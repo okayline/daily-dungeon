@@ -13,7 +13,7 @@
     "a cracked hand mirror", "a strip of prayer cloth"];
 
   const floorNum = st => parseInt(String(st.floor).replace(/\D/g, ""), 10) || 1;
-  // Log lines only name a direction for KURA's own actions ("KURA goes WEST"), never for hints or doors.
+  // Log lines only name a direction when stating a character's action ("KURA goes WEST"), never for hints or doors.
   const doorList = room => Object.keys(room.doors).length > 1 ? "Two doors." : "A single door.";
   // The third log line. About half the time it carries a faint clue about the room KURA is in
   // or the door she faces (never a direction word); otherwise it's pure atmosphere.
