@@ -120,7 +120,8 @@
     for (const m of [moonmsg[idx], st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
     S.push(r(" [F]IGHT [T]ALK [S]UMMON [I]TEM [M]AGIC [C]OMP [E]QUIP [G]O"));
-    S.push("+" + "=".repeat(78) + "+");
+    const sys = " [N]EXT [L]OAD [R]ST ";                 // system buttons tucked into the bottom border
+    S.push("+" + "=".repeat(78 - sys.length - 2) + sys + "==+");
     for (const line of S) if (line.length !== W) throw new Error(`bad width ${line.length}: ${line}`);
     return S.join("\n");
   }
