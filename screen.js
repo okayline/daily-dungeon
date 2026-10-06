@@ -103,8 +103,8 @@
     // the 3x3 room grid uses 5 rows under one blank row.
     const mapRows = st.map.length > 4 ? 5 : 4;
     const mp = st.map.slice(0, mapRows).map(m => m.replace("@", arrow)); while (mp.length < mapRows) mp.push("");
-    // The room grid is always 17 wide, so it sits in the same place every day.
-    const mapPad = mapRows === 5 ? Math.floor((PW - 17) / 2)
+    // The room grid comes already laid out across the panel, centered on KURA.
+    const mapPad = mapRows === 5 ? 0
       : Math.max(1, Math.floor((PW - Math.max(...mp.map(m => m.length))) / 2));
     const magStr = `ICHOR ${(st.ichor ?? st.mag ?? 0).toLocaleString("en-US")}`;
     const money = ljust(` SILVER ${(st.silver ?? st.macca ?? 0).toLocaleString("en-US")}`, PW - magStr.length) + magStr;

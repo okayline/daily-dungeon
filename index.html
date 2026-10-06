@@ -35,6 +35,9 @@
   .gold { color: var(--gold); }
   .visited { color: var(--dim); }
   .moon { color: var(--moon); }
+  /* The clock's colon blinks once a second; hidden, it still keeps its space. */
+  .colon { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { visibility: hidden; } }
   .stairs { color: var(--moon); }
   .goal { color: var(--gold); text-shadow: 0 0 6px var(--gold); }
   /* Map symbols like □ ⋰ ⋱ ↑ ↓ can be wider or narrower than letters in some fonts.
@@ -85,6 +88,7 @@
         });
         return left + map;
       }
+      if (i === 1) return esc(line).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2');
       if (i === 4) return esc(line).replace("^^^", '<span class="moon">^^^</span>');
       if (i === lines.length - 2) return esc(line)
         .replace("[G]O", '<span class="btn" data-act="go">[G]O</span>')
@@ -142,6 +146,12 @@
   load();
   // Once a minute: pick up a new save, or just redraw the clock while showing unsaved rolls.
   setInterval(() => (dirty ? draw() : load()), 60000);
+  // Live clock: redraw the moment the minute turns over (the colon blinks on its own).
+  let shownMinute = new Date().getMinutes();
+  setInterval(() => {
+    const m = new Date().getMinutes();
+    if (m !== shownMinute) { shownMinute = m; draw(); }
+  }, 1000);
 </script>
 </body>
 </html>

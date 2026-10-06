@@ -65,12 +65,17 @@
   // Minimap: only rooms KURA has been in are drawn, with door stubs leading out of them.
   // The ? shows in the dark at the lure room until it's found.
   // state: { at: room index, visited: [bool,bool,bool], found: [names found per room], facing }
+  // The map is centered on KURA: her room is always in the middle and the floor moves around her.
+  // Rooms two steps away up or down fall outside the 5 rows and stay off the map.
   function minimap(floor, state) {
-    const W = 17, rows = Array.from({ length: 5 }, () => Array(W).fill(" "));
-    const put = (r, c, s) => [...s].forEach((ch, k) => { rows[r][c + k] = ch; });
+    const W = 29, H = 5, rows = Array.from({ length: H }, () => Array(W).fill(" "));
+    const put = (r, c, s) => [...s].forEach((ch, k) => {
+      if (r >= 0 && r < H && c + k >= 0 && c + k < W) rows[r][c + k] = ch;
+    });
     const arrow = { N: "^", E: ">", S: "v", W: "<" }[state.facing] || "@";
+    const here = floor.rooms[state.at];
     floor.rooms.forEach((room, i) => {
-      const row = room.r * 2, col = room.c * 6;
+      const row = 2 + (room.r - here.r) * 2, col = 12 + (room.c - here.c) * 6;
       const found = state.found[i] || [];
       const lureHere = i === floor.lure && !found.includes("lure");
       if (!state.visited[i]) {

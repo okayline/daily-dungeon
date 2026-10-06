@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first. Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.7 - Oct 6 2026
+
+- The clock is live: the colon blinks every second and the time changes the moment the minute turns over.
+- The minimap is centered on KURA: her room stays in the middle and the floor moves around her.
+- The README links to the playable page.
+
 ## v0.6 - Oct 6 2026
 
 - The game now plays on real floors. The minimap, the room view and the second log line all follow KURA.
