@@ -83,7 +83,7 @@
     // Look controls at the foot of the 3D view: [<] and [>] turn KURA to look around (never move her),
     // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
-    overlay(VH - 1, 19, `[<] ${st.facing || "?"} [>]`);
+    overlay(VH - 1, 18, `[<]  ${st.facing || "?"}  [>]`);
     const moons = ["(     )", "(    ))", "(  ))))", "())))))", "(((O)))", "((((())", "((((  )", "((    )"];
     const names = ["NEW", "CRESC", "HALF", "GIBB", "FULL", "GIBB", "HALF", "CRESC"];
     const long = ["NEW", "WAX CRESC", "1ST QTR", "WAX GIBB", "FULL", "WANE GIBB", "LAST QTR", "WANE CRESC"];
@@ -98,8 +98,9 @@
     S.push("+" + "=".repeat(78) + "+");
     // Right panel is 29 characters wide: a leading space plus 28.
     const PW = 29, rule = " " + "-".repeat(PW - 1);
-    const mem = p => " " + ljust(p.name, 8) + ljust(`L${p.lv}`, 4) + "  " +
-      `${rjust(String(p.hp), 3)}/${rjust(String(p.hpmax), 3)}  ${rjust(String(p.mp), 2)}/${rjust(String(p.mpmax), 2)}`;
+    // Name gets 9 columns, level 3, then HP and MP each as 3/3 digits, so high levels still fit.
+    const mem = p => " " + ljust(p.name, 9) + ljust(`L${p.lv}`, 3) + " " +
+      `${rjust(String(p.hp), 3)}/${rjust(String(p.hpmax), 3)} ${rjust(String(p.mp), 3)}/${rjust(String(p.mpmax), 3)}`;
     const party = st.party.map(mem); while (party.length < 4) party.push("");
     // KURA is drawn on the minimap as an arrow showing the facing direction.
     const arrow = { N: "^", E: ">", S: "v", W: "<" }[st.facing] || "@";
@@ -124,7 +125,7 @@
     const face = `TURN ${String(st.steps || 0).padStart(3, "0")}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
     const gap = PW - 1 - align.length - face.length - dayStr.length;
     const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
-    const stat = [ljust(" PARTY", 20) + "HP" + " ".repeat(5) + "MP", rule, ...party.slice(0, 4),
+    const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
       rule, money, mapHead, "", ...mp.map(m => " ".repeat(mapPad) + m), ...(mapRows === 4 ? [""] : []), rule, bottom];
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");

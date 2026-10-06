@@ -60,6 +60,19 @@
     if (r < 0.6) return pick(CHATTER);
     return pick(AMBIENT);
   }
+  // What KURA sees when she turns: only what the 3D view already shows (wall, door, found stairs).
+  const SEE = {
+    wall: ["Bare stone.", "A blank wall, slick with damp.", "Cracked stone, nothing more.",
+      "Old mortar, older stains.", "The wall stares back.", "Scratch marks, long dried."],
+    door: ["A door, shut tight.", "A heavy door, iron-banded.", "A door, swollen with damp.",
+      "A warped door in its frame.", "A door, its handle worn smooth."],
+    stairs: ["The stairs drop into the dark.", "Steps lead down. They do not end.",
+      "The stairs wait."],
+  };
+  function sight(st) {
+    const v = st.dungeon ? (show(st), st.view.end) : "wall";
+    return pick(SEE[v] || SEE.wall);
+  }
   function atmosphere(st) {
     const d = st.dungeon;
     if (!d || Math.random() < 0.5) return flavor(st);
@@ -138,6 +151,8 @@
     if (!newDay || st.dead) return st;
     st.today = { date: t, stepped: false };
     st.unsaved = true;
+    // A night's rest heals a fifth of everyone's HP (fallen allies too, slowly).
+    if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
     const d = st.dungeon;
     if (d && t > d.deadline) {
       st.dead = true;
@@ -159,7 +174,13 @@
       case "silver": { const n = R(20, 150); st.silver = silver + n; return `Coins in the rubble. ${n} SILVER.`; }
       case "item": return `KURA finds ${pick(ITEMS)}.`;
       case "demon": {
-        st.party = st.party.map(p => ({ ...p, hp: Math.max(1, p.hp - R(0, Math.ceil(p.hpmax / 4))) }));
+        // Demons hit hard and can kill. Allies can drop to 0; if KURA does, the run is over.
+        st.party = st.party.map(p => ({ ...p, hp: Math.max(0, p.hp - R(0, Math.ceil(p.hpmax / 4))) }));
+        if (st.party[0] && st.party[0].hp <= 0) {
+          st.dead = true;
+          st.party = st.party.map(p => ({ ...p, hp: 0 }));
+          return "A demon attacks. KURA falls.";
+        }
         const n = R(5, 30); st.ichor = ichor + n;
         return `A demon attacks. It falls. ${n} ICHOR.`;
       }
@@ -192,32 +213,55 @@
   const FIND = 1 / 5;
   const WANDER = [1 / 30, 1 / 20, 1 / 14, 1 / 10, 1 / 6, 1 / 10, 1 / 14, 1 / 20];   // by moon phase, new -> full -> new
   const moon = () => (root.SMT || require("./screen.js")).moonIndex(new Date());
+  // Each room hides its things behind its walls (never behind a door). The stairs are always behind
+  // the wall they will open in; everything else is spread over the other walls, fixed by the floor's seed.
+  function walls(d, i) {
+    d.walls = d.walls || [];
+    if (d.walls[i]) return d.walls[i];
+    const room = d.floor.rooms[i];
+    const free = CW.filter(x => !(x in room.doors));
+    const w = { taken: {} };
+    free.forEach(x => { w[x] = []; w.taken[x] = 0; });
+    const sd = stairsDir(d.floor, i);
+    let k = (d.floor.seed + i * 31) >>> 0;
+    for (const thing of room.hidden) {
+      if (thing === "stairs") w[sd].push(thing);
+      else { w[free[k % free.length]].push(thing); k = (k * 1103515245 + 12345) >>> 0; }
+    }
+    return (d.walls[i] = w);
+  }
+
+  // SEARCH the wall KURA faces, NetHack style: unlimited, but each search has only a small chance
+  // to turn up that wall's next hidden thing. A bare wall never answers. Doors can't be searched.
   function search(st) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     if (!ensureFloor(st)) return show(st);
-    const d = st.dungeon, room = d.floor.rooms[d.at], found = d.found[d.at];
+    const d = st.dungeon, room = d.floor.rooms[d.at], found = d.found[d.at], dir = st.facing;
+    if (dir in room.doors) { st.log = "> Only a door here. Nothing to search."; return show(st); }
+    if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { st.log = "> The stairs wait. Nothing more here."; return show(st); }
     act(st);
-    d.searches = d.searches || [0, 0, 0];
-    const n = ++d.searches[d.at];
+    const where = `KURA searches the ${NAME[dir]} wall.`;
+    const say = text => {
+      const long = `> Day ${st.day}. ${where} ${text}`;
+      return long.length <= 77 ? long : `> Day ${st.day}. KURA searches ${NAME[dir]}. ${text}`;
+    };
     if (Math.random() < WANDER[moon()]) {
-      st.log = `> Day ${st.day}. KURA searches. ${reveal(st, "demon").replace("A demon attacks", "A demon wanders in")}`;
+      st.log = say(reveal(st, "demon").replace("A demon attacks", "A demon wanders in"));
       drift(st);
       return show(st);
     }
-    if (found.length < room.hidden.length && Math.random() < FIND) {
-      const thing = room.hidden[found.length];
+    const w = walls(d, d.at), pile = w[dir] || [];
+    if (w.taken[dir] < pile.length && Math.random() < FIND) {
+      const thing = pile[w.taken[dir]++];
       found.push(thing);
-      d.searches[d.at] = 0;
-      st.log = `> Day ${st.day}. KURA searches. ${reveal(st, thing)}`;
+      st.log = say(reveal(st, thing));
       // The first find in a room also takes stock of its doors.
       if (found.length === 1 && st.log.length + doorList(room).length < 77) st.log += " " + doorList(room);
-      if (thing === "stairs") st.facing = stairsDir(d.floor, d.at);
       drift(st);
       return show(st);
     }
-    st.log = `> Day ${st.day}. KURA searches. ` + pick(["Nothing.", "Only stone.", "Nothing but dust.",
-      "Nothing yet.", "The walls give nothing away."]);
+    st.log = say(pick(["Nothing.", "Only stone.", "Nothing but dust.", "Nothing yet.", "The wall gives nothing away."]));
     drift(st);
     return show(st);
   }
@@ -264,7 +308,7 @@
     if (!st.dungeon) return st;
     st.facing = how === "L" ? LEFT[st.facing] : RIGHT[st.facing];
     act(st);
-    st.log = `> KURA turns to face ${NAME[st.facing]}.`;
+    st.log = `> KURA turns to face ${NAME[st.facing]}. ${sight(st)}`;
     drift(st);
     return show(st);
   }
@@ -291,7 +335,10 @@
   function available(st) {
     const d = st.dungeon, t = st.today || {};
     const out = d && !st.dead ? exits(d) : [];
-    const res = { search: !!d && !st.dead };
+    // SEARCH works on the wall KURA faces; a door (or found stairs) can't be searched.
+    const facingWall = !!d && !(st.facing in d.floor.rooms[d.at].doors) &&
+      !(d.found[d.at].includes("stairs") && st.facing === stairsDir(d.floor, d.at));
+    const res = { search: !!d && !st.dead && facingWall };
     for (const x of CW) res[x] = !st.dead && !t.stepped && out.includes(x);
     return res;
   }

@@ -94,7 +94,7 @@
         const left = esc(line.slice(0, 48))
           .replace("[&lt;]", '<span class="btn" data-act="left">[&lt;]</span>')
           .replace("[&gt;]", '<span class="btn" data-act="right">[&gt;]</span>')
-          .replace(/(<\/span>) ([NESW?]) (<span)/, '$1 <span class="facing">$2</span> $3');
+          .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         return left + esc(line.slice(48));
       }
       if (i === 1) return esc(line).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2');
@@ -132,12 +132,13 @@
 
   // The adventure log: every line that starts with "Day N." (steps, searches, new days, descents).
   function remember(before) {
-    if (!save || !save.log || save.log === before || !/^> Day \d+\./.test(save.log)) return;
-    // Empty searches aren't news; only searches that turn something up go in the log.
-    if (/searches\. (Nothing|Only stone|The walls give)/.test(save.log)) return;
+    // Every action goes in the log: steps, searches (even empty ones), turns, walls, new days.
+    if (!save || !save.log || save.log === before) return;
     const h = save.history = save.history || [];
-    h.push("Day " + String(save.day).padStart(3, "0") + "  " + save.log.replace(/^> Day \d+\. /, ""));
-    if (h.length > 500) h.splice(0, h.length - 500);
+    const line = save.log.replace(/^> /, "").replace(/^Day \d+\. /, "");
+    h.push("D" + String(save.day).padStart(3, "0") + " T" + String(save.steps || 0).padStart(3, "0") + "  " + line);
+    // About 70 bytes an entry: 20,000 entries is roughly 1.4 MB, well inside a browser's storage.
+    if (h.length > 20000) h.splice(0, h.length - 20000);
   }
 
   function persist() {
@@ -176,7 +177,7 @@
     box.hidden = !open;
     if (open) {
       const h = (save && save.history) || [];
-      box.querySelector("pre").textContent = "ADVENTURE LOG  (" + h.length + " entries)\n\n" +
+      box.querySelector("pre").textContent = "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
         (h.length ? h.slice().reverse().join("\n") : "Nothing yet.");
     }
   }
@@ -184,7 +185,8 @@
   // BACKUP: shows this run as a code to copy; pasting a different code brings that run back.
   function backup() {
     if (!save) return;
-    const code = btoa(unescape(encodeURIComponent(JSON.stringify(save))));
+    // The code carries the run and the last 300 log entries, so it stays short enough to copy.
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) }))));
     const got = prompt("Your save code. Copy it to keep a backup or move your run to another device.\n" +
       "To restore a run, paste its code here and press OK.", code);
     if (!got || got.trim() === code) return;
@@ -202,11 +204,11 @@
     if (name === "backup") return backup();
     if (!save) return;
     if (name === "reset" && !confirm("Begin a new run? This run will be lost.")) return;
-    const log = save.log;
+    const log = save.log, steps = save.steps;
     save = name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
     if (name === "reset") save.history = [];
-    remember(name === "reset" ? "" : log);
+    remember(name === "reset" || save.steps !== steps ? "" : log);
     persist(); draw();
   }
 
