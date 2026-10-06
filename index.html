@@ -10,10 +10,10 @@
 <style>
   :root {
     --bg: #07090a;
-    --fg: #c8d6c0;
+    --fg: #e4e4df;
     --dim: #4f5d52;
-    --trail: #8a9a8c;
-    --bright: #f4f7e8;
+    --trail: #8f8f8a;
+    --bright: #ffffff;
     --demon: #e0564a;
     --gold: #e3b341;
     --moon: #9fc4ff;
@@ -27,8 +27,8 @@
   .frame { max-width: 100%; overflow-x: auto; }
   pre {
     margin: 0; font-family: inherit; line-height: 1.05;
-    font-size: clamp(6px, calc((100vw - 32px) / 49), 20px); white-space: pre;
-    text-shadow: 0 0 4px rgba(200, 214, 192, 0.25);
+    font-size: clamp(6px, calc((100vw - 32px) / 49), 22px); white-space: pre;
+    text-shadow: 0 0 4px rgba(228, 228, 223, 0.2);
   }
   .you { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .demon { color: var(--demon); }
@@ -47,7 +47,7 @@
   /* The diagonal-dot stairs (⋰ ⋱) are tiny math symbols in most fonts, so the page
      draws them as three stepped dots that fill one character cell. */
   .dots svg { width: 1ch; height: 1em; vertical-align: -0.15em; fill: currentColor; }
-  .note { margin-top: 12px; color: var(--dim); font-size: clamp(12px, 3vw, 18px); letter-spacing: 0.04em; }
+  .note { margin-top: 12px; color: var(--dim); font-size: clamp(13px, 3vw, 20px); letter-spacing: 0.04em; }
 </style>
 </head>
 <body>
