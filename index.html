@@ -67,14 +67,23 @@
     document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, save.extra || ""));
   }
 
-  fetch("save.json?t=" + Date.now(), { cache: "no-store" })
-    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(s => {
-      save = s; draw();
-      document.getElementById("note").textContent = s.saved ? `LAST SAVED ${s.saved}` : "";
-      setInterval(draw, 30000);
-    })
-    .catch(() => { document.getElementById("screen").textContent = "NO SAVE FOUND."; });
+  // Load the newest save, then redraw. Runs on open and once a minute after that,
+  // so the clock and moon stay current and a new save shows up without reloading.
+  function refresh() {
+    return fetch("save.json?t=" + Date.now(), { cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(s => {
+        save = s; draw();
+        document.getElementById("note").textContent = s.saved ? `LAST SAVED ${s.saved}` : "";
+      })
+      .catch(() => {
+        if (save) draw();   // keep showing the last good save if a check fails
+        else document.getElementById("screen").textContent = "NO SAVE FOUND.";
+      });
+  }
+
+  refresh();
+  setInterval(refresh, 60000);
 </script>
 </body>
 </html>
