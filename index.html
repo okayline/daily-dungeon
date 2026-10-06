@@ -12,6 +12,7 @@
     --bg: #07090a;
     --fg: #c8d6c0;
     --dim: #4f5d52;
+    --trail: #8a9a8c;
     --bright: #f4f7e8;
     --demon: #e0564a;
     --gold: #e3b341;
@@ -34,6 +35,16 @@
   .gold { color: var(--gold); }
   .visited { color: var(--dim); }
   .moon { color: var(--moon); }
+  .stairs { color: var(--moon); }
+  .goal { color: var(--gold); text-shadow: 0 0 6px var(--gold); }
+  /* Map symbols like □ ⋰ ⋱ ↑ ↓ can be wider or narrower than letters in some fonts.
+     Boxing each one to exactly one character keeps the grid lined up. */
+  .cell { display: inline-block; width: 1ch; text-align: center; overflow: visible;
+          font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; }
+  .room { color: var(--trail); }
+  /* The diagonal-dot stairs (⋰ ⋱) are tiny math symbols in most fonts, so the page
+     draws them as three stepped dots that fill one character cell. */
+  .dots svg { width: 1ch; height: 1em; vertical-align: -0.15em; fill: currentColor; }
   .note { margin-top: 12px; color: var(--dim); font-size: clamp(12px, 3vw, 18px); letter-spacing: 0.04em; }
 </style>
 </head>
@@ -44,6 +55,10 @@
 <script>
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   let save = null;
+  const dots = pts => `<svg viewBox="0 0 10 20" aria-hidden="true">${pts.map(([x, y]) =>
+    `<rect x="${x}" y="${y}" width="2.6" height="2.6"/>`).join("")}</svg>`;
+  const DOTS_UP = dots([[0.5, 14], [3.7, 9.5], [6.9, 5]]);     // steps rising to the right
+  const DOTS_DOWN = dots([[0.5, 5], [3.7, 9.5], [6.9, 14]]);   // steps falling to the right
 
   // Color only the minimap rows (right panel) and the moon marker.
   function colorize(text) {
@@ -51,9 +66,12 @@
     return lines.map((line, i) => {
       if (i >= 16 && i <= 19) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
-        const map = right.replace(/[@^<>v&$.?]/g, ch => {
-          const cls = { "@": "you", "^": "you", "<": "you", ">": "you", "v": "you", "&": "demon", "$": "gold", ".": "visited", "?": "visited" }[ch];
-          return `<span class="${cls}">${esc(ch)}</span>`;
+        const map = right.replace(/[@^<>v&$?□⋰⋱↑↓]/g, ch => {
+          const cls = { "@": "you", "^": "you", "<": "you", ">": "you", "v": "you",
+            "&": "demon", "$": "gold", "?": "goal", "□": "room",
+            "⋰": "stairs dots", "⋱": "stairs dots", "↑": "stairs", "↓": "stairs" }[ch];
+          const inner = ch === "⋰" ? DOTS_UP : ch === "⋱" ? DOTS_DOWN : esc(ch);
+          return `<span class="cell ${cls}">${inner}</span>`;
         });
         return left + map;
       }

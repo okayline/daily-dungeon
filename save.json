@@ -39,9 +39,10 @@
   }
  ],
  "map": [
-  ".-.-.-@-&",
-  "      |",
-  "      $-?"
+  "             ?",
+  "",
+  "⋰↑-□-□-@-",
+  "        |"
  ],
  "view": {
   "left": [
@@ -56,6 +57,6 @@
  },
  "log": "> Day 4. KURA enters a junction. Paths lead EAST and SOUTH.",
  "saved": "2026-10-06",
- "extra": "> CU SITH limps but will not rest. A door hums faintly to the east.",
+ "extra": "> COMP: Faint signal far to the northeast. Unreadable.",
  "facing": "E"
 }
