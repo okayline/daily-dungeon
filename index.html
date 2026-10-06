@@ -57,6 +57,7 @@
   <div class="frame"><pre id="screen">LOADING SAVE...</pre></div>
   <div class="note" id="note"></div>
 <script src="screen.js"></script>
+<script src="floor.js"></script>
 <script src="rules.js"></script>
 <script>
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -85,6 +86,9 @@
         return left + map;
       }
       if (i === 4) return esc(line).replace("^^^", '<span class="moon">^^^</span>');
+      if (i === lines.length - 2) return esc(line)
+        .replace("[G]O", '<span class="btn" data-act="go">[G]O</span>')
+        .replace("SE[A]RCH", '<span class="btn" data-act="search">SE[A]RCH</span>');
       if (i === lines.length - 1) return esc(line)
         .replace("[N]EXT", '<span class="btn" data-act="next">[N]EXT</span>')
         .replace("[L]OAD", '<span class="btn" data-act="load">[L]OAD</span>')
@@ -98,7 +102,7 @@
     document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, save.extra || ""));
   }
 
-  // The saved game lives in save.json on GitHub. NEXT and RST only change this browser's
+  // The saved game lives in save.json on GitHub. GO, SEARCH, NEXT and RST only change this browser's
   // copy (nothing is saved); LOAD throws that away and loads the saved game again.
   let dirty = false;
   function showNote() {
@@ -117,10 +121,11 @@
       });
   }
 
+  // GO and SEARCH use up a day; turning (arrow keys) is free. NEXT lets the game pick the day's action.
   function act(name) {
     if (name === "load") return load();
     if (!save) return;
-    save = name === "next" ? RULES.next(save) : RULES.reset(save);
+    save = name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R") : RULES[name](save);
     dirty = true; draw(); showNote();
   }
 
@@ -129,7 +134,9 @@
   });
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const k = { n: "next", l: "load", r: "reset" }[e.key.toLowerCase()]; if (k) act(k);
+    const k = { n: "next", l: "load", r: "reset", g: "go", a: "search", arrowup: "go",
+      arrowleft: "left", arrowright: "right" }[e.key.toLowerCase()];
+    if (k) { e.preventDefault(); act(k); }
   });
 
   load();

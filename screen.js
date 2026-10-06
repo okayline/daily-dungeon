@@ -106,7 +106,7 @@
     // The room grid is always 17 wide, so it sits in the same place every day.
     const mapPad = mapRows === 5 ? Math.floor((PW - 17) / 2)
       : Math.max(1, Math.floor((PW - Math.max(...mp.map(m => m.length))) / 2));
-    const magStr = `MAG ${st.mag.toLocaleString("en-US")}`;
+    const magStr = `ICHOR ${(st.ichor ?? st.mag ?? 0).toLocaleString("en-US")}`;
     const money = ljust(` SILVER ${(st.silver ?? st.macca ?? 0).toLocaleString("en-US")}`, PW - magStr.length) + magStr;
     const title = ` MAP  ${st.floor} `, dash = PW - 1 - title.length;
     const mapHead = " " + "-".repeat(Math.floor(dash / 2)) + title + "-".repeat(Math.ceil(dash / 2));
@@ -124,7 +124,7 @@
       "> MOON 6/8. Demons grow calmer.", "> MOON 7/8. Demons are docile. The new moon nears."];
     for (const m of [moonmsg[idx], st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
-    S.push(r(" [F]IGHT [T]ALK [S]UMMON [I]TEM [M]AGIC [C]OMP [E]QUIP [G]O"));
+    S.push(r(" [F]IGHT [T]ALK [S]UMMON [I]TEM [M]AGIC [C]OMP [E]QUIP [G]O SE[A]RCH"));
     const sys = " [N]EXT [L]OAD [R]ST ";                 // system buttons tucked into the bottom border
     S.push("+" + "=".repeat(78 - sys.length - 2) + sys + "==+");
     for (const line of S) if (line.length !== W) throw new Error(`bad width ${line.length}: ${line}`);

@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first. Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.6 - Oct 6 2026
+
+- The game now plays on real floors. The minimap, the room view and the second log line all follow KURA.
+- `[G]O` (or the up arrow) walks through the door KURA faces, or down the stairs once they're found. Facing a wall, GO turns to the next way out instead. The left and right arrows turn KURA. Turning is free.
+- `SE[A]RCH` (or A) turns up the next hidden thing in the room: demons (damage and ICHOR), items, SILVER, the `?` or the stairs. A room with nothing left can't be searched.
+- GO and SEARCH each use up a day. NEXT picks a day's action by itself, as a testing shortcut.
+- If the week runs out without finding the stairs, the floor gives way and KURA falls to the next floor (a placeholder rule).
+- RST starts a new run on a fresh B1F.
+- MAG is now ICHOR.
+
 ## v0.5 - Oct 6 2026
 
 - Floor generation in the new `floor.js`. Each floor is 3 rooms in a 3x3 grid, joined by doors in a line or an L. KURA starts in the up-stairs room.
