@@ -1,5 +1,5 @@
 {
- "day": 4,
+ "day": 5,
  "floor": "B3F",
  "align": "NEUTRAL",
  "silver": 4215,
@@ -39,10 +39,11 @@
   }
  ],
  "map": [
-  "             ?",
   "",
-  "⋰↑-□-□-@-",
-  "        |"
+  "",
+  "        ?  ╫[⋰↑<]",
+  "",
+  ""
  ],
  "view": {
   "left": [
@@ -55,8 +56,66 @@
   ],
   "end": "door"
  },
- "log": "> Day 4. KURA enters a junction. Paths lead EAST and SOUTH.",
+ "log": "> Day 5. KURA enters B3F. A door leads WEST.",
  "saved": "2026-10-06",
- "extra": "> GAME SAVED. DAY 004. KURA marks the wall and rests a moment.",
- "facing": "E"
+ "extra": "> GAME SAVED. DAY 005. KURA steadies her breath at the WEST door.",
+ "facing": "W",
+ "dungeon": {
+  "seed": 1848569264,
+  "floor": {
+   "seed": 1848569264,
+   "rooms": [
+    {
+     "r": 2,
+     "c": 2,
+     "doors": {
+      "W": 1
+     },
+     "hidden": [
+      "demon",
+      "demon"
+     ]
+    },
+    {
+     "r": 2,
+     "c": 1,
+     "doors": {
+      "E": 0,
+      "W": 2
+     },
+     "hidden": [
+      "lure",
+      "demon",
+      "stairs"
+     ]
+    },
+    {
+     "r": 2,
+     "c": 0,
+     "doors": {
+      "E": 1
+     },
+     "hidden": [
+      "demon",
+      "demon"
+     ]
+    }
+   ],
+   "start": 0,
+   "stairs": 1,
+   "lure": 1
+  },
+  "at": 0,
+  "visited": [
+   true,
+   false,
+   false
+  ],
+  "found": [
+   [],
+   [],
+   []
+  ],
+  "floorDay": 1
+ }
 }
