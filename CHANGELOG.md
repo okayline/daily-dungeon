@@ -2,6 +2,20 @@
 
 Changes to the game itself, newest first. Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.13 - Oct 6 2026
+
+- Anyone can play on the page: each player's run is saved in their own browser and saves itself after every action. A first visit starts a fresh run. No accounts or tokens.
+- `[L]OG` shows the run's adventure log, newest first: every step, find, new day and descent. Empty searches are left out.
+- `[B]ACKUP` shows the run as a save code to copy. Pasting a code restores that run, for backups or moving to another device.
+- `[R]ST` asks before ending a run. LOAD is gone; the repo's `save.json` is now only the chat run (`/smt-screen`).
+
+## v0.12 - Oct 6 2026
+
+- Days follow the real calendar (Honolulu time). The day's step comes back at midnight, DAY counts real days since the run began, and the map header shows today's real weekday.
+- Each floor's way down closes at the end of a Sunday. A new run's first floor closes this Sunday (or next Sunday if fewer than 3 days are left). Taking the stairs early gives bonus days: the next floor closes the Sunday after next.
+- On the last day, the third line warns that the way down closes tonight. Miss the deadline and the run is over.
+- NE[X]T is gone from the screen. The X key still jumps the game a day ahead, as a hidden testing cheat.
+
 ## v0.11 - Oct 6 2026
 
 - One step per day. `[N] [S] [E] [W]` take the day's step through the door on that side (or down the stairs once found), and dim once used. Turning and the free actions are unlimited.

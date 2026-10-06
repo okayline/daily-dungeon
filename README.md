@@ -9,4 +9,4 @@ An 80-column ASCII roguelike in the spirit of 80s CRPG dungeon crawlers. You get
 - `floor.js` rolls each floor and `rules.js` holds the day-by-day rules (GO, SEARCH, turning).
 - `save.json` is the game state. Each move will be committed here, so the commit history is the adventure log.
 
-Status: floors, GO and SEARCH work on the page. Play there stays in your browser until it's saved from chat; the in-page save and the once-a-day limit come later.
+Status: playable. Each player's run is saved in their own browser (with a LOG and a BACKUP code), days follow the real calendar, and every floor's way down closes on Sunday. `save.json` holds the chat run played with `/smt-screen`.

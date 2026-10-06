@@ -115,9 +115,9 @@
     const magStr = `ICHOR ${(st.ichor ?? st.mag ?? 0).toLocaleString("en-US")}`;
     const money = ljust(` SILVER ${(st.silver ?? st.macca ?? 0).toLocaleString("en-US")}`, PW - magStr.length) + magStr;
     const WEEK = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-    // Each floor is one week, MON to SUN. For now the weekday follows the floor's day count;
-    // later a floor will start on a real Monday so this matches the real date.
-    const wk = st.dungeon ? WEEK[Math.min(st.dungeon.floorDay, 7) - 1] : "";
+    // Each floor is a real week: the header shows today's weekday (Honolulu), MON to SUN.
+    const today = Math.floor((now.getTime() - 10 * 3600 * 1000) / 86400000) + (st.clockOffset || 0);
+    const wk = st.dungeon ? WEEK[(today + 3) % 7] : "";
     const title = ` MAP  ${st.floor}${wk ? "  " + wk : ""} `, dash = PW - 1 - title.length;
     const mapHead = " " + "-".repeat(Math.floor(dash / 2)) + title + "-".repeat(Math.ceil(dash / 2));
     const align = `ALIGN [${String(st.align).slice(0, 3).toUpperCase()}]`;
@@ -174,7 +174,7 @@
     // Free actions on the left (unlimited); the day's actions on the right (one search, one step).
     const free = " [F]IGHT [T]ALK [I]NVOKE", daily = "| SE[A]RCH  [N] [S] [E] [W] ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " NE[X]T [L]OAD [R]ST ";                 // system buttons tucked into the bottom border
+    const sys = " [L]OG [B]ACKUP [R]ST ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");

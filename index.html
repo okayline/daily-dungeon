@@ -52,12 +52,17 @@
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
   .unsaved { color: var(--gold); }
+  .frame { position: relative; }
+  .logview { position: absolute; inset: 0; background: rgba(7, 9, 10, 0.96); overflow: auto; cursor: pointer;
+    border: 1px solid var(--trail); box-sizing: border-box; padding: 1.5em 2ch; }
+  .logview pre { white-space: pre-wrap; }
   .facing { color: var(--bright); }
   .saved { color: var(--fg); }
 </style>
 </head>
 <body>
-  <div class="frame"><pre id="screen">LOADING SAVE...</pre></div>
+  <div class="frame"><pre id="screen">LOADING...</pre>
+    <div id="log" class="logview" hidden><pre></pre></div></div>
 <script src="screen.js"></script>
 <script src="floor.js"></script>
 <script src="rules.js"></script>
@@ -101,11 +106,11 @@
           .replace(/\[([NSEW])\]/g, (m, x) => b(m, "go-" + x, can[x]));
       }
       if (i === lines.length - 1) return esc(line)
-        // SAVED / NOT SAVED shows for a few seconds after a load or an action, then fades back into the border.
+        // SAVED / NOT SAVED shows for a few seconds after each action, then fades back into the border.
         .replace(/ (NOT SAVED|SAVED \d{4}-\d\d-\d\d) /, (m, t) => Date.now() < statusUntil
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
-        .replace("NE[X]T", '<span class="btn" data-act="next">NE[X]T</span>')
-        .replace("[L]OAD", '<span class="btn" data-act="load">[L]OAD</span>')
+        .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
+        .replace("[B]ACKUP", '<span class="btn" data-act="backup">[B]ACKUP</span>')
         .replace("[R]ST", '<span class="btn" data-act="reset">[R]ST</span>');
       return esc(line);
     }).join("\n");
@@ -116,50 +121,116 @@
     document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, save.extra || ""));
   }
 
-  // The saved game lives in save.json on GitHub. GO, SEARCH, NEXT and RST only change this browser's
-  // copy (nothing is saved); LOAD throws that away and loads the saved game again.
-  let dirty = false;
-  // How long the save status stays visible in the bottom border.
+  // Every player's run lives in their own browser and saves itself after every action.
+  // (The repo's save.json is the chat run, played with /smt-screen; the page doesn't touch it.)
+  const KEY = "daily-dungeon-run";
   let statusUntil = 0;
   function flashStatus() { statusUntil = Date.now() + 4000; setTimeout(draw, 4100); }
+  const hstDate = () => new Date(Date.now() - 10 * 3600 * 1000).toISOString().slice(0, 10);
 
-  function load() {
-    return fetch("save.json?t=" + Date.now(), { cache: "no-store" })
-      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(s => { const fresh = !save || dirty; save = s; dirty = false; if (fresh) flashStatus(); draw(); })
-      .catch(() => {
-        if (save) draw();   // keep showing the last good save if a check fails
-        else document.getElementById("screen").textContent = "NO SAVE FOUND.";
-      });
+  // The adventure log: every line that starts with "Day N." (steps, searches, new days, descents).
+  function remember(before) {
+    if (!save || !save.log || save.log === before || !/^> Day \d+\./.test(save.log)) return;
+    // Empty searches aren't news; only searches that turn something up go in the log.
+    if (/searches \(\d+\)\. (Nothing|Only stone|The walls give)/.test(save.log)) return;
+    const h = save.history = save.history || [];
+    h.push("Day " + String(save.day).padStart(3, "0") + "  " + save.log.replace(/^> Day \d+\. /, ""));
+    if (h.length > 500) h.splice(0, h.length - 500);
   }
 
-  // GO and SEARCH use up a day; turning (arrow keys) is free. NEXT lets the game pick the day's action.
-  function act(name) {
-    if (name === "load") return load();
+  function persist() {
+    try {
+      delete save.unsaved;
+      save.saved = hstDate();
+      localStorage.setItem(KEY, JSON.stringify(save));
+    } catch (e) {
+      save.unsaved = true;   // private window or storage blocked: play still works, it just won't last
+    }
+    flashStatus();
+  }
+
+  // Catch up with the real date (a new day, or a missed deadline), then save.
+  function tick() {
     if (!save) return;
+    const before = JSON.stringify(save), log = save.log;
+    save = RULES.tick(save);
+    if (JSON.stringify(save) !== before) { remember(log); persist(); }
+  }
+
+  function start() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
+    if (s && s.dungeon && s.party) { save = s; tick(); flashStatus(); draw(); return; }
+    save = RULES.reset({});
+    save.history = [];
+    remember("");
+    persist(); draw();
+  }
+
+  // LOG: the run's adventure log, newest first. Click, L or Escape closes it.
+  function toggleLog(force) {
+    const box = document.getElementById("log");
+    const open = force === undefined ? box.hidden : force;
+    box.hidden = !open;
+    if (open) {
+      const h = (save && save.history) || [];
+      box.querySelector("pre").textContent = "ADVENTURE LOG  (" + h.length + " entries)\n\n" +
+        (h.length ? h.slice().reverse().join("\n") : "Nothing yet.");
+    }
+  }
+
+  // BACKUP: shows this run as a code to copy; pasting a different code brings that run back.
+  function backup() {
+    if (!save) return;
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify(save))));
+    const got = prompt("Your save code. Copy it to keep a backup or move your run to another device.\n" +
+      "To restore a run, paste its code here and press OK.", code);
+    if (!got || got.trim() === code) return;
+    try {
+      const s = JSON.parse(decodeURIComponent(escape(atob(got.trim()))));
+      if (!s.dungeon || !s.party) throw new Error("not a run");
+      if (!confirm("Replace this run with the one from the code?")) return;
+      save = s; tick(); persist(); draw();
+    } catch (e) { alert("That code didn't work. Nothing was changed."); }
+  }
+
+  // N/S/E/W take the day's step, SEARCH is unlimited, turning is free. NEXT (X) is a hidden testing cheat.
+  function act(name) {
+    if (name === "log") return toggleLog();
+    if (name === "backup") return backup();
+    if (!save) return;
+    if (name === "reset" && !confirm("Begin a new run? This run will be lost.")) return;
+    const log = save.log;
     save = name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
-    dirty = true; flashStatus(); draw();
+    if (name === "reset") save.history = [];
+    remember(name === "reset" ? "" : log);
+    persist(); draw();
   }
 
   document.getElementById("screen").addEventListener("click", e => {
     const b = e.target.closest(".btn"); if (b) act(b.dataset.act);
   });
+  document.getElementById("log").addEventListener("click", () => toggleLog(false));
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", l: "load", r: "reset", g: "go",
-      a: "search", arrowup: "go", arrowleft: "left", arrowright: "right" }[e.key.toLowerCase()];
+    const key = e.key.toLowerCase();
+    if (!document.getElementById("log").hidden) {
+      if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
+      return;
+    }
+    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", l: "log", b: "backup", r: "reset", g: "go",
+      a: "search", arrowup: "go", arrowleft: "left", arrowright: "right" }[key];
     if (k) { e.preventDefault(); act(k); }
   });
 
-  load();
-  // Once a minute: pick up a new save, or just redraw the clock while showing unsaved rolls.
-  setInterval(() => (dirty ? draw() : load()), 60000);
-  // Live clock: redraw the moment the minute turns over (the colon blinks on its own).
+  start();
+  // Live clock: redraw the moment the minute turns over (the colon blinks on its own),
+  // and catch up with the real date so midnight brings the new day.
   let shownMinute = new Date().getMinutes();
   setInterval(() => {
     const m = new Date().getMinutes();
-    if (m !== shownMinute) { shownMinute = m; draw(); }
+    if (m !== shownMinute) { shownMinute = m; tick(); draw(); }
   }, 1000);
 </script>
 </body>
