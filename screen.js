@@ -98,11 +98,14 @@
       return ` ${ljust(left, 12)}${rjust(String(p.hp), 3)}/${rjust(String(p.hpmax), 3)} ${rjust(String(p.mp), 2)}/${rjust(String(p.mpmax), 2)}`;
     };
     const party = st.party.map(mem); while (party.length < 4) party.push("");
-    const mp = st.map.slice(); while (mp.length < 3) mp.push("");
+    // KURA is drawn on the minimap as an arrow showing the facing direction.
+    const arrow = { N: "^", E: ">", S: "v", W: "<" }[st.facing] || "@";
+    const mp = st.map.slice(0, 4).map(m => m.replace("@", arrow)); while (mp.length < 4) mp.push("");
+    const magStr = `MAG ${st.mag.toLocaleString("en-US")}`;
+    const money = ljust(` MACCA ${st.macca.toLocaleString("en-US")}`, 26 - magStr.length) + magStr;
     const stat = [" PARTY            HP    MP", " -------------------------", ...party.slice(0, 4),
-      " -------------------------", ` MACCA  ${st.macca.toLocaleString("en-US")}`,
-      ` MAG    ${rjust(st.mag.toLocaleString("en-US"), 5)}`,
-      ` ------- MAP  ${st.floor} -------`, "", ...mp.slice(0, 3).map(m => "      " + m), "",
+      " -------------------------", money,
+      ` ------- MAP  ${st.floor} -------`, "", ...mp.map(m => "      " + m), "",
       " -------------------------", ` ALIGN  ${ljust(st.align, 11)}DAY ${String(st.day).padStart(3, "0")}`];
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");

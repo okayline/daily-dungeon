@@ -49,10 +49,10 @@
   function colorize(text) {
     const lines = text.split("\n");
     return lines.map((line, i) => {
-      if (i >= 17 && i <= 19) {
+      if (i >= 16 && i <= 19) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
-        const map = right.replace(/[@&$.?]/g, ch => {
-          const cls = { "@": "you", "&": "demon", "$": "gold", ".": "visited", "?": "visited" }[ch];
+        const map = right.replace(/[@^<>v&$.?]/g, ch => {
+          const cls = { "@": "you", "^": "you", "<": "you", ">": "you", "v": "you", "&": "demon", "$": "gold", ".": "visited", "?": "visited" }[ch];
           return `<span class="${cls}">${esc(ch)}</span>`;
         });
         return left + map;
