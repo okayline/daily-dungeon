@@ -92,21 +92,25 @@
     S.push(rc(names.map(n => center(n, 9)).join("")));
     S.push(rc(moons.map((_, i) => center(i === idx ? "^^^" : "", 9)).join("")));
     S.push("+" + "=".repeat(78) + "+");
-    const mem = p => {
-      const lv = `L${p.lv}`;
-      const left = p.name.length <= 6 ? ljust(p.name, 7) + lv : `${p.name} ${lv}`;
-      return ` ${ljust(left, 12)}${rjust(String(p.hp), 3)}/${rjust(String(p.hpmax), 3)} ${rjust(String(p.mp), 2)}/${rjust(String(p.mpmax), 2)}`;
-    };
+    // Right panel is 29 characters wide: a leading space plus 28.
+    const PW = 29, rule = " " + "-".repeat(PW - 1);
+    const mem = p => " " + ljust(p.name, 8) + ljust(`L${p.lv}`, 4) + "  " +
+      `${rjust(String(p.hp), 3)}/${rjust(String(p.hpmax), 3)}  ${rjust(String(p.mp), 2)}/${rjust(String(p.mpmax), 2)}`;
     const party = st.party.map(mem); while (party.length < 4) party.push("");
     // KURA is drawn on the minimap as an arrow showing the facing direction.
     const arrow = { N: "^", E: ">", S: "v", W: "<" }[st.facing] || "@";
     const mp = st.map.slice(0, 4).map(m => m.replace("@", arrow)); while (mp.length < 4) mp.push("");
+    const mapPad = Math.max(1, Math.floor((PW - Math.max(...mp.map(m => m.length))) / 2));
     const magStr = `MAG ${st.mag.toLocaleString("en-US")}`;
-    const money = ljust(` MACCA ${st.macca.toLocaleString("en-US")}`, 26 - magStr.length) + magStr;
-    const stat = [" PARTY            HP    MP", " -------------------------", ...party.slice(0, 4),
-      " -------------------------", money,
-      ` ------- MAP  ${st.floor} -------`, "", ...mp.map(m => "      " + m), "",
-      " -------------------------", ` ALIGN  ${ljust(st.align, 11)}DAY ${String(st.day).padStart(3, "0")}`];
+    const money = ljust(` MACCA ${st.macca.toLocaleString("en-US")}`, PW - magStr.length) + magStr;
+    const title = ` MAP  ${st.floor} `, dash = PW - 1 - title.length;
+    const mapHead = " " + "-".repeat(Math.floor(dash / 2)) + title + "-".repeat(Math.ceil(dash / 2));
+    const align = `ALIGN [${String(st.align).slice(0, 3).toUpperCase()}]`;
+    const face = `FACE ${st.facing || "?"}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
+    const gap = PW - 1 - align.length - face.length - dayStr.length;
+    const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
+    const stat = [ljust(" PARTY", 20) + "HP" + " ".repeat(5) + "MP", rule, ...party.slice(0, 4),
+      rule, money, mapHead, "", ...mp.map(m => " ".repeat(mapPad) + m), "", rule, bottom];
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");
     const moonmsg = ["> NEW MOON. Demons are calm. Negotiation is favorable.", "> MOON 1/8. Demons begin to stir.",
