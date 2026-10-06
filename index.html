@@ -72,7 +72,10 @@
           const cls = { "@": "you", "^": "you", "<": "you", ">": "you", "v": "you",
             "&": "demon", "$": "gold", "?": "goal", "□": "room",
             "⋰": "stairs dots", "⋱": "stairs dots", "↑": "stairs", "↓": "stairs" }[ch];
-          const inner = ch === "⋰" ? DOTS_UP : ch === "⋱" ? DOTS_DOWN : `<span class="g">${esc(ch)}</span>`;
+          // Plain keyboard characters (? > < ^ v $ &) stay in the screen font;
+          // only real Unicode symbols switch to the fallback symbol font.
+          const inner = ch === "⋰" ? DOTS_UP : ch === "⋱" ? DOTS_DOWN
+            : ch.charCodeAt(0) < 128 ? esc(ch) : `<span class="g">${esc(ch)}</span>`;
           return `<span class="cell ${cls}">${inner}</span>`;
         });
         return left + map;
