@@ -114,11 +114,15 @@
       : Math.max(1, Math.floor((PW - Math.max(...mp.map(m => m.length))) / 2));
     const magStr = `ICHOR ${(st.ichor ?? st.mag ?? 0).toLocaleString("en-US")}`;
     const money = ljust(` SILVER ${(st.silver ?? st.macca ?? 0).toLocaleString("en-US")}`, PW - magStr.length) + magStr;
-    const title = ` MAP  ${st.floor} `, dash = PW - 1 - title.length;
+    const WEEK = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+    // Each floor is one week, MON to SUN. For now the weekday follows the floor's day count;
+    // later a floor will start on a real Monday so this matches the real date.
+    const wk = st.dungeon ? WEEK[Math.min(st.dungeon.floorDay, 7) - 1] : "";
+    const title = ` MAP  ${st.floor}${wk ? "  " + wk : ""} `, dash = PW - 1 - title.length;
     const mapHead = " " + "-".repeat(Math.floor(dash / 2)) + title + "-".repeat(Math.ceil(dash / 2));
     const align = `ALIGN [${String(st.align).slice(0, 3).toUpperCase()}]`;
-    // STEP counts every action KURA has taken (GO, SEARCH, turning); facing shows in the turn controls.
-    const face = `STEP ${String(st.steps || 0).padStart(3, "0")}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
+    // TURN counts every action KURA has taken (stepping, searching, turning); facing shows in the turn controls.
+    const face = `TURN ${String(st.steps || 0).padStart(3, "0")}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
     const gap = PW - 1 - align.length - face.length - dayStr.length;
     const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
     const stat = [ljust(" PARTY", 20) + "HP" + " ".repeat(5) + "MP", rule, ...party.slice(0, 4),
@@ -167,8 +171,10 @@
     const moonLine = "> " + lines[realDay % lines.length];
     for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
-    S.push(r(" [F]IGHT [T]ALK [S]UMMON [I]TEM [M]AGIC [C]OMP [E]QUIP [G]O SE[A]RCH"));
-    const sys = " [N]EXT [L]OAD [R]ST ";                 // system buttons tucked into the bottom border
+    // Free actions on the left (unlimited); the day's actions on the right (one search, one step).
+    const free = " [F]IGHT [T]ALK [I]NVOKE", daily = "| SE[A]RCH  [N] [S] [E] [W] ";
+    S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
+    const sys = " NE[X]T [L]OAD [R]ST ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");

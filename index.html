@@ -50,6 +50,7 @@
   .door { color: var(--trail); }
   .btn { cursor: pointer; color: var(--bright); }
   .btn:hover { background: var(--fg); color: var(--bg); }
+  .btn.off { color: var(--dim); }
   .unsaved { color: var(--gold); }
   .facing { color: var(--bright); }
   .saved { color: var(--fg); }
@@ -91,14 +92,19 @@
       }
       if (i === 1) return esc(line).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2');
       if (i === 4) return esc(line).replace("^^^", '<span class="moon">^^^</span>');
-      if (i === lines.length - 2) return esc(line)
-        .replace("[G]O", '<span class="btn" data-act="go">[G]O</span>')
-        .replace("SE[A]RCH", '<span class="btn" data-act="search">SE[A]RCH</span>');
+      if (i === lines.length - 2) {
+        // Daily actions dim once used (or when there's no door that way).
+        const can = save ? RULES.available(save) : {};
+        const b = (txt, act, ok) => `<span class="btn${ok ? "" : " off"}" data-act="${act}">${txt}</span>`;
+        return esc(line)
+          .replace("SE[A]RCH", b("SE[A]RCH", "search", can.search))
+          .replace(/\[([NSEW])\]/g, (m, x) => b(m, "go-" + x, can[x]));
+      }
       if (i === lines.length - 1) return esc(line)
         // SAVED / NOT SAVED shows for a few seconds after a load or an action, then fades back into the border.
         .replace(/ (NOT SAVED|SAVED \d{4}-\d\d-\d\d) /, (m, t) => Date.now() < statusUntil
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
-        .replace("[N]EXT", '<span class="btn" data-act="next">[N]EXT</span>')
+        .replace("NE[X]T", '<span class="btn" data-act="next">NE[X]T</span>')
         .replace("[L]OAD", '<span class="btn" data-act="load">[L]OAD</span>')
         .replace("[R]ST", '<span class="btn" data-act="reset">[R]ST</span>');
       return esc(line);
@@ -131,7 +137,8 @@
   function act(name) {
     if (name === "load") return load();
     if (!save) return;
-    save = name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R") : RULES[name](save);
+    save = name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
+      : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
     dirty = true; flashStatus(); draw();
   }
 
@@ -140,8 +147,8 @@
   });
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const k = { n: "next", l: "load", r: "reset", g: "go", a: "search", arrowup: "go",
-      arrowleft: "left", arrowright: "right" }[e.key.toLowerCase()];
+    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", l: "load", r: "reset", g: "go",
+      a: "search", arrowup: "go", arrowleft: "left", arrowright: "right" }[e.key.toLowerCase()];
     if (k) { e.preventDefault(); act(k); }
   });
 
