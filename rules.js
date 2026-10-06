@@ -13,8 +13,38 @@
     "a cracked hand mirror", "a strip of prayer cloth"];
 
   const floorNum = st => parseInt(String(st.floor).replace(/\D/g, ""), 10) || 1;
-  const doorList = room => Object.keys(room.doors).map(d => NAME[d]).join(" and ");
+  // Log lines only name a direction for KURA's own actions ("KURA goes WEST"), never for hints or doors.
+  const doorList = room => Object.keys(room.doors).length > 1 ? "Two doors." : "A single door.";
+  // The third log line. About half the time it carries a faint clue about the room KURA is in
+  // or the door she faces (never a direction word); otherwise it's pure atmosphere.
+  const MOOD = ["> The air is cold and still.", "> Water drips somewhere in the dark.", "> Dust hangs in the lamplight.",
+    "> The stone hums faintly underfoot.", "> PIXIE's glow flickers, then steadies.", "> ELF listens. Nothing answers.",
+    "> CU SITH sniffs the floor and growls low.", "> Old scratches line the walls.", "> A draft stirs, then dies.",
+    "> The silence presses close."];
   const copy = st => JSON.parse(JSON.stringify(st));
+
+  const CLUE = {
+    stairsHere: ["> The stones underfoot ring hollow.", "> KURA's steps echo too long here.",
+      "> A thin cold breath rises between the flagstones.", "> CU SITH paws at the floor and whines."],
+    stairsBeyond: ["> A cold draft breathes under the door.", "> The door is beaded with chill damp.",
+      "> PIXIE shivers and will not look at the door.", "> Air moves through the door, as if drawn downward."],
+    lureHere: ["> Something glints between the stones.", "> ELF tilts her head, as if hearing a bell.",
+      "> A faint warmth lingers in this room."],
+    lureBeyond: ["> A thread of warm light leaks around the door.", "> Faint music, or the memory of it, behind the door.",
+      "> PIXIE drifts toward the door, curious."],
+  };
+  function atmosphere(st) {
+    const d = st.dungeon;
+    if (!d || Math.random() < 0.5) return pick(MOOD);
+    const here = d.found[d.at], room = d.floor.rooms[d.at];
+    const ahead = room.doors[st.facing];
+    const clues = [];
+    if (d.floor.stairs === d.at && !here.includes("stairs")) clues.push(...CLUE.stairsHere);
+    if (ahead !== undefined && d.floor.stairs === ahead && !d.found[ahead].includes("stairs")) clues.push(...CLUE.stairsBeyond);
+    if (d.floor.lure === d.at && !here.includes("lure")) clues.push(...CLUE.lureHere);
+    if (ahead !== undefined && d.floor.lure === ahead && !d.found[ahead].includes("lure")) clues.push(...CLUE.lureBeyond);
+    return clues.length ? pick(clues) : pick(MOOD);
+  }
 
   // The stairs sit against a wall with no door. Which wall is fixed by the floor's seed.
   function stairsDir(floor, i) {
@@ -73,10 +103,10 @@
   // an old save with no floor starts one, and an action after the week runs out drops KURA a floor.
   function startDay(st, descending) {
     st.day += 1;
-    st.extra = "> Not saved.";
+    st.unsaved = true;
     if (!st.dungeon) {
       const f = arrive(st, floorNum(st));
-      st.log = `> Day ${st.day}. KURA enters ${st.floor}. A door leads ${doorList(f.rooms[0])}.`;
+      st.log = `> Day ${st.day}. KURA enters ${st.floor}.`;
       return false;
     }
     if (!descending && st.dungeon.floorDay >= FLOOR.DAYS) {
@@ -102,8 +132,11 @@
       const thing = room.hidden[found.length];
       found.push(thing);
       st.log = `> Day ${st.day}. KURA searches. ${reveal(st, thing)}`;
+      // The first search of a room also takes stock of its doors.
+      if (found.length === 1 && st.log.length + doorList(room).length < 77) st.log += " " + doorList(room);
       if (thing === "stairs") st.facing = stairsDir(dd.floor, dd.at);
     }
+    st.extra = atmosphere(st);
     return show(st);
   }
 
@@ -118,7 +151,7 @@
       const dd = st.dungeon;
       if (descending) {
         const f = arrive(st, floorNum(st) + 1);
-        st.log = `> Day ${st.day}. KURA descends to ${st.floor}. A door leads ${doorList(f.rooms[0])}.`;
+        st.log = `> Day ${st.day}. KURA descends to ${st.floor}.`;
       } else {
         const i = dd.floor.rooms[dd.at].doors[st.facing];
         const isNew = !dd.visited[i];
@@ -127,6 +160,7 @@
         st.log = `> Day ${st.day}. KURA goes ${NAME[st.facing]} into ${isNew ? "a new room" : "a cleared room"}.`;
       }
     }
+    st.extra = atmosphere(st);
     return show(st);
   }
 
@@ -143,9 +177,8 @@
       const k = CW.indexOf(st.facing);
       st.facing = [1, 2, 3, 4].map(n => CW[(k + n) % 4]).find(x => out.includes(x));
     }
-    const ahead = d.found[d.at].includes("stairs") && st.facing === stairsDir(d.floor, d.at) ? "the stairs"
-      : st.facing in d.floor.rooms[d.at].doors ? `the ${NAME[st.facing]} door` : `the ${NAME[st.facing]} wall`;
-    st.extra = `> KURA turns to face ${ahead}.`;
+    // Turning leaves the log alone: the view, the map arrow and FACE show the new direction.
+    st.unsaved = true;
     return show(st);
   }
 
@@ -176,8 +209,9 @@
         { name: "CU SITH", lv: 1, hp: 26, hpmax: 26, mp: 4, mpmax: 4 }],
     });
     const f = arrive(st, 1);
-    st.log = `> Day 1. KURA descends into B1F. A door leads ${doorList(f.rooms[0])}.`;
-    st.extra = "> NEW RUN. Not saved.";
+    st.log = `> Day 1. KURA descends into B1F.`;
+    st.extra = atmosphere(st);
+    st.unsaved = true;
     return show(st);
   }
 

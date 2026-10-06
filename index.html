@@ -35,8 +35,8 @@
   .gold { color: var(--gold); }
   .visited { color: var(--dim); }
   .moon { color: var(--moon); }
-  /* The clock's colon blinks once a second; hidden, it still keeps its space. */
-  .colon { animation: blink 1s steps(1) infinite; }
+  /* The clock's colon blinks slowly (1s on, 1s off); hidden, it still keeps its space. */
+  .colon { animation: blink 2s steps(1) infinite; }
   @keyframes blink { 50% { visibility: hidden; } }
   .stairs { color: var(--moon); }
   .goal { color: var(--gold); text-shadow: 0 0 6px var(--gold); }
@@ -53,6 +53,8 @@
   .dots svg { width: 1ch; height: 1em; vertical-align: -0.15em; fill: currentColor; }
   .btn { cursor: pointer; color: var(--bright); }
   .btn:hover { background: var(--fg); color: var(--bg); }
+  .unsaved { color: var(--gold); }
+  .saved { color: var(--fg); }
   .note { margin-top: 12px; color: var(--dim); font-size: clamp(13px, 3vw, 20px); letter-spacing: 0.04em; }
 </style>
 </head>
@@ -94,6 +96,9 @@
         .replace("[G]O", '<span class="btn" data-act="go">[G]O</span>')
         .replace("SE[A]RCH", '<span class="btn" data-act="search">SE[A]RCH</span>');
       if (i === lines.length - 1) return esc(line)
+        // SAVED / NOT SAVED shows for a few seconds after a load or an action, then fades back into the border.
+        .replace(/ (NOT SAVED|SAVED \d{4}-\d\d-\d\d) /, (m, t) => Date.now() < statusUntil
+          ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
         .replace("[N]EXT", '<span class="btn" data-act="next">[N]EXT</span>')
         .replace("[L]OAD", '<span class="btn" data-act="load">[L]OAD</span>')
         .replace("[R]ST", '<span class="btn" data-act="reset">[R]ST</span>');
@@ -109,16 +114,18 @@
   // The saved game lives in save.json on GitHub. GO, SEARCH, NEXT and RST only change this browser's
   // copy (nothing is saved); LOAD throws that away and loads the saved game again.
   let dirty = false;
+  // How long the save status stays visible in the bottom border.
+  let statusUntil = 0;
+  function flashStatus() { statusUntil = Date.now() + 4000; setTimeout(draw, 4100); }
+  // The save status now lives in the screen's bottom border; the note below just explains LOAD.
   function showNote() {
-    document.getElementById("note").textContent = dirty
-      ? "NOT SAVED  -  [L]OAD TO RETURN TO THE SAVED GAME"
-      : (save && save.saved ? `LAST SAVED ${save.saved}` : "");
+    document.getElementById("note").textContent = dirty ? "[L]OAD RETURNS TO THE SAVED GAME" : "";
   }
 
   function load() {
     return fetch("save.json?t=" + Date.now(), { cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(s => { save = s; dirty = false; draw(); showNote(); })
+      .then(s => { const fresh = !save || dirty; save = s; dirty = false; if (fresh) flashStatus(); draw(); showNote(); })
       .catch(() => {
         if (save) draw();   // keep showing the last good save if a check fails
         else document.getElementById("screen").textContent = "NO SAVE FOUND.";
@@ -130,7 +137,7 @@
     if (name === "load") return load();
     if (!save) return;
     save = name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R") : RULES[name](save);
-    dirty = true; draw(); showNote();
+    dirty = true; flashStatus(); draw(); showNote();
   }
 
   document.getElementById("screen").addEventListener("click", e => {

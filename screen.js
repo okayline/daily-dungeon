@@ -126,7 +126,9 @@
     S.push("+" + "-".repeat(78) + "+");
     S.push(r(" [F]IGHT [T]ALK [S]UMMON [I]TEM [M]AGIC [C]OMP [E]QUIP [G]O SE[A]RCH"));
     const sys = " [N]EXT [L]OAD [R]ST ";                 // system buttons tucked into the bottom border
-    S.push("+" + "=".repeat(78 - sys.length - 2) + sys + "==+");
+    // Save status sits in the bottom border too, so it never takes one of the three log lines.
+    const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
+    S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");
     for (const line of S) if (line.length !== W) throw new Error(`bad width ${line.length}: ${line}`);
     return S.join("\n");
   }

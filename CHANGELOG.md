@@ -2,6 +2,15 @@
 
 Changes to the game itself, newest first. Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.8 - Oct 6 2026
+
+- The save status moved into the bottom border (`SAVED 2026-10-06` or a gold `NOT SAVED`), so all three log lines are free for the game.
+- Log lines only name a direction when it's KURA's own action ("KURA goes WEST into a new room"). Doors and hints never give a direction away; the map, the room view and FACE show where things are.
+- Doors are only counted when KURA first searches a room ("A single door." / "Two doors.").
+- Turning no longer writes a log line. After GO or SEARCH, the third line is atmosphere. About half the time it carries a faint clue about the room or the door KURA faces (a hollow floor, a cold draft, a glint), never a direction.
+- The save status shows for a few seconds after loading or playing, then fades back into the border.
+- The clock's colon blinks more slowly.
+
 ## v0.7 - Oct 6 2026
 
 - The clock is live: the colon blinks every second and the time changes the moment the minute turns over.

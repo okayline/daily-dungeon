@@ -56,9 +56,9 @@
   ],
   "end": "door"
  },
- "log": "> Day 5. KURA enters B3F. A door leads WEST.",
+ "log": "> Day 5. KURA enters B3F.",
  "saved": "2026-10-06",
- "extra": "> GAME SAVED. DAY 005. KURA steadies her breath at the WEST door.",
+ "extra": "> Fresh stone. Old dust. The air tastes faintly of metal.",
  "facing": "W",
  "dungeon": {
   "seed": 1848569264,
