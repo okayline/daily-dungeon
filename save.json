@@ -1,0 +1,60 @@
+{
+ "day": 4,
+ "floor": "B3F",
+ "align": "NEUTRAL",
+ "macca": 4215,
+ "mag": 880,
+ "party": [
+  {
+   "name": "KURA",
+   "lv": 12,
+   "hp": 88,
+   "hpmax": 102,
+   "mp": 14,
+   "mpmax": 30
+  },
+  {
+   "name": "ELF",
+   "lv": 11,
+   "hp": 54,
+   "hpmax": 61,
+   "mp": 42,
+   "mpmax": 55
+  },
+  {
+   "name": "PIXIE",
+   "lv": 10,
+   "hp": 71,
+   "hpmax": 71,
+   "mp": 20,
+   "mpmax": 20
+  },
+  {
+   "name": "CU SITH",
+   "lv": 9,
+   "hp": 12,
+   "hpmax": 58,
+   "mp": 0,
+   "mpmax": 0
+  }
+ ],
+ "map": [
+  ".-.-.-@-&",
+  "      |",
+  "      $-?"
+ ],
+ "view": {
+  "left": [
+   true,
+   true
+  ],
+  "right": [
+   true,
+   true
+  ],
+  "end": "door"
+ },
+ "log": "> Day 4. KURA enters a junction. Paths lead EAST and SOUTH.",
+ "saved": "2026-10-06",
+ "extra": "> CU SITH limps but will not rest. A door hums faintly to the east."
+}
