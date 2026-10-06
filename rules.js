@@ -11,6 +11,8 @@
   const LEFT = { N: "W", E: "N", S: "E", W: "S" }, RIGHT = { N: "E", E: "S", S: "W", W: "N" };
   // Rare things. MOON_DROPS only fall from demons under a gibbous or full moon; DEEP ones sit far
   // inside a wall and take dozens of searches to reach.
+  // Demons from old folklore (none borrowed from the SMT games).
+  const DEMONS = ["GHOUL", "IMP", "BOGEY", "WRAITH", "KAPPA", "ONI", "GAKI", "BARGHEST", "REDCAP", "LAMIA", "NUE", "DULLAHAN"];
   const MOON_DROPS = ["a moonstone", "a shard of pale moonlight", "a fang still warm", "a silver-veined horn"];
   const DEEP = ["a sealed reliquary", "a black pearl", "an old COMP chip", "a ring of red gold", "a sword in a rotted sheath"];
   const ITEMS = [
@@ -204,22 +206,12 @@
       case "silver": { const n = R(20, 150); st.silver = silver + n; return `Coins in the rubble. ${n} SILVER.`; }
       case "item": { const it = pick(ITEMS); st.items = (st.items || []).concat(it); return `KURA finds ${it}.`; }
       case "demon": {
-        // Demons hit hard and can kill. Allies can drop to 0; if KURA does, the run is over.
-        st.party = st.party.map(p => ({ ...p, hp: Math.max(0, p.hp - R(0, Math.ceil(p.hpmax / 4))) }));
-        if (st.party[0] && st.party[0].hp <= 0) {
-          st.dead = true;
-          st.party = st.party.map(p => ({ ...p, hp: 0 }));
-          return "A demon attacks. KURA falls.";
-        }
-        const n = R(5, 30); st.ichor = ichor + n;
-        // Under a bright moon, fallen demons sometimes leave something rare behind (told on line 3).
-        const dropOdds = [0, 0, 0, 0.1, 0.25, 0.1, 0, 0][moon()];
-        if (Math.random() < dropOdds) {
-          const it = pick(MOON_DROPS);
-          st.items = (st.items || []).concat(it);
-          st.drop = `> Something glints where the demon fell: ${it}.`;
-        }
-        return `A demon attacks. It falls. ${n} ICHOR.`;
+        // A demon appears and stays until it's fought, talked down, or escaped (see the ENCOUNTER section).
+        const name = pick(DEMONS);
+        const hpmax = 16 + 9 * floorNum(st) + R(0, 8);
+        st.encounter = { name, hp: hpmax, hpmax, round: 0, angered: false };
+        st.round = [`A ${name} blocks the way.`];
+        return `A ${name} appears!`;
       }
     }
     return "Dust. Nothing more here.";
@@ -276,6 +268,7 @@
   function search(st) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
+    if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
     const d = st.dungeon, room = d.floor.rooms[d.at], found = d.found[d.at], dir = st.facing;
     if (dir in room.doors) { st.log = "> Only a door here. Nothing to search."; return show(st); }
@@ -287,7 +280,7 @@
       return long.length <= 77 ? long : `> Day ${st.day}. KURA searches ${NAME[dir]}. ${text}`;
     };
     if (Math.random() < WANDER[moon()]) {
-      st.log = say(reveal(st, "demon").replace("A demon attacks", "A demon wanders in"));
+      st.log = say(reveal(st, "demon").replace(/^A (\w+) appears!/, "A $1 wanders in!"));
       drift(st);
       if (st.drop) { st.extra = st.drop; delete st.drop; }
       return show(st);
@@ -327,10 +320,34 @@
       st.facing = dir;
       st.log = pick([`> A wall to the ${NAME[dir]}. KURA can't go that way.`, `> KURA walks ${NAME[dir]} into solid stone.`,
         `> Only cold wall to the ${NAME[dir]}.`]);
+      if (st.encounter) st.round = [`A wall to the ${NAME[dir]}. No way out there.`];
       return show(st);
     }
-    if (today(st).stepped) { st.facing = dir; st.log = "> KURA has already moved today. Rest until tomorrow."; return show(st); }
-    act(st);
+    if (today(st).stepped) {
+      st.facing = dir; st.log = "> KURA has already moved today. Rest until tomorrow.";
+      if (st.encounter) st.round = ["Today's step is spent. No running now."];
+      return show(st);
+    }
+    // With a demon in the way, stepping through a door is running: it uses the day's step either way,
+    // and half the time the demon blocks it and strikes.
+    if (st.encounter) {
+      const e = st.encounter, lines = [];
+      act(st);
+      today(st).stepped = true;
+      st.facing = dir;
+      st.roundOver = false;
+      if (Math.random() < 0.5) {
+        lines.push(`KURA runs ${NAME[dir]}. The ${e.name} blocks the door.`);
+        st.log = `> Day ${st.day}. KURA tries to run ${NAME[dir]}. The ${e.name} blocks it.`;
+        demonTurn(st, lines);
+        st.round = lines;
+        if (st.dead) st.roundOver = true;
+        return show(st);
+      }
+      st.encounter = null;
+      st.roundOver = true;
+      st.round = [`KURA runs ${NAME[dir]} and leaves the ${e.name} behind.`];
+    } else act(st);
     st.today.stepped = true;
     st.facing = dir;
     if (d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at)) {
@@ -366,6 +383,7 @@
   function next(st) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
+    if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
     st.clockOffset = (st.clockOffset || 0) + 1;
     sync(st);
@@ -398,7 +416,7 @@
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },
-      align: "NEUTRAL", silver: 0, ichor: 0, items: [],
+      align: "NEUTRAL", silver: 0, ichor: 0, items: [], encounter: null,
       party: [
         { name: "KURA", lv: 1, hp: 30, hpmax: 30, mp: 8, mpmax: 8 },
         { name: "ELF", lv: 1, hp: 22, hpmax: 22, mp: 14, mpmax: 14 },
@@ -479,7 +497,92 @@
     return show(st);
   }
 
-  const api = { next, reset, search, go, turn, available, tick, inventory, useItem };
+  // ENCOUNTER: a demon stays until it is beaten, talked down, or escaped. Each choice is one round,
+  // and the demon answers every round it's still standing. The moon decides how wild it is:
+  // under a full moon demons hit harder and almost never listen; under a new moon they'd rather talk.
+  const RAGE = [0.8, 0.9, 1.0, 1.15, 1.3, 1.15, 1.0, 0.9];          // demon damage by moon phase
+  const LISTEN = [0.7, 0.55, 0.45, 0.3, 0.1, 0.3, 0.45, 0.55];      // chance a talk works, by moon phase
+  function demonTurn(st, lines) {
+    const e = st.encounter, up = st.party.filter(p => p.hp > 0);
+    if (!up.length) return;
+    const target = Math.random() < 0.4 ? st.party[0].hp > 0 ? st.party[0] : pick(up) : pick(up);
+    const dmg = Math.min(target.hp, Math.max(1, Math.round(R(2, Math.ceil(target.hpmax / 3)) * RAGE[moon()])));
+    st.party = st.party.map(p => p === target ? { ...p, hp: p.hp - dmg } : p);
+    lines.push(`The ${e.name} strikes ${target.name}. -${dmg} HP` + (target.hp - dmg <= 0 ? ". FALLS" : ""));
+    if (st.party[0].hp <= 0) {
+      st.dead = true;
+      st.party = st.party.map(p => ({ ...p, hp: 0 }));
+      lines.push("KURA falls. The run is over.");
+      st.log = `> Day ${st.day}. The ${e.name} strikes KURA down.`;
+      st.encounter = null;
+      st.round = lines;
+      st.roundOver = true;
+    }
+  }
+  function win(st, lines) {
+    const e = st.encounter;
+    const n = R(5, 30) + 3 * floorNum(st);
+    st.ichor = (st.ichor ?? st.mag ?? 0) + n;
+    lines.push(`The ${e.name} falls.  +${n} ICHOR`);
+    const dropOdds = [0, 0, 0, 0.1, 0.25, 0.1, 0, 0][moon()];
+    if (Math.random() < dropOdds) {
+      const it = pick(MOON_DROPS);
+      st.items = (st.items || []).concat(it);
+      lines.push(`It leaves ${it}.`);
+    }
+    st.log = `> Day ${st.day}. The ${e.name} falls. ${n} ICHOR.`;
+    st.encounter = null;
+  }
+  function round(st, fn, idle) {
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    if (!st.encounter) { if (idle) st.log = idle; return show(st); }
+    act(st);
+    st.encounter.round++;
+    const lines = [];
+    st.roundOver = false;
+    fn(st, lines);
+    if (st.encounter && !st.dead) demonTurn(st, lines);
+    if (!st.encounter || st.dead) st.roundOver = true;
+    st.round = lines;
+    return show(st);
+  }
+  // FIGHT: everyone still standing strikes once; then the demon answers.
+  function fight(st) {
+    return round(st, (st, lines) => {
+      const e = st.encounter;
+      let total = 0;
+      for (const p of st.party) if (p.hp > 0) total += R(1, 4) + Math.floor((p.lv || 1) / 2);
+      e.hp = Math.max(0, e.hp - total);
+      lines.push(`The party strikes. -${total}`);
+      st.log = `> Day ${st.day}. KURA's party fights the ${e.name}.`;
+      if (e.hp <= 0) win(st, lines);
+    }, "> Nothing here to fight.");
+  }
+  // TALK: the demon may listen and leave (sometimes with a gift), ask a price, or take offense.
+  function talk(st) {
+    return round(st, (st, lines) => {
+      const e = st.encounter;
+      st.log = `> Day ${st.day}. KURA speaks to the ${e.name}.`;
+      if (e.angered) { lines.push(`The ${e.name} won't listen anymore.`); return; }
+      const r = Math.random(), ok = LISTEN[moon()];
+      if (r < ok * 0.6) {
+        lines.push(`The ${e.name} listens, and slips away.`);
+        if (Math.random() < 0.4) { const it = pick(ITEMS); st.items = (st.items || []).concat(it); lines.push(`It leaves ${it} behind.`); }
+        st.log = `> Day ${st.day}. KURA talks the ${e.name} down. It leaves.`;
+        st.encounter = null;
+      } else if (r < ok) {
+        const price = 20 + 10 * floorNum(st) + R(0, 20), have = st.silver ?? st.macca ?? 0;
+        if (have >= price) {
+          st.silver = have - price;
+          lines.push(`The ${e.name} wants ${price} SILVER. KURA pays. It leaves.`);
+          st.log = `> Day ${st.day}. KURA pays the ${e.name} ${price} SILVER. It leaves.`;
+          st.encounter = null;
+        } else { lines.push(`The ${e.name} wants ${price} SILVER. KURA has too little.`); e.angered = true; }
+      } else { lines.push(`The ${e.name} laughs at KURA.`); e.angered = Math.random() < 0.5; }
+    }, "> KURA speaks. Only the walls answer.");
+  }
+  const api = { next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

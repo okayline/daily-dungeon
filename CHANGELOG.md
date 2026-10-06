@@ -2,6 +2,18 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.17 - Oct 6 2026, 11:06 HST
+
+- SE[A]RCH moved to the free actions on the left, since it can be used any number of times.
+- The day's step buttons are spelled out: `[N]ORTH [S]OUTH [E]AST [W]EST`.
+- When a search turns something up, a gold-bordered box says what KURA found (with its note) and waits for Enter, Space, Esc or a click. Holding A won't skip past it.
+- Real encounters. A demon that turns up (in a wall, or wandering in) stays until it's dealt with, in a box showing its name and HP bar. Each round, choose:
+  - `[F]IGHT`: everyone still standing strikes, then the demon strikes back. Beat it for ICHOR (and, under a bright moon, maybe a rare drop).
+  - `[T]ALK`: it may listen and leave (sometimes with a gift), ask for SILVER, or laugh and refuse to talk again. Demons listen best at new moon and almost never at full moon.
+  - Run through a door: during a fight the open directions in the menu glow red. Stepping through one uses the day's step either way; half the time KURA gets away into that room, otherwise the demon blocks the door and strikes. With the step already spent, there's no running.
+- Demons hit harder under a brighter moon. If KURA falls, the run is over. Using an item mid-fight is free.
+- Moving takes two presses: the first lights the button gold and asks "Use today's step to go NORTH? Press [N] again.", the second moves. Anything else, or six seconds, cancels.
+
 ## v0.16 - Oct 6 2026, 10:48 HST
 
 - Deep caches: about one room in three hides something rare deep inside one wall, found only 1 in 35 per search. That wall can stay silent for 30, 40, 50 tries and then give.

@@ -51,11 +51,18 @@
   .btn { cursor: pointer; color: var(--bright); }
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
+  .btn.armed { background: var(--gold); color: var(--bg); }
+  .btn.flee { color: var(--demon); text-shadow: 0 0 8px var(--demon); animation: blink 1.2s steps(1) infinite; }
   .unsaved { color: var(--gold); }
   .frame { position: relative; }
   .logview { position: absolute; inset: 0; background: rgba(7, 9, 10, 0.96); overflow: auto; cursor: pointer;
     border: 1px solid var(--trail); box-sizing: border-box; padding: 1.5em 2ch; }
   .logview pre { white-space: pre-wrap; }
+  .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
+    border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
+  .foundbox pre { white-space: pre; text-align: center; }
+  .foundbox .gold { color: var(--gold); }
+  .foundbox .demon { color: var(--demon); }
   .facing { color: var(--bright); }
   .saved { color: var(--fg); }
 </style>
@@ -63,7 +70,8 @@
 <body>
   <div class="frame"><pre id="screen">LOADING...</pre>
     <div id="log" class="logview" hidden><pre></pre></div>
-    <div id="inv" class="logview" hidden><pre></pre></div></div>
+    <div id="inv" class="logview" hidden><pre></pre></div>
+    <div id="found" class="foundbox" hidden><pre></pre></div></div>
 <script src="screen.js"></script>
 <script src="floor.js"></script>
 <script src="rules.js"></script>
@@ -105,9 +113,12 @@
         const can = save ? RULES.available(save) : {};
         const b = (txt, act, ok) => `<span class="btn${ok ? "" : " off"}" data-act="${act}">${txt}</span>`;
         return esc(line)
+          .replace("[F]IGHT", '<span class="btn" data-act="fight">[F]IGHT</span>')
+          .replace("[T]ALK", '<span class="btn" data-act="talk">[T]ALK</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace("SE[A]RCH", b("SE[A]RCH", "search", can.search))
-          .replace(/\[([NSEW])\]/g, (m, x) => b(m, "go-" + x, can[x]));
+          .replace(/\[([NSEW])\](ORTH|OUTH|AST|EST)/g, (m, x) =>
+            b(m, "go-" + x, can[x]).replace('class="btn', 'class="btn' + (armed === x ? " armed" : save && save.encounter && can[x] ? " flee" : "")));
       }
       if (i === lines.length - 1) return esc(line)
         // SAVED / NOT SAVED shows for a few seconds after each action, then fades back into the border.
@@ -122,7 +133,9 @@
 
   function draw() {
     if (!save) return;
-    document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, save.extra || ""));
+    // While a step is waiting for its second press, line 3 asks for confirmation (never saved).
+    const extra = armed ? `> Use today's step to go ${NAMES[armed]}? Press [${armed}] again.` : save.extra || "";
+    document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extra));
   }
 
   // Every player's run lives in their own browser and saves itself after every action.
@@ -165,7 +178,7 @@
   function start() {
     let s = null;
     try { s = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
-    if (s && s.dungeon && s.party) { save = s; tick(); flashStatus(); draw(); return; }
+    if (s && s.dungeon && s.party) { save = s; tick(); flashStatus(); draw(); encounterBox(); return; }
     save = RULES.reset({});
     save.history = [];
     remember("");
@@ -229,24 +242,104 @@
     showInv(true);
   }
 
+  // The day's one step takes two presses: the first arms it, the second (same direction) moves.
+  // Anything else cancels. A wall or an already-used step answers on the first press.
+  const NAMES = { N: "NORTH", S: "SOUTH", E: "EAST", W: "WEST" };
+  let armed = null, armTimer = null;
+  function disarm() { armed = null; clearTimeout(armTimer); }
+  // When a search turns something up, a box says what it was and waits for Enter, Space, Esc or a
+  // click, so a quick run of searches can't skip past it. Holding A won't dismiss it.
+  function foundBox(before) {
+    if (!save) return;
+    const newItems = (save.items || []).slice((before.items || []).length);
+    const silver = (save.silver || 0) - (before.silver || 0);
+    const lines = [];
+    for (const it of newItems) lines.push(it);
+    if (silver > 0 && /Coins/.test(save.log)) lines.push(silver + " SILVER");
+    if (/Stairs lead down/.test(save.log)) lines.push("the stairs down");
+    if (/alcove/.test(save.log)) lines.push("something hidden, lit from within");
+    const box = document.getElementById("found");
+    const pre = box.querySelector("pre");
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
+    if (!lines.length) return;
+    pre.innerHTML = "";
+    add("KURA FOUND");
+    add(" ");
+    for (const l of lines) add(l, "gold");
+    const notes = newItems.map(n => (RULES.inventory({ items: [n] })[0] || {}).text).filter(Boolean);
+    if (notes.length) { add(" "); notes.forEach(n => add(n)); }
+    add(" ");
+    add("[ENTER]");
+    box.hidden = false;
+    box.dataset.mode = "found";
+  }
+  function closeFound() {
+    document.getElementById("found").hidden = true;
+    if (save && save.roundOver) { delete save.round; delete save.roundOver; persist(); draw(); }
+  }
+
+  // ENCOUNTER box: the demon, its HP, what happened this round, and the choices. It stays open until
+  // the demon is gone (or KURA falls); then [ENTER] closes it.
+  function encounterBox() {
+    const e = save && save.encounter, lines = (save && save.round) || [];
+    if (!e && !(save && save.roundOver)) return false;
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
+    if (e) {
+      const filled = Math.round(10 * e.hp / e.hpmax);
+      add(`${e.name}   [${"#".repeat(filled)}${"-".repeat(10 - filled)}]`, "demon");
+    } else add(save.dead ? "DEFEAT" : "THE WAY IS CLEAR", save.dead ? "demon" : "gold");
+    add(" ");
+    for (const l of lines) add(l, /falls\.  \+|leaves|slips away|pays|escapes/.test(l) ? "gold" : /KURA falls|FALLS/.test(l) ? "demon" : "");
+    add(" ");
+    if (e) {
+      const opt = (label, act) => { const d = document.createElement("span"); d.textContent = label; d.className = "btn"; d.dataset.fact = act; return d; };
+      const row = document.createElement("div");
+      row.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"));
+      pre.appendChild(row);
+      add(" ");
+      add("or run through a door: [N] [S] [E] [W] below (uses today's step)");
+    } else add("[ENTER]");
+    box.hidden = false;
+    box.dataset.mode = e ? "encounter" : "done";
+    return true;
+  }
+
   function act(name) {
+    if (name.startsWith("go-") && save) {
+      const dir = name.slice(3);
+      if (armed !== dir && RULES.available(save)[dir]) {
+        disarm(); armed = dir;
+        armTimer = setTimeout(() => { armed = null; draw(); }, 6000);
+        return draw();
+      }
+    }
+    disarm();
     if (name === "invoke") return showInv(document.getElementById("inv").hidden);
     if (name === "log") return toggleLog();
     if (name === "backup") return backup();
     if (!save) return;
     if (name === "reset" && !confirm("Begin a new run? This run will be lost.")) return;
     const log = save.log, steps = save.steps;
+    const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
     if (name === "reset") save.history = [];
     remember(name === "reset" || save.steps !== steps ? "" : log);
     persist(); draw();
+    if (name !== "reset" && !encounterBox()) foundBox(before);
   }
 
   document.getElementById("screen").addEventListener("click", e => {
     const b = e.target.closest(".btn"); if (b) act(b.dataset.act);
   });
   document.getElementById("log").addEventListener("click", () => toggleLog(false));
+  document.getElementById("found").addEventListener("click", e => {
+    const b = e.target.closest("[data-fact]");
+    if (b) act(b.dataset.fact);
+    else if (document.getElementById("found").dataset.mode !== "encounter") closeFound();
+  });
   document.getElementById("inv").addEventListener("click", e => {
     const line = e.target.closest("[data-i]");
     if (line) useInv(Number(line.dataset.i)); else showInv(false);
@@ -254,6 +347,15 @@
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
+    const fbox = document.getElementById("found");
+    if (!fbox.hidden) {
+      e.preventDefault();
+      if (fbox.dataset.mode === "encounter") {
+        const k = { f: "fight", t: "talk", n: "go-N", s: "go-S", e: "go-E", w: "go-W" }[key];
+        if (k) act(k);
+      } else if (key === "enter" || key === " " || key === "escape") closeFound();
+      return;
+    }
     if (!document.getElementById("inv").hidden) {
       if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); }
       else if (/^[1-9]$/.test(key)) { e.preventDefault(); useInv(Number(key) - 1); }
@@ -263,7 +365,7 @@
       if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
       return;
     }
-    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", i: "invoke", l: "log", b: "backup", r: "reset", 
+    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", f: "fight", t: "talk", i: "invoke", l: "log", b: "backup", r: "reset", 
       a: "search", arrowleft: "left", arrowright: "right" }[key];
     if (k) { e.preventDefault(); act(k); }
   });

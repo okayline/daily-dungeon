@@ -171,8 +171,8 @@
     const moonLine = "> " + lines[realDay % lines.length];
     for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
-    // Free actions on the left (unlimited); the day's actions on the right (one search, one step).
-    const free = " [F]IGHT [T]ALK [I]NVOKE", daily = "| SE[A]RCH  [N] [S] [E] [W] ";
+    // Free actions on the left (unlimited, searching included); the day's one step on the right.
+    const free = " [F]IGHT [T]ALK [I]NVOKE SE[A]RCH", daily = "| [N]ORTH [S]OUTH [E]AST [W]EST ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
     const sys = " [L]OG [B]ACKUP [R]ST ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
