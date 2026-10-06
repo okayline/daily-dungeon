@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.16 - Oct 6 2026, 10:48 HST
+
+- Deep caches: about one room in three hides something rare deep inside one wall, found only 1 in 35 per search. That wall can stay silent for 30, 40, 50 tries and then give.
+- Moon drops: demons that fall under a gibbous moon (10%) or a full moon (25%) sometimes leave a rare item behind.
+- `[I]NVOKE` (or I) opens the inventory: every item KURA carries, with counts and a short note. Press a number or click to use one; using an item is free.
+- 20 more common finds, old-dungeon things (a rusted iron key, a jar of grave salt) and ruined-city tech (a dead pager, a cracked phone, a neon tube fragment, a VR visor). Just for keeping, each with a short note.
+- Usable for now: a vial of medicine (heals everyone by a third), a strip of prayer cloth (raises fallen allies a little), a stub of black candle. Keepsakes and rares can be looked at but not used yet.
+
 ## v0.15 - Oct 6 2026, 10:31 HST
 
 - Demons can kill. Every demon fight (hidden or wandering) can drop party members to 0 HP, and if KURA falls, the run is over. A night's rest heals a fifth of everyone's HP.

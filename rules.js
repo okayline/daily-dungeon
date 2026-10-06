@@ -9,8 +9,38 @@
   const NAME = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
   const CW = ["N", "E", "S", "W"];
   const LEFT = { N: "W", E: "N", S: "E", W: "S" }, RIGHT = { N: "E", E: "S", S: "W", W: "N" };
-  const ITEMS = ["a vial of medicine", "a bead of smoky glass", "a bent silver charm", "a stub of black candle",
-    "a cracked hand mirror", "a strip of prayer cloth"];
+  // Rare things. MOON_DROPS only fall from demons under a gibbous or full moon; DEEP ones sit far
+  // inside a wall and take dozens of searches to reach.
+  const MOON_DROPS = ["a moonstone", "a shard of pale moonlight", "a fang still warm", "a silver-veined horn"];
+  const DEEP = ["a sealed reliquary", "a black pearl", "an old COMP chip", "a ring of red gold", "a sword in a rotted sheath"];
+  const ITEMS = [
+    "a vial of medicine",
+    "a bead of smoky glass",
+    "a bent silver charm",
+    "a stub of black candle",
+    "a cracked hand mirror",
+    "a strip of prayer cloth",
+    "a rusted iron key",
+    "a chipped bone die",
+    "a tin of old matches",
+    "a moth-eaten glove",
+    "a page of a burned book",
+    "a jar of grave salt",
+    "a wax seal, unbroken",
+    "a dead pager",
+    "a cracked phone",
+    "a spent battery",
+    "a subway token",
+    "a tangle of fiber cable",
+    "a scratched data disc",
+    "a burned-out circuit board",
+    "a cassette with no label",
+    "a neon tube fragment",
+    "an ID card, face scratched",
+    "a vending machine coin",
+    "a VR visor, lens cracked",
+    "a bag of loose screws",
+  ];
 
   const floorNum = st => parseInt(String(st.floor).replace(/\D/g, ""), 10) || 1;
   // Log lines only name a direction when stating a character's action ("KURA goes WEST"), never for hints or doors.
@@ -172,7 +202,7 @@
       case "stairs": return "A floor stone shifts. Stairs lead down.";
       case "lure": return "A hidden alcove, lit from within.";
       case "silver": { const n = R(20, 150); st.silver = silver + n; return `Coins in the rubble. ${n} SILVER.`; }
-      case "item": return `KURA finds ${pick(ITEMS)}.`;
+      case "item": { const it = pick(ITEMS); st.items = (st.items || []).concat(it); return `KURA finds ${it}.`; }
       case "demon": {
         // Demons hit hard and can kill. Allies can drop to 0; if KURA does, the run is over.
         st.party = st.party.map(p => ({ ...p, hp: Math.max(0, p.hp - R(0, Math.ceil(p.hpmax / 4))) }));
@@ -182,6 +212,13 @@
           return "A demon attacks. KURA falls.";
         }
         const n = R(5, 30); st.ichor = ichor + n;
+        // Under a bright moon, fallen demons sometimes leave something rare behind (told on line 3).
+        const dropOdds = [0, 0, 0, 0.1, 0.25, 0.1, 0, 0][moon()];
+        if (Math.random() < dropOdds) {
+          const it = pick(MOON_DROPS);
+          st.items = (st.items || []).concat(it);
+          st.drop = `> Something glints where the demon fell: ${it}.`;
+        }
         return `A demon attacks. It falls. ${n} ICHOR.`;
       }
     }
@@ -210,7 +247,7 @@
   // room's next hidden thing. An empty room never answers, and the player can't tell it apart
   // from an unlucky one. Every search passes a little time, and a demon may wander in;
   // that happens more under a bright moon.
-  const FIND = 1 / 5;
+  const FIND = 1 / 5, DEEP_FIND = 1 / 35;
   const WANDER = [1 / 30, 1 / 20, 1 / 14, 1 / 10, 1 / 6, 1 / 10, 1 / 14, 1 / 20];   // by moon phase, new -> full -> new
   const moon = () => (root.SMT || require("./screen.js")).moonIndex(new Date());
   // Each room hides its things behind its walls (never behind a door). The stairs are always behind
@@ -228,6 +265,9 @@
       if (thing === "stairs") w[sd].push(thing);
       else { w[free[k % free.length]].push(thing); k = (k * 1103515245 + 12345) >>> 0; }
     }
+    // About one room in three hides something deep in one wall: findable, but only 1 in 35 per search,
+    // and that wall may look empty for a very long time.
+    if (k % 3 === 0) w.deep = { dir: free[(k >>> 4) % free.length], item: DEEP[(k >>> 8) % DEEP.length], found: false };
     return (d.walls[i] = w);
   }
 
@@ -249,6 +289,7 @@
     if (Math.random() < WANDER[moon()]) {
       st.log = say(reveal(st, "demon").replace("A demon attacks", "A demon wanders in"));
       drift(st);
+      if (st.drop) { st.extra = st.drop; delete st.drop; }
       return show(st);
     }
     const w = walls(d, d.at), pile = w[dir] || [];
@@ -259,6 +300,14 @@
       // The first find in a room also takes stock of its doors.
       if (found.length === 1 && st.log.length + doorList(room).length < 77) st.log += " " + doorList(room);
       drift(st);
+      if (st.drop) { st.extra = st.drop; delete st.drop; }
+      return show(st);
+    }
+    if (w.deep && w.deep.dir === dir && !w.deep.found && Math.random() < DEEP_FIND) {
+      w.deep.found = true;
+      st.items = (st.items || []).concat(w.deep.item);
+      st.log = say("Deep in the stone, something gives.");
+      st.extra = `> KURA pulls out ${w.deep.item}.`;
       return show(st);
     }
     st.log = say(pick(["Nothing.", "Only stone.", "Nothing but dust.", "Nothing yet.", "The wall gives nothing away."]));
@@ -349,7 +398,7 @@
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },
-      align: "NEUTRAL", silver: 0, ichor: 0,
+      align: "NEUTRAL", silver: 0, ichor: 0, items: [],
       party: [
         { name: "KURA", lv: 1, hp: 30, hpmax: 30, mp: 8, mpmax: 8 },
         { name: "ELF", lv: 1, hp: 22, hpmax: 22, mp: 14, mpmax: 14 },
@@ -364,7 +413,73 @@
     return show(st);
   }
 
-  const api = { next, reset, search, go, turn, available, tick };
+  // ITEMS: what each one does when used from the INVOKE screen. Using an item is free (no day spent).
+  const ITEM_INFO = {
+    "a vial of medicine": { text: "Heals everyone by a third.", use: st => heal(st, 1 / 3, false), say: "The party breathes easier." },
+    "a strip of prayer cloth": { text: "Raises fallen allies a little.", use: st => heal(st, 1 / 4, true), say: "Fallen allies stir." },
+    "a stub of black candle": { text: "Burns for a while. Calms the dark.", use: st => { st.extra = "> The candle burns low. The dark draws back."; }, say: "A small light holds." },
+    "a bead of smoky glass": { text: "Something moves inside it." },
+    "a bent silver charm": { text: "Warm to the touch at night." },
+    "a cracked hand mirror": { text: "Shows a room that isn't here." },
+    "a moonstone": { text: "Rare. Fell under a bright moon." },
+    "a shard of pale moonlight": { text: "Rare. Fell under a bright moon." },
+    "a fang still warm": { text: "Rare. Fell under a bright moon." },
+    "a silver-veined horn": { text: "Rare. Fell under a bright moon." },
+    "a sealed reliquary": { text: "Rare. Pulled from deep in a wall." },
+    "a black pearl": { text: "Rare. Pulled from deep in a wall." },
+    "an old COMP chip": { text: "Rare. Pulled from deep in a wall." },
+    "a ring of red gold": { text: "Rare. Pulled from deep in a wall." },
+    "a sword in a rotted sheath": { text: "Rare. Pulled from deep in a wall." },
+    "a rusted iron key": { text: "It opens nothing here." },
+    "a chipped bone die": { text: "Always lands on six." },
+    "a tin of old matches": { text: "Half of them still strike." },
+    "a moth-eaten glove": { text: "Too small for any hand you know." },
+    "a page of a burned book": { text: 'One line survives: "down is not away."' },
+    "a jar of grave salt": { text: "Spirits don't like it." },
+    "a wax seal, unbroken": { text: "Pressed with a sigil you don't know." },
+    "a dead pager": { text: "It buzzes once, every new moon." },
+    "a cracked phone": { text: "The screen shows a map of somewhere else." },
+    "a spent battery": { text: "Still faintly warm." },
+    "a subway token": { text: "For a line that was never built." },
+    "a tangle of fiber cable": { text: "It glows when nobody looks." },
+    "a scratched data disc": { text: "Labelled in a hand you almost know." },
+    "a burned-out circuit board": { text: "Smells of ozone and incense." },
+    "a cassette with no label": { text: "Hiss, then breathing." },
+    "a neon tube fragment": { text: "Flickers pink in the dark." },
+    "an ID card, face scratched": { text: "Clearance level: none." },
+    "a vending machine coin": { text: "The machines down here still take it." },
+    "a VR visor, lens cracked": { text: "Shows the room, but emptier." },
+    "a bag of loose screws": { text: "Rattles like teeth." },
+  };
+  function heal(st, part, revive) {
+    st.party = st.party.map(p => (p.hp > 0 || revive) ? { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax * part)) } : p);
+  }
+  // The inventory, grouped: [{ name, count, text, usable }].
+  function inventory(st) {
+    const counts = {};
+    for (const it of st.items || []) counts[it] = (counts[it] || 0) + 1;
+    return Object.keys(counts).map(name => {
+      const info = ITEM_INFO[name] || { text: "" };
+      return { name, count: counts[name], text: info.text, usable: !!info.use };
+    });
+  }
+  // Use one of an item. Things that can't be used yet just get looked at.
+  function useItem(st, name) {
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    if (!ensureFloor(st)) return show(st);
+    const i = (st.items || []).indexOf(name);
+    if (i < 0) return show(st);
+    const info = ITEM_INFO[name] || {};
+    if (!info.use) { st.log = `> KURA turns ${name.replace(/^an? /, "the ")} over. Not now.`; return show(st); }
+    st.items.splice(i, 1);
+    act(st);
+    info.use(st);
+    st.log = `> KURA uses ${name}. ${info.say}`;
+    return show(st);
+  }
+
+  const api = { next, reset, search, go, turn, available, tick, inventory, useItem };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

@@ -62,7 +62,8 @@
 </head>
 <body>
   <div class="frame"><pre id="screen">LOADING...</pre>
-    <div id="log" class="logview" hidden><pre></pre></div></div>
+    <div id="log" class="logview" hidden><pre></pre></div>
+    <div id="inv" class="logview" hidden><pre></pre></div></div>
 <script src="screen.js"></script>
 <script src="floor.js"></script>
 <script src="rules.js"></script>
@@ -104,6 +105,7 @@
         const can = save ? RULES.available(save) : {};
         const b = (txt, act, ok) => `<span class="btn${ok ? "" : " off"}" data-act="${act}">${txt}</span>`;
         return esc(line)
+          .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace("SE[A]RCH", b("SE[A]RCH", "search", can.search))
           .replace(/\[([NSEW])\]/g, (m, x) => b(m, "go-" + x, can[x]));
       }
@@ -199,7 +201,36 @@
   }
 
   // N/S/E/W take the day's step, SEARCH is unlimited, turning is free. NEXT (X) is a hidden testing cheat.
+  // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
+  let invList = [];
+  function showInv(open) {
+    const box = document.getElementById("inv");
+    box.hidden = !open;
+    if (!open) return;
+    invList = save ? RULES.inventory(save) : [];
+    const pre = box.querySelector("pre");
+    pre.innerHTML = "";
+    const add = (txt, cls, i) => { const d = document.createElement("div"); d.textContent = txt; if (cls) d.className = cls; if (i !== undefined) d.dataset.i = i; pre.appendChild(d); };
+    add("INVOKE  -  INVENTORY", "");
+    add(" ");
+    if (!invList.length) add("Nothing yet. Search the walls.");
+    invList.forEach((it, i) => add(
+      `${i < 9 ? i + 1 : " "}  ${(it.name + (it.count > 1 ? " x" + it.count : "")).padEnd(30)} ${it.text}`,
+      it.usable ? "btn" : "", i));
+    add(" ");
+    add("Press a number or click an item to use it. [I] or Esc closes.");
+  }
+  function useInv(i) {
+    const it = invList[i];
+    if (!it || !save) return;
+    const log = save.log;
+    save = RULES.useItem(save, it.name);
+    remember(log); persist(); draw();
+    showInv(true);
+  }
+
   function act(name) {
+    if (name === "invoke") return showInv(document.getElementById("inv").hidden);
     if (name === "log") return toggleLog();
     if (name === "backup") return backup();
     if (!save) return;
@@ -216,14 +247,23 @@
     const b = e.target.closest(".btn"); if (b) act(b.dataset.act);
   });
   document.getElementById("log").addEventListener("click", () => toggleLog(false));
+  document.getElementById("inv").addEventListener("click", e => {
+    const line = e.target.closest("[data-i]");
+    if (line) useInv(Number(line.dataset.i)); else showInv(false);
+  });
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
+    if (!document.getElementById("inv").hidden) {
+      if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); }
+      else if (/^[1-9]$/.test(key)) { e.preventDefault(); useInv(Number(key) - 1); }
+      return;
+    }
     if (!document.getElementById("log").hidden) {
       if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
       return;
     }
-    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", l: "log", b: "backup", r: "reset", 
+    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", i: "invoke", l: "log", b: "backup", r: "reset", 
       a: "search", arrowleft: "left", arrowright: "right" }[key];
     if (k) { e.preventDefault(); act(k); }
   });
