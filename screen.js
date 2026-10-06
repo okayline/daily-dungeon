@@ -99,10 +99,15 @@
     const party = st.party.map(mem); while (party.length < 4) party.push("");
     // KURA is drawn on the minimap as an arrow showing the facing direction.
     const arrow = { N: "^", E: ">", S: "v", W: "<" }[st.facing] || "@";
-    const mp = st.map.slice(0, 4).map(m => m.replace("@", arrow)); while (mp.length < 4) mp.push("");
-    const mapPad = Math.max(1, Math.floor((PW - Math.max(...mp.map(m => m.length))) / 2));
+    // The map area is 6 rows. An old 4-row map gets a blank row above and below;
+    // the 3x3 room grid uses 5 rows under one blank row.
+    const mapRows = st.map.length > 4 ? 5 : 4;
+    const mp = st.map.slice(0, mapRows).map(m => m.replace("@", arrow)); while (mp.length < mapRows) mp.push("");
+    // The room grid is always 17 wide, so it sits in the same place every day.
+    const mapPad = mapRows === 5 ? Math.floor((PW - 17) / 2)
+      : Math.max(1, Math.floor((PW - Math.max(...mp.map(m => m.length))) / 2));
     const magStr = `MAG ${st.mag.toLocaleString("en-US")}`;
-    const money = ljust(` MACCA ${st.macca.toLocaleString("en-US")}`, PW - magStr.length) + magStr;
+    const money = ljust(` SILVER ${(st.silver ?? st.macca ?? 0).toLocaleString("en-US")}`, PW - magStr.length) + magStr;
     const title = ` MAP  ${st.floor} `, dash = PW - 1 - title.length;
     const mapHead = " " + "-".repeat(Math.floor(dash / 2)) + title + "-".repeat(Math.ceil(dash / 2));
     const align = `ALIGN [${String(st.align).slice(0, 3).toUpperCase()}]`;
@@ -110,7 +115,7 @@
     const gap = PW - 1 - align.length - face.length - dayStr.length;
     const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
     const stat = [ljust(" PARTY", 20) + "HP" + " ".repeat(5) + "MP", rule, ...party.slice(0, 4),
-      rule, money, mapHead, "", ...mp.map(m => " ".repeat(mapPad) + m), "", rule, bottom];
+      rule, money, mapHead, "", ...mp.map(m => " ".repeat(mapPad) + m), ...(mapRows === 4 ? [""] : []), rule, bottom];
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");
     const moonmsg = ["> NEW MOON. Demons are calm. Negotiation is favorable.", "> MOON 1/8. Demons begin to stir.",

@@ -44,6 +44,7 @@
   .cell { display: inline-block; width: 1ch; text-align: center; overflow: visible; white-space: nowrap; }
   .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
+  .door { color: var(--trail); }
   /* The diagonal-dot stairs (⋰ ⋱) are tiny math symbols in most fonts, so the page
      draws them as three stepped dots that fill one character cell. */
   .dots svg { width: 1ch; height: 1em; vertical-align: -0.15em; fill: currentColor; }
@@ -69,12 +70,12 @@
   function colorize(text) {
     const lines = text.split("\n");
     return lines.map((line, i) => {
-      if (i >= 16 && i <= 19) {
+      if (i >= 16 && i <= 20) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
-        const map = right.replace(/[@^<>v&$?□⋰⋱↑↓]/g, ch => {
+        const map = right.replace(/[@^<>v&$?□⋰⋱↑↓╫═]/g, ch => {
           const cls = { "@": "you", "^": "you", "<": "you", ">": "you", "v": "you",
             "&": "demon", "$": "gold", "?": "goal", "□": "room",
-            "⋰": "stairs dots", "⋱": "stairs dots", "↑": "stairs", "↓": "stairs" }[ch];
+            "⋰": "stairs dots", "⋱": "stairs dots", "↑": "stairs", "↓": "stairs", "╫": "door", "═": "door" }[ch];
           // Plain keyboard characters (? > < ^ v $ &) stay in the screen font;
           // only real Unicode symbols switch to the fallback symbol font.
           const inner = ch === "⋰" ? DOTS_UP : ch === "⋱" ? DOTS_DOWN

@@ -25,7 +25,7 @@
 
   function reset(st) {
     return Object.assign({}, st, {
-      day: 1, floor: "B1F", align: "NEUTRAL", macca: 0, mag: 0, facing: "E",
+      day: 1, floor: "B1F", align: "NEUTRAL", silver: 0, mag: 0, facing: "E",
       party: [
         { name: "KURA", lv: 1, hp: 30, hpmax: 30, mp: 8, mpmax: 8 },
         { name: "ELF", lv: 1, hp: 22, hpmax: 22, mp: 14, mpmax: 14 },
@@ -44,7 +44,7 @@
     return Object.assign({}, st, {
       day, facing: pick(["N", "E", "S", "W"]), map: m.map,
       party: st.party.map(roll),
-      macca: st.macca + R(0, 150), mag: st.mag + R(0, 30),
+      silver: (st.silver ?? st.macca ?? 0) + R(0, 150), mag: st.mag + R(0, 30),
       view: { left: [Math.random() < 0.6, Math.random() < 0.7], right: [Math.random() < 0.6, Math.random() < 0.7],
         end: pick(["dark", "dark", "wall", "door", "stairs"]) },
       log: `> Day ${day}. KURA enters a new room. Exits: ${m.exits.map(d => NAME[d]).join(", ")}.`,
