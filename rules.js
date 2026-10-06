@@ -177,7 +177,8 @@
       const k = CW.indexOf(st.facing);
       st.facing = [1, 2, 3, 4].map(n => CW[(k + n) % 4]).find(x => out.includes(x));
     }
-    // Turning leaves the log alone: the view, the map arrow and FACE show the new direction.
+    // Turning is an action too, so it says which way KURA now faces (third line, no day spent).
+    st.extra = `> KURA turns to face ${NAME[st.facing]}.`;
     st.unsaved = true;
     return show(st);
   }

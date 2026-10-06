@@ -80,6 +80,11 @@
     const idx = moonIndex(now), when = hst(now);
     const v = st.view;
     const view = renderView(v.left, v.right, v.end, (v.end === "dark" || v.end === "door") ? 2 : 1);
+    // Turn controls at the foot of the 3D view: [^] walks forward, [<] and [>] turn,
+    // and the letter between them is the way KURA faces.
+    const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
+    overlay(VH - 2, 22, "[^]");
+    overlay(VH - 1, 19, `[<] ${st.facing || "?"} [>]`);
     const moons = ["(     )", "(    ))", "(  ))))", "())))))", "(((O)))", "((((())", "((((  )", "((    )"];
     const names = ["NEW", "CRESC", "HALF", "GIBB", "FULL", "GIBB", "HALF", "CRESC"];
     const long = ["NEW", "WAX CRESC", "1ST QTR", "WAX GIBB", "FULL", "WANE GIBB", "LAST QTR", "WANE CRESC"];
@@ -118,11 +123,45 @@
       rule, money, mapHead, "", ...mp.map(m => " ".repeat(mapPad) + m), ...(mapRows === 4 ? [""] : []), rule, bottom];
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");
-    const moonmsg = ["> NEW MOON. Demons are calm. Negotiation is favorable.", "> MOON 1/8. Demons begin to stir.",
-      "> MOON 2/8. Demons are wary but will listen.", "> MOON 3/8. Demons grow restless.",
-      "> FULL MOON. Demons will not negotiate.", "> MOON 5/8. Demons are still agitated.",
-      "> MOON 6/8. Demons grow calmer.", "> MOON 7/8. Demons are docile. The new moon nears."];
-    for (const m of [moonmsg[idx], st.log || "", extra]) S.push(r(" " + m));
+    // The moon line: a mysterious word on the moon, the demons, or both. No numbers; the moon bar
+    // above already shows the phase. Several lines per phase, changing with each new day.
+    const MOONLINE = [
+      [ // new
+        "The sky is empty. Below, the demons hold their breath.", "No moon. The dark listens.",
+        "Demons sleep with one eye open.", "A black sky. Even old hungers rest tonight.",
+        "Something below would rather talk than bite."],
+      [ // waxing crescent
+        "A thin blade of light cuts the dark.", "Demons stir in their sleep.",
+        "The moon opens one eye. The deep begins to wake.", "Something below turns over, restless.",
+        "A pale hook hangs overhead. Claws flex in the dark."],
+      [ // first quarter
+        "Half the moon watches. Half the dark watches back.", "Demons pace the edges of the light.",
+        "The light and the dark weigh each other.", "Patient eyes follow from the corners.",
+        "Demons will listen, but not for long."],
+      [ // waxing gibbous
+        "The moon swells. So does something below.", "The halls hum with a low growl.",
+        "Light pours in. Tempers rise to meet it.", "Demons scratch at the walls, impatient.",
+        "Almost full. The deep grows loud."],
+      [ // full
+        "The moon is a white eye, wide open.", "Full light. The deep howls back.",
+        "Demons run wild beneath the open moon.", "No bargains tonight. Only hunger.",
+        "Every shadow has teeth."],
+      [ // waning gibbous
+        "The moon bleeds slowly. The fever lingers.", "The howling fades, but the anger stays.",
+        "Demons nurse their fury in the dark.", "The white eye begins to close.",
+        "Something below still remembers the light."],
+      [ // last quarter
+        "Half the moon turns away.", "Demons tire of the hunt.",
+        "The dark grows heavy and slow.", "Tempers cool in the waning light.",
+        "Some below may hear an offer now."],
+      [ // waning crescent
+        "A thin moon. The deep grows drowsy.", "Demons drowse in the corners.",
+        "The light is almost gone. So is the anger.", "Only a sliver left. The dark softens.",
+        "The new moon is coming. The deep can feel it."],
+    ];
+    const lines = MOONLINE[idx];
+    const moonLine = "> " + lines[((st.day || 0) % lines.length + lines.length) % lines.length];
+    for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
     S.push(r(" [F]IGHT [T]ALK [S]UMMON [I]TEM [M]AGIC [C]OMP [E]QUIP [G]O SE[A]RCH"));
     const sys = " [N]EXT [L]OAD [R]ST ";                 // system buttons tucked into the bottom border

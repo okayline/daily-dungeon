@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first. Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.9 - Oct 6 2026
+
+- Turn controls at the foot of the 3D view: `[^]` walks forward, `[<]` and `[>]` turn, and the letter between them shows which way KURA faces. Click them or use the arrow keys.
+- Turning writes "KURA turns to face EAST." on the third line (free, no day spent), so direction words show up in actions as well as movement.
+- The "[L]OAD returns to the saved game" note under the screen is gone.
+- The first log line is now a mysterious word on the moon, the demons or both ("Demons drowse in the corners.", "The moon is a white eye, wide open."), with no phase number since the moon bar shows it. Five versions per phase, changing with each new day.
+
 ## v0.8 - Oct 6 2026
 
 - The save status moved into the bottom border (`SAVED 2026-10-06` or a gold `NOT SAVED`), so all three log lines are free for the game.
