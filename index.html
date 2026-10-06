@@ -39,8 +39,10 @@
   .goal { color: var(--gold); text-shadow: 0 0 6px var(--gold); }
   /* Map symbols like □ ⋰ ⋱ ↑ ↓ can be wider or narrower than letters in some fonts.
      Boxing each one to exactly one character keeps the grid lined up. */
-  .cell { display: inline-block; width: 1ch; text-align: center; overflow: visible;
-          font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; }
+  /* .cell keeps the screen's own font so 1ch equals exactly one character of the grid;
+     only the glyph inside it switches to a font that has the symbol. */
+  .cell { display: inline-block; width: 1ch; text-align: center; overflow: visible; white-space: nowrap; }
+  .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
   /* The diagonal-dot stairs (⋰ ⋱) are tiny math symbols in most fonts, so the page
      draws them as three stepped dots that fill one character cell. */
@@ -70,7 +72,7 @@
           const cls = { "@": "you", "^": "you", "<": "you", ">": "you", "v": "you",
             "&": "demon", "$": "gold", "?": "goal", "□": "room",
             "⋰": "stairs dots", "⋱": "stairs dots", "↑": "stairs", "↓": "stairs" }[ch];
-          const inner = ch === "⋰" ? DOTS_UP : ch === "⋱" ? DOTS_DOWN : esc(ch);
+          const inner = ch === "⋰" ? DOTS_UP : ch === "⋱" ? DOTS_DOWN : `<span class="g">${esc(ch)}</span>`;
           return `<span class="cell ${cls}">${inner}</span>`;
         });
         return left + map;
