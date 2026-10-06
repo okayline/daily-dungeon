@@ -64,6 +64,12 @@
     const d = st.dungeon, room = d.floor.rooms[d.at];
     st.map = FLOOR.minimap(d.floor, { ...d, facing: st.facing });
     const door = dir => dir in room.doors;
+    if (st.dead) {
+      // Game over: the view goes dark and the third line points to RST.
+      st.view = { left: [true, true], right: [true, true], end: "dark" };
+      st.extra = "> GAME OVER. Press [R]ST to begin a new run.";
+      return st;
+    }
     const stairsAhead = d.found[d.at].includes("stairs") && st.facing === stairsDir(d.floor, d.at);
     st.view = {
       left: [!door(LEFT[st.facing]), true], right: [!door(RIGHT[st.facing]), true],
@@ -100,9 +106,10 @@
   }
 
   // Start a day. Returns false if the day was used up some other way:
-  // an old save with no floor starts one, and an action after the week runs out drops KURA a floor.
+  // an old save with no floor starts one, and an action after the week runs out ends the run (game over).
   function startDay(st, descending) {
     st.day += 1;
+    st.steps = (st.steps || 0) + 1;
     st.unsaved = true;
     if (!st.dungeon) {
       const f = arrive(st, floorNum(st));
@@ -110,9 +117,10 @@
       return false;
     }
     if (!descending && st.dungeon.floorDay >= FLOOR.DAYS) {
-      // Placeholder until the end-of-week rule is decided.
-      arrive(st, floorNum(st) + 1);
-      st.log = `> Day ${st.day}. The week ends. The floor gives way. KURA falls to ${st.floor}.`;
+      // The week is over and the stairs were not taken: the run ends. Only RST starts a new one.
+      st.dead = true;
+      st.party = st.party.map(p => ({ ...p, hp: 0 }));
+      st.log = `> Day ${st.day}. The week ends. The dark closes over KURA.`;
       return false;
     }
     return true;
@@ -120,10 +128,11 @@
 
   // SEARCH: turn up the next hidden thing in this room. Uses the day.
   function search(st) {
+    if (st.dead) { st = copy(st); st.extra = "> GAME OVER. Press [R]ST to begin a new run."; return show(st); }
     st = copy(st);
     const d = st.dungeon;
     if (d && d.found[d.at].length >= d.floor.rooms[d.at].hidden.length) {
-      st.extra = "> Nothing left to find here. The day is not spent.";
+      st.log = "> KURA searches again. Nothing left here. The day is not spent.";
       return show(st);
     }
     if (startDay(st, false)) {
@@ -141,11 +150,16 @@
   }
 
   // GO: through the door ahead, or down the stairs ahead. Uses the day.
-  // Facing a wall, GO turns KURA to the next way out instead, which is free.
+  // Facing a wall, GO stops KURA with a message instead. Nothing happens and no day is spent.
   function go(st) {
+    if (st.dead) { st = copy(st); st.extra = "> GAME OVER. Press [R]ST to begin a new run."; return show(st); }
     st = copy(st);
     const d = st.dungeon;
-    if (d && !exits(d).includes(st.facing)) return turn(st, "next");
+    if (d && !exits(d).includes(st.facing)) {
+      st.log = pick(["> A wall. KURA can't go that way.", "> KURA walks into solid stone.",
+        "> Only cold wall here. The way is shut."]);
+      return show(st);
+    }
     const descending = d && d.found[d.at].includes("stairs") && st.facing === stairsDir(d.floor, d.at);
     if (startDay(st, descending)) {
       const dd = st.dungeon;
@@ -166,6 +180,7 @@
 
   // Turning is free: "L" and "R" turn 90 degrees, "next" faces the next way out clockwise.
   function turn(st, how) {
+    if (st.dead) { st = copy(st); st.extra = "> GAME OVER. Press [R]ST to begin a new run."; return show(st); }
     st = copy(st);
     const d = st.dungeon;
     if (!d) return st;
@@ -177,14 +192,16 @@
       const k = CW.indexOf(st.facing);
       st.facing = [1, 2, 3, 4].map(n => CW[(k + n) % 4]).find(x => out.includes(x));
     }
-    // Turning is an action too, so it says which way KURA now faces (third line, no day spent).
-    st.extra = `> KURA turns to face ${NAME[st.facing]}.`;
+    // Turning is an action too: the action line says which way KURA now faces (no day spent).
+    st.steps = (st.steps || 0) + 1;
+    st.log = `> KURA turns to face ${NAME[st.facing]}.`;
     st.unsaved = true;
     return show(st);
   }
 
   // NEXT: a day's action picked automatically (a testing shortcut).
   function next(st) {
+    if (st.dead) { st = copy(st); st.extra = "> GAME OVER. Press [R]ST to begin a new run."; return show(st); }
     const d = st.dungeon;
     if (!d) return go(st);
     if (d.found[d.at].includes("stairs")) return go({ ...copy(st), facing: stairsDir(d.floor, d.at) });
@@ -202,7 +219,7 @@
     st = copy(st);
     delete st.macca; delete st.mag;
     Object.assign(st, {
-      day: 1, align: "NEUTRAL", silver: 0, ichor: 0,
+      day: 1, steps: 0, dead: false, align: "NEUTRAL", silver: 0, ichor: 0,
       party: [
         { name: "KURA", lv: 1, hp: 30, hpmax: 30, mp: 8, mpmax: 8 },
         { name: "ELF", lv: 1, hp: 22, hpmax: 22, mp: 14, mpmax: 14 },

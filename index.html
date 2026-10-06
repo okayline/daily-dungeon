@@ -48,9 +48,6 @@
   .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
   .door { color: var(--trail); }
-  /* The diagonal-dot stairs (⋰ ⋱) are tiny math symbols in most fonts, so the page
-     draws them as three stepped dots that fill one character cell. */
-  .dots svg { width: 1ch; height: 1em; vertical-align: -0.15em; fill: currentColor; }
   .btn { cursor: pointer; color: var(--bright); }
   .btn:hover { background: var(--fg); color: var(--bg); }
   .unsaved { color: var(--gold); }
@@ -66,10 +63,6 @@
 <script>
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   let save = null;
-  const dots = pts => `<svg viewBox="0 0 10 20" aria-hidden="true">${pts.map(([x, y]) =>
-    `<rect x="${x}" y="${y}" width="2.6" height="2.6"/>`).join("")}</svg>`;
-  const DOTS_UP = dots([[0.5, 14], [3.7, 9.5], [6.9, 5]]);     // steps rising to the right
-  const DOTS_DOWN = dots([[0.5, 5], [3.7, 9.5], [6.9, 14]]);   // steps falling to the right
 
   // Color only the minimap rows (right panel) and the moon marker.
   function colorize(text) {
@@ -77,14 +70,12 @@
     return lines.map((line, i) => {
       if (i >= 16 && i <= 20) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
-        const map = right.replace(/[@^<>v&$?□⋰⋱↑↓╫═]/g, ch => {
-          const cls = { "@": "you", "^": "you", "<": "you", ">": "you", "v": "you",
-            "&": "demon", "$": "gold", "?": "goal", "□": "room",
-            "⋰": "stairs dots", "⋱": "stairs dots", "↑": "stairs", "↓": "stairs", "╫": "door", "═": "door" }[ch];
+        const map = right.replace(/[@^v&$?□=‖]/g, ch => {
+          const cls = { "@": "you", "^": "stairs", "v": "stairs",
+            "&": "demon", "$": "gold", "?": "goal", "□": "room", "=": "door", "‖": "door" }[ch];
           // Plain keyboard characters (? > < ^ v $ &) stay in the screen font;
           // only real Unicode symbols switch to the fallback symbol font.
-          const inner = ch === "⋰" ? DOTS_UP : ch === "⋱" ? DOTS_DOWN
-            : ch.charCodeAt(0) < 128 ? esc(ch) : `<span class="g">${esc(ch)}</span>`;
+          const inner = ch.charCodeAt(0) < 128 ? esc(ch) : `<span class="g">${esc(ch)}</span>`;
           return `<span class="cell ${cls}">${inner}</span>`;
         });
         return left + map;

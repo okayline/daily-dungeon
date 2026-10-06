@@ -107,7 +107,8 @@
     // The map area is 6 rows. An old 4-row map gets a blank row above and below;
     // the 3x3 room grid uses 5 rows under one blank row.
     const mapRows = st.map.length > 4 ? 5 : 4;
-    const mp = st.map.slice(0, mapRows).map(m => m.replace("@", arrow)); while (mp.length < mapRows) mp.push("");
+    // Old 4-row maps drew KURA as a facing arrow; the room grid keeps her as @ (FACE shows the way).
+    const mp = st.map.slice(0, mapRows).map(m => mapRows === 4 ? m.replace("@", arrow) : m); while (mp.length < mapRows) mp.push("");
     // The room grid comes already laid out across the panel, centered on KURA.
     const mapPad = mapRows === 5 ? 0
       : Math.max(1, Math.floor((PW - Math.max(...mp.map(m => m.length))) / 2));
@@ -116,7 +117,8 @@
     const title = ` MAP  ${st.floor} `, dash = PW - 1 - title.length;
     const mapHead = " " + "-".repeat(Math.floor(dash / 2)) + title + "-".repeat(Math.ceil(dash / 2));
     const align = `ALIGN [${String(st.align).slice(0, 3).toUpperCase()}]`;
-    const face = `FACE ${st.facing || "?"}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
+    // STEP counts every action KURA has taken (GO, SEARCH, turning); facing shows in the turn controls.
+    const face = `STEP ${String(st.steps || 0).padStart(3, "0")}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
     const gap = PW - 1 - align.length - face.length - dayStr.length;
     const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
     const stat = [ljust(" PARTY", 20) + "HP" + " ".repeat(5) + "MP", rule, ...party.slice(0, 4),
@@ -124,7 +126,7 @@
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");
     // The moon line: a mysterious word on the moon, the demons, or both. No numbers; the moon bar
-    // above already shows the phase. Several lines per phase, changing with each new day.
+    // above already shows the phase. Several lines per phase, changing once per real day.
     const MOONLINE = [
       [ // new
         "The sky is empty. Below, the demons hold their breath.", "No moon. The dark listens.",
@@ -160,7 +162,9 @@
         "The new moon is coming. The deep can feel it."],
     ];
     const lines = MOONLINE[idx];
-    const moonLine = "> " + lines[((st.day || 0) % lines.length + lines.length) % lines.length];
+    // Picked by the real date (Honolulu), so it changes once a day, not with every action.
+    const realDay = Math.floor((now.getTime() - 10 * 3600 * 1000) / 86400000);
+    const moonLine = "> " + lines[realDay % lines.length];
     for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
     S.push(r(" [F]IGHT [T]ALK [S]UMMON [I]TEM [M]AGIC [C]OMP [E]QUIP [G]O SE[A]RCH"));

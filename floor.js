@@ -68,33 +68,30 @@
   // The map is centered on KURA: her room is always in the middle and the floor moves around her.
   // Rooms two steps away up or down fall outside the 5 rows and stay off the map.
   function minimap(floor, state) {
+    // One symbol per room: [@] KURA, [^] the way up, [v] stairs down once found, [?] the lure,
+    // [ ] a visited room. Doors: = between rooms side by side, ‖ between stacked rooms.
     const W = 29, H = 5, rows = Array.from({ length: H }, () => Array(W).fill(" "));
     const put = (r, c, s) => [...s].forEach((ch, k) => {
       if (r >= 0 && r < H && c + k >= 0 && c + k < W) rows[r][c + k] = ch;
     });
-    const arrow = { N: "^", E: ">", S: "v", W: "<" }[state.facing] || "@";
     const here = floor.rooms[state.at];
     floor.rooms.forEach((room, i) => {
-      const row = 2 + (room.r - here.r) * 2, col = 12 + (room.c - here.c) * 6;
+      const row = 2 + (room.r - here.r) * 2, col = 13 + (room.c - here.c) * 4;
       const found = state.found[i] || [];
       const lureHere = i === floor.lure && !found.includes("lure");
       if (!state.visited[i]) {
-        if (lureHere) put(row, col + 2, "?");   // the lure, glimpsed in the dark
+        if (lureHere) put(row, col + 1, "?");   // the lure, glimpsed in the dark
         return;
       }
-      const you = state.at === i ? arrow : " ";
-      let inside;
-      if (i === floor.start) inside = "⋰↑" + you;
-      else if (found.includes("stairs")) inside = "↓⋱" + you;
-      else if (lureHere) inside = " ?" + you;
-      else inside = state.at === i ? ` ${arrow} ` : " □ ";
-      put(row, col, "[" + inside + "]");
+      const mark = state.at === i ? "@" : i === floor.start ? "^"
+        : found.includes("stairs") ? "v" : lureHere ? "?" : " ";
+      put(row, col, "[" + mark + "]");
       // Door stubs out of a visited room, so the next room shows it exists.
       for (const d of Object.keys(room.doors)) {
-        if (d === "E") put(row, col + 5, "╫");
-        if (d === "W") put(row, col - 1, "╫");
-        if (d === "S") put(row + 1, col + 2, "═");
-        if (d === "N") put(row - 1, col + 2, "═");
+        if (d === "E") put(row, col + 3, "=");
+        if (d === "W") put(row, col - 1, "=");
+        if (d === "S") put(row + 1, col + 1, "‖");
+        if (d === "N") put(row - 1, col + 1, "‖");
       }
     });
     return rows.map(r => r.join("").replace(/\s+$/, ""));
