@@ -94,6 +94,10 @@
         if (d === "N") put(row - 1, col + 1, "‖");
       }
     });
+    // KURA's facing: an arrow in the gap on that side of her room (it covers the door mark there).
+    const f = state.facing;
+    if (f === "E") put(2, 16, ">"); else if (f === "W") put(2, 12, "<");
+    else if (f === "N") put(1, 14, "^"); else if (f === "S") put(3, 14, "v");
     return rows.map(r => r.join("").replace(/\s+$/, ""));
   }
 

@@ -17,10 +17,6 @@
   const doorList = room => Object.keys(room.doors).length > 1 ? "Two doors." : "A single door.";
   // The third log line. About half the time it carries a faint clue about the room KURA is in
   // or the door she faces (never a direction word); otherwise it's pure atmosphere.
-  const MOOD = ["> The air is cold and still.", "> Water drips somewhere in the dark.", "> Dust hangs in the lamplight.",
-    "> The stone hums faintly underfoot.", "> PIXIE's glow flickers, then steadies.", "> ELF listens. Nothing answers.",
-    "> CU SITH sniffs the floor and growls low.", "> Old scratches line the walls.", "> A draft stirs, then dies.",
-    "> The silence presses close."];
   const copy = st => JSON.parse(JSON.stringify(st));
 
   const CLUE = {
@@ -33,9 +29,40 @@
     lureBeyond: ["> A thread of warm light leaks around the door.", "> Faint music, or the memory of it, behind the door.",
       "> PIXIE drifts toward the door, curious."],
   };
+  // The third line drifts now and then: after a search or a turn there's a chance it changes,
+  // so it isn't frozen all day. The last-day warning stays put.
+  function drift(st) {
+    const d = st.dungeon;
+    if (st.dead || !d) return;
+    if (d.deadline !== undefined && clock(st) === d.deadline) { st.extra = "> The air grows heavy. The way down closes tonight."; return; }
+    if (Math.random() < 0.3) st.extra = atmosphere(st);
+  }
+  // Plain flavor for the third line: party chatter, how the party is holding up, demon sounds
+  // (more of them under a bright moon), or the dungeon itself. Never a direction, never a clue.
+  const CHATTER = ["> PIXIE hums an old song, off key.", "> ELF counts the coins twice, frowning.",
+    "> CU SITH yawns, all teeth.", "> PIXIE: \"It's too quiet. I hate quiet.\"",
+    "> ELF: \"Keep your voice down.\"", "> CU SITH circles twice and lies down.",
+    "> PIXIE lands on KURA's shoulder to rest.", "> ELF traces a sigil on the wall, then wipes it away."];
+  const HURT = ["> {n} is breathing hard.", "> {n} looks tired.", "> {n} favors one side.",
+    "> {n} says nothing, but the wounds show."];
+  const DEMON = ["> Claws scrape stone somewhere far off.", "> A low laugh echoes, then stops.",
+    "> Something large shifts in the dark.", "> Wings beat once, close by.", "> A howl rises from below."];
+  const AMBIENT = ["> Water drips somewhere in the dark.", "> The stone ticks as it cools.",
+    "> A draft stirs, then dies.", "> Dust sifts down from the ceiling.", "> The silence presses close.",
+    "> Old scratches line the walls.", "> The lamp gutters, then steadies.", "> Pipes groan inside the walls."];
+  function flavor(st) {
+    const hurt = (st.party || []).filter(p => p.hpmax && p.hp > 0 && p.hp < p.hpmax / 2);
+    const m = (root.SMT || require("./screen.js")).moonIndex(new Date());
+    const demonOdds = [0.08, 0.12, 0.16, 0.22, 0.32, 0.22, 0.16, 0.12][m];   // brighter moon, louder demons
+    const r = Math.random();
+    if (hurt.length && r < 0.25) return pick(HURT).replace("{n}", pick(hurt).name);
+    if (r < 0.25 + demonOdds) return pick(DEMON);
+    if (r < 0.6) return pick(CHATTER);
+    return pick(AMBIENT);
+  }
   function atmosphere(st) {
     const d = st.dungeon;
-    if (!d || Math.random() < 0.5) return pick(MOOD);
+    if (!d || Math.random() < 0.5) return flavor(st);
     const here = d.found[d.at], room = d.floor.rooms[d.at];
     const ahead = room.doors[st.facing];
     const clues = [];
@@ -43,7 +70,7 @@
     if (ahead !== undefined && d.floor.stairs === ahead && !d.found[ahead].includes("stairs")) clues.push(...CLUE.stairsBeyond);
     if (d.floor.lure === d.at && !here.includes("lure")) clues.push(...CLUE.lureHere);
     if (ahead !== undefined && d.floor.lure === ahead && !d.found[ahead].includes("lure")) clues.push(...CLUE.lureBeyond);
-    return clues.length ? pick(clues) : pick(MOOD);
+    return clues.length ? pick(clues) : flavor(st);
   }
 
   // The stairs sit against a wall with no door. Which wall is fixed by the floor's seed.
@@ -174,21 +201,24 @@
     d.searches = d.searches || [0, 0, 0];
     const n = ++d.searches[d.at];
     if (Math.random() < WANDER[moon()]) {
-      st.log = `> Day ${st.day}. KURA searches (${n}). ${reveal(st, "demon").replace("A demon attacks", "A demon wanders in")}`;
+      st.log = `> Day ${st.day}. KURA searches. ${reveal(st, "demon").replace("A demon attacks", "A demon wanders in")}`;
+      drift(st);
       return show(st);
     }
     if (found.length < room.hidden.length && Math.random() < FIND) {
       const thing = room.hidden[found.length];
       found.push(thing);
       d.searches[d.at] = 0;
-      st.log = `> Day ${st.day}. KURA searches (${n}). ${reveal(st, thing)}`;
+      st.log = `> Day ${st.day}. KURA searches. ${reveal(st, thing)}`;
       // The first find in a room also takes stock of its doors.
       if (found.length === 1 && st.log.length + doorList(room).length < 77) st.log += " " + doorList(room);
       if (thing === "stairs") st.facing = stairsDir(d.floor, d.at);
+      drift(st);
       return show(st);
     }
-    st.log = `> Day ${st.day}. KURA searches (${n}). ` + pick(["Nothing.", "Only stone.", "Nothing but dust.",
+    st.log = `> Day ${st.day}. KURA searches. ` + pick(["Nothing.", "Only stone.", "Nothing but dust.",
       "Nothing yet.", "The walls give nothing away."]);
+    drift(st);
     return show(st);
   }
 
@@ -235,6 +265,7 @@
     st.facing = how === "L" ? LEFT[st.facing] : RIGHT[st.facing];
     act(st);
     st.log = `> KURA turns to face ${NAME[st.facing]}.`;
+    drift(st);
     return show(st);
   }
 

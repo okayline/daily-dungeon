@@ -80,10 +80,9 @@
     const idx = moonIndex(now), when = hst(now);
     const v = st.view;
     const view = renderView(v.left, v.right, v.end, (v.end === "dark" || v.end === "door") ? 2 : 1);
-    // Turn controls at the foot of the 3D view: [^] walks forward, [<] and [>] turn,
-    // and the letter between them is the way KURA faces.
+    // Look controls at the foot of the 3D view: [<] and [>] turn KURA to look around (never move her),
+    // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
-    overlay(VH - 2, 22, "[^]");
     overlay(VH - 1, 19, `[<] ${st.facing || "?"} [>]`);
     const moons = ["(     )", "(    ))", "(  ))))", "())))))", "(((O)))", "((((())", "((((  )", "((    )"];
     const names = ["NEW", "CRESC", "HALF", "GIBB", "FULL", "GIBB", "HALF", "CRESC"];

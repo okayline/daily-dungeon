@@ -76,8 +76,11 @@
     return lines.map((line, i) => {
       if (i >= 16 && i <= 20) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
-        const map = right.replace(/[@^v&$?□=‖]/g, ch => {
-          const cls = { "@": "you", "^": "stairs", "v": "stairs",
+        // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
+        const map = right.replace(/\[[\^v]\]|[@^v<>&$?□=‖]/g, m => {
+          if (m.length === 3) return "[" + `<span class="cell stairs">${m[1]}</span>` + "]";
+          const ch = m;
+          const cls = { "@": "you", "^": "you", "v": "you", "<": "you", ">": "you",
             "&": "demon", "$": "gold", "?": "goal", "□": "room", "=": "door", "‖": "door" }[ch];
           // Plain keyboard characters (? > < ^ v $ &) stay in the screen font;
           // only real Unicode symbols switch to the fallback symbol font.
@@ -89,7 +92,6 @@
       // Turn controls under the 3D view (only the left 48 columns, so the map is never touched).
       if (i === 21 || i === 22) {
         const left = esc(line.slice(0, 48))
-          .replace("[^]", '<span class="btn" data-act="go">[^]</span>')
           .replace("[&lt;]", '<span class="btn" data-act="left">[&lt;]</span>')
           .replace("[&gt;]", '<span class="btn" data-act="right">[&gt;]</span>')
           .replace(/(<\/span>) ([NESW?]) (<span)/, '$1 <span class="facing">$2</span> $3');
@@ -132,7 +134,7 @@
   function remember(before) {
     if (!save || !save.log || save.log === before || !/^> Day \d+\./.test(save.log)) return;
     // Empty searches aren't news; only searches that turn something up go in the log.
-    if (/searches \(\d+\)\. (Nothing|Only stone|The walls give)/.test(save.log)) return;
+    if (/searches\. (Nothing|Only stone|The walls give)/.test(save.log)) return;
     const h = save.history = save.history || [];
     h.push("Day " + String(save.day).padStart(3, "0") + "  " + save.log.replace(/^> Day \d+\. /, ""));
     if (h.length > 500) h.splice(0, h.length - 500);
@@ -219,8 +221,8 @@
       if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
       return;
     }
-    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", l: "log", b: "backup", r: "reset", g: "go",
-      a: "search", arrowup: "go", arrowleft: "left", arrowright: "right" }[key];
+    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", l: "log", b: "backup", r: "reset", 
+      a: "search", arrowleft: "left", arrowright: "right" }[key];
     if (k) { e.preventDefault(); act(k); }
   });
 
