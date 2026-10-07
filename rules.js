@@ -147,7 +147,7 @@
   // About half the days are ordinary. Every omen is true: its effect is real all day.
   const OMENS = [
     // Ordinary days still read like omens: ambiguous, and they promise nothing that won't happen.
-    { key: "none", fx: {}, lines: ["What you carry will be counted.", "The deep remembers a name. Not yours, yet.",
+    { key: "none", fx: {}, lines: ["What you carry will be counted.", "The deep remembers a name. Yours...soon.",
       "Someone walked this way before you.", "Count the doors. Then count them again.", "The ninth bell has not rung.",
       "What is below was once above.", "Somewhere a light is left on for you.", "The stone dreams of the sea.",
       "Not every silence is empty.", "A promise kept, a long way down."] },
@@ -195,6 +195,7 @@
       const kind = streak >= 4 ? "data" : linger >= 15 ? "folk" : "plain";
       st.tell = HEAT_TELL[after][kind];
     }
+    if (after !== before) { st.statusIn = 0; st.statusKind = "air"; }   // the conditions report updates right away
   }
   // A stub of black candle calms the room it's lit in.
   function calm(st) { const d = st.dungeon; if (d && d.heat) d.heat[d.at] = Math.max(0, (d.heat[d.at] || 0) - 8); }
@@ -296,14 +297,15 @@
   // Draw the minimap and the first-person view from where KURA stands and faces.
   function show(st) {
     const d = st.dungeon, room = d.floor.rooms[d.at];
-    st.omenText = omen(clock(st)).text;                 // line 1
+    st.omenText = omen(clock(st)).text;                 // the omen, framed under the 3D view
+    status(st);                                         // line 1
     if (st.tell) { st.extra = st.tell; delete st.tell; } // a heat tell takes line 3 right away
     st.map = FLOOR.minimap(d.floor, { ...d, facing: st.facing });
     const door = dir => dir in room.doors;
     if (st.dead) {
       // Game over: the view goes dark and the third line points to RST.
       st.view = { left: [true, true], right: [true, true], end: "dark" };
-      st.extra = "> GAME OVER. Press [R]ST to begin a new run.";
+      st.extra = "> GAME OVER. Press [R]ESET to begin a new run.";
       return st;
     }
     const stairsAhead = d.found[d.at].includes("stairs") && st.facing === stairsDir(d.floor, d.at);
@@ -336,7 +338,8 @@
     const a = FLOOR.arrive(floor);
     st.floor = `B${num}F`;
     st.facing = a.facing;
-    st.dungeon = { seed: floor.seed, floor, at: a.at, visited: a.visited, found: a.found, deadline };
+    st.dungeon = { seed: floor.seed, floor, at: a.at, visited: a.visited, found: a.found, deadline, arrived: clock(st) };
+    st.statusIn = 0;                                   // a fresh floor gets a fresh report
     return floor;
   }
 
@@ -371,6 +374,7 @@
     if (!newDay || st.dead) return st;
     st.today = { date: t, stepped: false };
     st.unsaved = true;
+    st.statusIn = 0; st.statusKind = "news";
     // Overnight every room's heat halves. It never quite resets.
     let settled = false;
     if (st.dungeon && st.dungeon.heat) {
@@ -424,11 +428,57 @@
 
   // Each day KURA gets ONE step (through a door, or down found stairs).
   // Searching, turning and the free actions are unlimited. Days follow the real calendar.
-  const OVER = "> GAME OVER. Press [R]ST to begin a new run.";
+  const OVER = "> GAME OVER. Press [R]ESET to begin a new run.";
   const today = st => (st.today = st.today || { stepped: false });
   function act(st) {                       // every action counts a STEP and marks the game unsaved
     st.steps = (st.steps || 0) + 1;
     st.unsaved = true;
+    st.statusIn = (st.statusIn ?? 0) - 1;  // line 1 (the status report) changes every 5-10 actions
+  }
+
+  // LINE 1: THE STATUS REPORT. Mostly news (about 7 in 10): the floor, the days left, rooms surveyed,
+  // the party's state, today's step. Otherwise a detached conditions readout: the air (this is the
+  // room's heat, as temperature), a smell, a sound or the light. It changes every 5-10 actions, and
+  // right away when the heat changes, on a new day, on a new floor, and on the last day.
+  const FLOOR_NAME = ["", "First floor", "Second floor", "Third floor", "Fourth floor"];
+  const AIR = [["cool, still", "chilly", "cold, still"], ["mild", "mild, stirring"], ["humid", "warm, close"],
+    ["hot, stifling", "hot, thick"]];
+  const SMELL = ["Odor of wet stone", "Odor of mold", "Old pipes", "Rust", "Cheap incense", "Damp paper",
+    "Cold ash", "Ozone, faintly", "Salt and earth"];
+  const DETAIL = ["Dripping, distant", "Low hum", "No sound", "Light unsteady", "Light steady", "Wind, somewhere",
+    "Pipes ticking", "Footsteps? None"];
+  function report(st, kind) {
+    const d = st.dungeon, t = clock(st), n = floorNum(st);
+    const name = FLOOR_NAME[n] || st.floor, left = d.deadline - t, onFloor = t - (d.arrived ?? t) + 1;
+    const closes = left <= 0 ? "The way down closes tonight" : left === 1 ? "The way down closes tomorrow"
+      : pick([`${left} days until the way down closes`, `The way down closes ${fmt(d.deadline)}`]);
+    if (kind === "air" || (kind !== "news" && Math.random() < 0.3)) {
+      const tier = heatTier((d.heat || [])[d.at] || 0);
+      // A fight or a break leaves a smell in the room for a while; otherwise each room has its own.
+      const smell = d.scent && d.scent.room === d.at && Math.random() < 0.5 ? d.scent.text : SMELL[(d.seed + d.at * 7) % SMELL.length];
+      return `> Conditions: ${pick(AIR[tier])}. ${smell}.` + (Math.random() < 0.6 ? ` ${pick(DETAIL)}.` : "");
+    }
+    const seen = d.visited.filter(Boolean).length, stairs = d.found.some(f => f.includes("stairs"));
+    const hurt = st.party.filter(p => p.hp > 0 && p.hp < p.hpmax / 2).length, down = st.party.filter(p => p.hp <= 0).length;
+    const party = down ? `${down} down` : hurt ? "Party wounded" : "Conditions holding";
+    const news = [
+      `${name}. ${closes}.`,
+      `Day ${onFloor} on this floor. ${closes}.`,
+      `${name}. ${seen} of 3 rooms surveyed. Stairs ${stairs ? "confirmed" : "unconfirmed"}.`,
+      `Day ${onFloor}. ${party}.`,
+      `${name}. ${party}. Today's step ${(st.today || {}).stepped ? "spent" : "unused"}.`,
+    ];
+    return "> " + (left <= 1 ? news[pick([0, 1])] : pick(news));
+  }
+  function status(st) {
+    if (!st.dungeon || st.dead) return;
+    const last = st.dungeon.deadline - clock(st) <= 0;
+    if ((st.statusIn ?? 0) > 0 && !(last && !/tonight/.test(st.status || ""))) return;
+    let line, tries = 0;
+    do line = report(st, last ? "news" : st.statusKind); while (line === st.status && tries++ < 5);
+    st.status = line.slice(0, 77);
+    st.statusIn = R(5, 10);
+    delete st.statusKind;
   }
   // Every action starts by catching up with the real date. An old save with no floor starts one.
   function ensureFloor(st) {
@@ -686,6 +736,23 @@
     });
   }
   // Use one of an item. Things that can't be used yet just get looked at.
+  // Lines must fit the 77 columns of a log line: with a long item name, say "it" instead.
+  const fitIt = (line, the) => line.length <= 77 ? line
+    : line.replace("> " + the.replace(/^t/, "T"), "> It").replace(the, "it").slice(0, 77);
+  const BREAK = { COMMON: 0.3, UNCOMMON: 0.22, RARE: 0.1, MYTHIC: 0.03, MOON: 0 };
+  // When KURA breaks something a party member loves (folklore: old spirit things; data and
+  // hardware: tech; hybrids: things that are both), they take it hard.
+  const GRIEF = {
+    ELF: ['ELF: "That was older than you."', "ELF looks at the pieces for a long moment."],
+    PIXIE: ['PIXIE: "You BROKE it!"', "PIXIE gathers the pieces like they might mend."],
+    "CU SITH": ["CU SITH whines at the pieces.", "CU SITH noses the pieces, then looks at KURA."],
+    folklore: ['{n}: "Some things you do not break."', "{n} flinches as it breaks."],
+    data: ['{n}: "ASSET DESTROYED."', '{n}: "LOGGED. DO NOT REPEAT."'],
+    hardware: ['{n}: "...was that one of us?"', "{n} goes quiet for a long time."],
+    hybrid: ['{n}: "Half of me felt that."', "{n} hisses as it breaks."],
+  };
+  const SNATCH = { PIXIE: 'PIXIE snatches {it} away. "No."', "CU SITH": "CU SITH takes {it} gently in its teeth and won't let go.",
+    ELF: 'ELF catches KURA\'s wrist. "Not that one."' };
   function useItem(st, name) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
@@ -693,8 +760,70 @@
     const i = (st.items || []).indexOf(name);
     if (i < 0) return show(st);
     const info = ITEM_INFO[name] || {};
-    // Most things can't be used (yet): a placeholder line says so, and nothing is spent.
-    if (!info.use) { act(st); st.log = `> KURA turns ${name.replace(/^an? /, "the ")} over. Nothing happens.`; return show(st); }
+    // Most things can't be used (yet). Trying anyway can break it: every try is a roll, so one battery
+    // survives a dozen tries and the next snaps on the first. Rarer things are sturdier; MOON things never break.
+    // Odds per try: COMMON 30%, UNCOMMON 22%, RARE 10%, MYTHIC 3% (about 3, 5, 10 and 33 tries on average).
+    if (!info.use) {
+      act(st);
+      const the = name.replace(/^an? /, "the "), tier = TIER[name] || "COMMON", nat = natureOf(name), m = moon();
+      // Spirit things are more fragile under a full moon and tougher at the new moon.
+      const odds = BREAK[tier] * (nat === "spirit" ? (m === 4 ? 1.5 : m === 0 ? 0.5 : 1) : 1);
+      st.wear = st.wear || {};
+      const w = st.wear[name] = (st.wear[name] || 0) + 1;
+      // Party members who love this kind of thing care what happens to it (see GRIEF).
+      const fans = (st.party || []).slice(1).filter(p => p.hp > 0 && (TASTE[p.family || "folklore"] || {})[nat] >= 1.5);
+      if (odds && Math.random() < odds) {
+        // Once per kind of item, someone who loves it may grab it before it breaks.
+        st.snatched = st.snatched || {};
+        if (fans.length && !st.snatched[name] && Math.random() < 0.3) {
+          const p = pick(fans);
+          st.snatched[name] = true;
+          st.log = `> KURA is about to break ${the}.`;
+          st.extra = fitIt("> " + (SNATCH[p.name] || '{n} snatches {it} away. "No."').replace(/\{n\}/g, p.name).replace(/\{it\}/g, the), the);
+          st.log = fitIt(st.log, the);
+          st.fidgetLine = st.extra;            // so the next quiet try clears it
+          return show(st);
+        }
+        st.items.splice(i, 1); delete st.wear[name];
+        tally(st, "broken"); note(st, "items", name, "broken");
+        st.log = `> ${the.replace(/^t/, "T")} comes apart in KURA's hands.`;
+        // Breaking is loud: the room heats up, and something may come to see.
+        heatUp(st, 2);
+        st.dungeon.scent = { room: st.dungeon.at, text: "Smoke, faintly" };
+        // Breaking things leans CHAOS; breaking a relic pulls harder: a LAW relic toward CHAOS,
+        // a CHAOS relic toward LAW (KURA getting rid of something dangerous).
+        const a = itemAlign(name);
+        lean(st, a === "LAW" ? "breakLAW" : a === "CHAOS" ? "breakCHAOS" : "break");
+        // Junk is hollow: once in a while something was inside (COMMON 1 in 10, UNCOMMON 1 in 12;
+        // half again as often at the new moon, when the deep is quiet). What falls out: COMMON 60%, RARE 35%, MYTHIC 5%.
+        const inside = ({ COMMON: 0.1, UNCOMMON: 1 / 12 }[tier] || 0) * (m === 0 ? 1.5 : 1);
+        if (Math.random() < inside) {
+          const r = Math.random(), got = pick(names(r < 0.05 ? "MYTHIC" : r < 0.4 ? "RARE" : "COMMON"));
+          gain(st, got);
+          tally(st, "insides");
+          st.log += " Something was inside.";
+        }
+        st.log = fitIt(st.log, the);
+        // Someone who loved it takes it hard: an extra hit to their patience, and a line of grief.
+        if (fans.length) {
+          const p = pick(fans);
+          p.patience = Math.max(0, (p.patience ?? PATIENCE) - 2);
+          st.extra = st.fidgetLine = "> " + pick(GRIEF[p.name] || GRIEF[p.family || "folklore"]).replace(/\{n\}/g, p.name);
+        } else fidget(st);
+        if (Math.random() < encounterChance(st) && !st.encounter) {
+          st.extra = "> " + reveal(st, "demon").replace(" appears!", " comes to see what broke.");
+        }
+        return show(st);
+      }
+      st.log = "> " + (w === 1 ? `KURA turns ${the} over. Nothing happens.`
+        : !odds ? `KURA tries ${the} again. It won't break. It's older than she is.`
+        : pick([`KURA shakes ${the}. Something rattles.`, `KURA turns ${the} over again. Still nothing.`,
+          `KURA bangs ${the} against the wall. It holds.`, `KURA twists ${the}. It creaks.`]));
+      st.log = fitIt(st.log, the);
+      heatUp(st, 0.5);                 // fiddling makes a little noise too
+      fidget(st);
+      return show(st);
+    }
     st.items.splice(i, 1);
     act(st);
     info.use(st);
@@ -737,6 +866,7 @@
       gain(st, it, lines);
     }
     st.log = `> Day ${st.day}. ${THE(e.name)} falls. ${n} ICHOR.`;
+    st.dungeon.scent = { room: st.dungeon.at, text: "Copper in the air" };
     st.encounter = null;
   }
   function round(st, fn, idle) {
@@ -803,7 +933,8 @@
   //   running through a door: +0.15
   //   finding a LAW / CHAOS relic (RARE and up): -0.3 / +0.3; offering one pulls toward it (+-0.4, NEUTRAL: none)
   const LEAN = { LAW: -1, CHAOS: 1, NEUTRAL: 0, search: -0.03, hot: 0.2, talk: -0.15, fight: 0.3, kill: 0.6,
-    pay: -0.4, task: -0.4, offer: 0.4, run: 0.15, findLAW: -0.3, findCHAOS: 0.3, offerLAW: -0.4 };
+    pay: -0.4, task: -0.4, offer: 0.4, run: 0.15, findLAW: -0.3, findCHAOS: 0.3, offerLAW: -0.4,
+    break: 0.15, breakLAW: 0.6, breakCHAOS: -0.4 };
   function lean(st, why, lines) {
     const base = LEAN[why] || 0;
     if (!base) return;
@@ -990,19 +1121,7 @@
     const tier = heatTier((st.dungeon.heat || [])[st.dungeon.at] || 0), fam = p.family || "folklore";
     // Out of patience and still being talked to: half the time they snap. CHAOS members lash out at
     // KURA (it never kills her); LAW and NEUTRAL ones leave the party for good.
-    if (p.patience === 0 && Math.random() < 0.5) {
-      if (p.align === "CHAOS") {
-        const kura = st.party[0], dmg = Math.min(kura.hp - 1, R(2, Math.ceil(kura.hpmax / 5)));
-        st.party = st.party.map((q, i) => i === 0 ? { ...q, hp: q.hp - Math.max(0, dmg) } : q);
-        st.log = `> Day ${st.day}. ${p.name} has had enough.`;
-        st.extra = "> " + (SNAP[p.name] || `${p.name} strikes KURA.`) + (dmg > 0 ? ` -${dmg} HP` : "");
-      } else {
-        st.party = st.party.filter(q => q !== p);
-        st.log = `> Day ${st.day}. ${p.name} leaves the party.`;
-        st.extra = "> " + (QUIT[p.name] || QUIT[fam]).replace(/\{n\}/g, p.name);
-      }
-      return show(st);
-    }
+    if (snap(st, p)) return show(st);
     p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
     // A dangerous room (nervous or worse) outranks being annoyed; otherwise a tired member says so.
     const lines = tier >= 2 ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier]
@@ -1011,6 +1130,36 @@
     const pool = lines.map(l => "> " + l.replace(/\{n\}/g, p.name));
     st.extra = pick(pool.filter(l => l !== st.extra));        // never the same line twice in a row
     return show(st);
+  }
+
+  // A party member with no patience left, pushed again: half the time they snap. CHAOS members lash
+  // out at KURA (never fatally); LAW and NEUTRAL ones leave the party for good. True if they snapped.
+  function snap(st, p) {
+    if (p.patience !== 0 || Math.random() >= 0.5) return false;
+    if (p.align === "CHAOS") {
+      const kura = st.party[0], dmg = Math.min(kura.hp - 1, R(2, Math.ceil(kura.hpmax / 5)));
+      st.party = st.party.map((q, i) => i === 0 ? { ...q, hp: q.hp - Math.max(0, dmg) } : q);
+      st.log = `> Day ${st.day}. ${p.name} has had enough.`;
+      st.extra = "> " + (SNAP[p.name] || `${p.name} strikes KURA.`) + (dmg > 0 ? ` -${dmg} HP` : "");
+    } else {
+      st.party = st.party.filter(q => q !== p);
+      st.log = `> Day ${st.day}. ${p.name} leaves the party.`;
+      st.extra = "> " + (QUIT[p.name] || QUIT[p.family || "folklore"]).replace(/\{n\}/g, p.name);
+    }
+    return true;
+  }
+  // Fiddling with something useless, over and over, wears on the party too.
+  const FIDDLE = ['{n} watches KURA fiddle with it.', '{n}: "What are you doing?"', "{n} pretends not to notice.",
+    '{n}: "It\'s not going to do anything."'];
+  function fidget(st) {
+    const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
+    // Nobody reacts this time: clear an earlier reaction so it doesn't look like a new one.
+    if (!friends.length || Math.random() < 0.5) { if (st.extra === st.fidgetLine) st.extra = ""; return; }
+    const p = pick(friends), log = st.log;
+    if (snap(st, p)) { st.log = log; st.fidgetLine = st.extra; return; }   // line 2 keeps the item; line 3 the snap
+    p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
+    const lines = p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[p.patience] : FIDDLE;
+    st.extra = st.fidgetLine = "> " + pick(lines).replace(/\{n\}/g, p.name);
   }
 
   // KURA's answer to a demon's price or offer.
@@ -1170,7 +1319,7 @@
         `${a} demons prize it. ${a === "LAW" ? "CHAOS" : "LAW"} demons think less of it.`);
       else if (a) lines.push("NEUTRAL: no pull either way.");
       if (info.use) lines.push("Can be used from INVOKE.");
-      return { name, known: true, tag: `${t}${a ? "   " + a : ""}`, lines, count: `Found ${seen.found}` };
+      return { name, known: true, tag: `${t}${a ? "   " + a : ""}`, lines, count: `Found ${seen.found}` + (seen.broken ? `   Broken ${seen.broken}` : "") };
     }) }));
     return { demons, items };
   }
@@ -1212,6 +1361,7 @@
       ["Demons met", k.met || 0], ["Beaten", k.beaten || 0], ["Talked to", k.demonTalks || 0],
       ["Gifts given", k.gifts || 0], ["Recruited", k.recruited || 0], ["Escaped", k.fled || 0],
       ["Party talks", k.partyTalks || 0], ["Items found", k.items || 0],
+      ["Items broken", `${k.broken || 0}  (${k.insides || 0} had something inside)`],
       ["SILVER", `${st.silver || 0}  (${k.silverFound || 0} found)`], ["ICHOR", `${st.ichor || 0}  (${k.ichorWon || 0} won)`],
       ["Party left", (st.party || []).slice(1).map(p => p.name).join(", ") || "nobody"],
     ];

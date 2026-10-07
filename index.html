@@ -77,6 +77,8 @@
   .lit { color: var(--moon); text-shadow: 0 0 6px var(--moon); animation: breathe 4s ease-in-out infinite; }
   @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
   .mframe { color: var(--trail); }
+  /* The build number, small, under the screen's lower right corner. */
+  .ver { text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
   .step { color: var(--bright); }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .t-COMMON { color: var(--fg); } .t-UNCOMMON { color: #7bd88f; } .t-RARE { color: #6aa9ff; }
@@ -91,6 +93,8 @@
     <div id="log" class="logview" hidden><pre></pre></div>
     <div id="inv" class="viewpop" hidden><pre></pre></div>
     <div id="codex" class="logview" hidden><pre></pre></div>
+    <div id="about" class="logview" hidden><pre></pre></div>
+    <div id="ver" class="ver"></div>
     <div id="found" class="foundbox" hidden><pre></pre></div></div>
 <script src="screen.js"></script>
 <script src="floor.js"></script>
@@ -144,7 +148,7 @@
           .replace("[F]IGHT", '<span class="btn" data-act="fight">[F]IGHT</span>')
           .replace("[T]ALK", '<span class="btn" data-act="talk">[T]ALK</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
-          .replace("SE[A]RCH", b("SE[A]RCH", "search", can.search))
+          .replace("[S]EARCH", b("[S]EARCH", "search", can.search))
           .replace(/\[([NSEW])\](ORTH|OUTH|AST|EST)/g, (m, x) =>
             b(m, "go-" + x, can[x]).replace('class="btn', 'class="btn' + (armed === x ? " armed" : save && save.encounter && can[x] ? " flee" : "")));
       }
@@ -153,9 +157,10 @@
         .replace(/ (NOT SAVED|SAVED \d{4}-\d\d-\d\d) /, (m, t) => Date.now() < statusUntil
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
         .replace("[C]ODEX", '<span class="btn" data-act="codex">[C]ODEX</span>')
+        .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
-        .replace("[B]ACKUP", '<span class="btn" data-act="backup">[B]ACKUP</span>')
-        .replace("[R]ST", '<span class="btn" data-act="reset">[R]ST</span>');
+        .replace("[P]ASS", '<span class="btn" data-act="backup">[P]ASS</span>')
+        .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>');
       return esc(line);
     }).join("\n")
       // The ALIGN arrow (which way the last action pulled KURA) glows white.
@@ -179,11 +184,22 @@
 
   // The adventure log: every line that starts with "Day N." (steps, searches, new days, descents).
   function remember(before) {
-    // Every action goes in the log: steps, searches (even empty ones), turns, walls, new days.
-    if (!save || !save.log || save.log === before) return;
+    // Everything the player reads goes in the log: the day's omen (once), line 2 (every action, even a
+    // repeat), what happened in a fight or a talk (the box lines), and line 3 when it changes.
+    // Hidden numbers never go in. Follow-up lines are indented under the action they belong to.
+    if (!save) return;
     const h = save.history = save.history || [];
-    const line = save.log.replace(/^> /, "").replace(/^Day \d+\. /, "");
-    h.push("D" + String(save.day).padStart(3, "0") + " T" + String(save.steps || 0).padStart(3, "0") + "  " + line);
+    const stamp = "D" + String(save.day).padStart(3, "0") + " T" + String(save.steps || 0).padStart(3, "0") + "  ";
+    const clean = t => String(t || "").replace(/^> /, "").replace(/^Day \d+\. /, "");
+    const mem = save.logged = save.logged || {};
+    if (save.omenText && save.omenText !== mem.omen) { mem.omen = save.omenText; h.push(stamp + "OMEN " + save.omenText.replace(/^> /, "")); }
+    if (save.status && save.status !== mem.status) { mem.status = save.status; h.push(stamp + "STATUS " + clean(save.status)); }
+    if (save.log && save.log !== before) h.push(stamp + clean(save.log));
+    const round = JSON.stringify(save.round || []);
+    if (save.round && save.round.length && round !== mem.round) save.round.forEach(l => h.push("            | " + l));
+    mem.round = round;
+    if (save.extra && save.extra !== mem.extra) h.push("            " + save.extra);
+    mem.extra = save.extra;
     // About 70 bytes an entry: 20,000 entries is roughly 1.4 MB, well inside a browser's storage.
     if (h.length > 20000) h.splice(0, h.length - 20000);
   }
@@ -228,6 +244,7 @@
     } catch (e) {}
   }
   async function start() {
+    document.getElementById("ver").textContent = SMT.VERSION;
     await syncTime();
     let s = null;
     try { s = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
@@ -249,26 +266,28 @@
       const end = save && save.dead ? `THE RUN IS OVER.  ${save.floor}, day ${save.day}, turn ${save.steps || 0}.\n` +
         `${(save.log || "").replace(/^> (Day \d+\. )?/, "")}\n\n` +
         RULES.summary(save).map(([k, v]) => "  " + (k + " ").padEnd(15, ".") + " " + v).join("\n") +
-        "\n\n[R]ST begins a new run.\n\n" : "";
+        "\n\n[R]ESET begins a new run.\n\n" : "";
       box.querySelector("pre").textContent = end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
-        (h.length ? h.slice().reverse().join("\n") : "Nothing yet.");
+        // Newest first, but each action keeps its follow-up lines underneath it.
+        (h.length ? h.reduce((g, l) => (/^ /.test(l) && g.length ? g[g.length - 1].push(l) : g.push([l]), g), [])
+          .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.");
     }
   }
 
-  // BACKUP: shows this run as a code to copy; pasting a different code brings that run back.
+  // PASS: the run's password, like old console games: copy it to keep or move the run; paste one to continue it.
   function backup() {
     if (!save) return;
     // The code carries the run and the last 300 log entries, so it stays short enough to copy.
     const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) }))));
-    const got = prompt("Your save code. Copy it to keep a backup or move your run to another device.\n" +
-      "To restore a run, paste its code here and press OK.", code);
+    const got = prompt("Your password. Copy it to keep this run or move it to another device.\n" +
+      "To continue a run, paste its password here and press OK.", code);
     if (!got || got.trim() === code) return;
     try {
       const s = JSON.parse(decodeURIComponent(escape(atob(got.trim()))));
       if (!s.dungeon || !s.party) throw new Error("not a run");
-      if (!confirm("Replace this run with the one from the code?")) return;
+      if (!confirm("Replace this run with the one from the password?")) return;
       save = s; tick(); persist(); draw();
-    } catch (e) { alert("That code didn't work. Nothing was changed."); }
+    } catch (e) { alert("That password didn't work. Nothing was changed."); }
   }
 
   // N/S/E/W take the day's step, SEARCH is unlimited, turning is free. NEXT (X) is a hidden testing cheat.
@@ -327,6 +346,48 @@
     const help = add("[1-9] choose  "), btn = (t, k) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = "btn"; sp.dataset[k] = "1"; return sp; };
     help.append(btn("[ENTER] use", "use"), "  ", btn("[C]ODEX", "codex"));
   }
+  // ABOUT: the build, what the game is, a few numbers from this run and the codex.
+  // (The full stats only show at the end of a run.)
+  function showAbout(open) {
+    const box = document.getElementById("about");
+    box.hidden = !open;
+    if (!open || !save) return;
+    const k = save.stats || {}, cx = RULES.codex(save);
+    const count = list => { const all = list.flatMap(g => g.entries); return `${all.filter(e => e.known).length} / ${all.length}`; };
+    const two = (a, b, c, d) => "  " + (a + " ").padEnd(16, ".") + " " + String(b).padEnd(10) + " " + (c + " ").padEnd(16, ".") + " " + d;
+    const line = "-".repeat(71);
+    box.querySelector("pre").textContent = [
+      "DAILY DUNGEON" + ("build " + SMT.VERSION).padStart(58), line,
+      "A dungeon crawler you play one step a day, on the real calendar.",
+      "Each floor's way down closes at the end of Sunday. The moon, the",
+      "omens and the demons all follow real time.", "",
+      "Search as much as you like. Talk to demons, or fight them.",
+      "Take your one step. Come back tomorrow.", "",
+      "THIS RUN",
+      two("Floor", save.floor, "Day", save.day),
+      two("Turns", save.steps || 0, "Alignment", String(save.align).slice(0, 3)),
+      two("Demons met", k.met || 0, "Items found", k.items || 0), "",
+      "CODEX",
+      two("Demons", count(cx.demons), "Items", count(cx.items)), "",
+      "KEYS",
+      "  [^] / up arrow ..... take the day's one step, the way KURA faces",
+      "  [<] [>] / arrows ... turn (free)",
+      "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
+      "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
+      "  [R]UN .............. in a fight: run through a door (uses the day's step)",
+      "  [Y]ES  [N]O ........ answer a question; 1-8 picks a gift",
+      "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
+      "  [C]ODEX ............ every demon and item found, over all runs",
+      "  [L]OG .............. the adventure log",
+      "  [P]ASS ............. this run's password: copy it to keep or move the run,",
+      "                       or paste one in to continue that run",
+      "  [R]ESET ............ start a new run       [?] this page",
+      "",
+      "Made by okayline.   [?] or Esc closes",
+    ].join("\n");
+  }
+  document.getElementById("about").addEventListener("click", () => showAbout(false));
+
   // CODEX: every demon met and item found, over all runs. Unknown ones show as ???.
   let codexTab = "demons", codexSel = 0;
   function showCodex(open) {
@@ -367,6 +428,8 @@
     save = RULES.useItem(save, it.name);
     logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
+    // Something fell out of broken junk: close the bag and show it like any find.
+    if (/Something was inside/.test(save.log)) { showInv(false); foundBox({ items: save.items.slice(0, -1), silver: save.silver }); return; }
     showInv(true);
   }
 
@@ -496,6 +559,7 @@
     disarm();
     if (name === "invoke") return showInv(document.getElementById("inv").hidden);
     if (name === "log") return toggleLog();
+    if (name === "about") return showAbout(document.getElementById("about").hidden);
     if (name === "codex") { codexSel = -1; return showCodex(document.getElementById("codex").hidden); }
     if (name === "backup") return backup();
     if (!save) return;
@@ -547,7 +611,7 @@
     if (!fbox.hidden) {
       e.preventDefault();
       if (fbox.dataset.mode === "confirm") {
-        const same = armed && key === armed.toLowerCase();
+        const same = armed && (key === armed.toLowerCase() || key === "arrowup");
         answerConfirm(key === "enter" || key === "y" || same);
         return;
       }
@@ -557,9 +621,14 @@
         if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", escape: "give-none" }[key];
         else if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", r: "run", n: "go-N", s: "go-S", e: "go-E", w: "go-W" }[key];
+        else k = { f: "fight", t: "talk", r: "run", arrowup: "run" }[key];
         if (k) act(k);
       } else if (key === "enter" || key === " " || key === "escape") closeFound();
+      return;
+    }
+    if (!document.getElementById("about").hidden) {
+      e.preventDefault();
+      if (key === "?" || key === "escape") showAbout(false);
       return;
     }
     if (!document.getElementById("codex").hidden) {
@@ -582,8 +651,9 @@
       if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
       return;
     }
-    const k = { c: "codex", n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", f: "fight", t: "talk", i: "invoke", l: "log", b: "backup", r: "reset", 
-      a: "search", arrowleft: "left", arrowright: "right" }[key];
+    // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
+    const k = { "?": "about", c: "codex", x: "next", f: "fight", t: "talk", i: "invoke", l: "log", p: "backup", r: "reset",
+      s: "search", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (k) { e.preventDefault(); act(k); }
   });
 

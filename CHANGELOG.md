@@ -2,7 +2,33 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.28 - Oct 6 2026, 20:03 HST
+
+![v0.28](screenshots/v0.28.png)
+
+- **About page** (`[?]` in the bottom border, or the ? key): the build number, what the game is, a few numbers from this run (floor, day, turns, alignment, demons met, items found) and how full the codex is. The full stats still only show at the end of a run.
+- **SEARCH is `[S]` now** (it was A). With the NSEW buttons gone, the compass keys are retired too: the day's step is `[^]` or the up arrow, and in a fight the up arrow or R runs.
+- About has a guide to every key.
+- **The omen has its own frame** under the 3D view: centered, with arrows on the edges that grow inward when the omen is short (`||>  "Count the doors."  <||`). It no longer sits on log line 1.
+- **Log line 1 is a status report** that changes every 5-10 actions. Mostly news ("First floor. 5 days until the way down closes.", "Day 6 on this floor. The way down closes tomorrow.", "First floor. 2 of 3 rooms surveyed. Stairs unconfirmed.", "Day 3. Party wounded."), mixed with a detached conditions readout: the air (the room's heat, as temperature), a smell, a sound or the light ("Conditions: humid. Odor of mold. Dripping, distant."). It updates right away when the heat changes, on a new day or floor, and on the last day. A fight leaves copper in the air; a break, smoke.
+- One omen reworded: "The deep remembers a name. Yours...soon."
+- The build number shows small under the screen's lower right corner.
+- The bottom border reads `[?] [L]OG [P]ASS [R]ESET`. BACKUP is now `[P]ASS`, the run's password like old console games (copy it to keep or move the run; paste one in to continue it), and RST is spelled out as `[R]ESET`.
+- **The adventure log keeps everything you read:** each day's omen, every action, everything said and done in a fight or a talk, and line 3 whenever it changes (party replies, finds, warnings). Follow-up lines sit indented under the action they belong to. Hidden numbers stay out.
+- **Items can break.** Trying to use something that does nothing can break it ("comes apart in KURA's hands"), and every try is a roll: one battery survives a dozen tries, the next snaps on the first. COMMON things break 30% of the time per try, UNCOMMON 22%, RARE 10%, MYTHIC 3%, and MOON things never break. Junk is hollow, though: when a COMMON thing breaks there's a 1 in 10 chance something was inside (1 in 12 for UNCOMMON), and it pops up like a find: usually more junk, 35% of the time a RARE, 5% a MYTHIC. Breaking things has consequences:
+  - **Noise.** Fiddling makes a little noise and breaking makes a lot: the room heats up, and something may "come to see what broke."
+  - **Alignment.** Breaking things leans CHAOS. Breaking a LAW relic is a big CHAOS act; breaking a CHAOS relic leans LAW, like getting rid of something dangerous.
+  - **The party cares what you break.** Break something a member loves (folklore: old spirit things; data and hardware: tech; hybrids: half-and-half things) and they take it hard: "ELF: "That was older than you."", "PIXIE: "You BROKE it!"", "CU SITH whines at the pieces.", "ASSET DESTROYED.", costing extra patience. Once per kind of item, one of them may stop you: "ELF catches KURA's wrist. "Not that one.""
+  - **The moon.** Spirit things are more fragile under a full moon and tougher at the new moon, and things turn up inside junk more often at the new moon.
+  - The codex counts how many of each item you've broken, and the end-of-run stats list items broken and how many had something inside.
+  
+  The party notices fiddling too: "What are you doing?", "It's not going to do anything.", and it wears on their patience like being talked at, up to snapping.
+- Each changelog entry now comes with a screenshot of that build.
+- The README is up to date with how the game plays now.
+
 ## v0.27 - Oct 6 2026, 19:16 HST
+
+![v0.27](screenshots/v0.27.png)
 
 - **A block moon** sits at the far left of the top panel, showing today's phase: lit columns fill in as it waxes and empty as it wanes, and on the page the lit part glows and slowly breathes. The phase bar shifts over to make room.
 - **The day's step is the `[^]` button** above the facing letter in the 3D view: it walks KURA the way she faces (dimmed when that's a wall or the step is spent). The NSEW buttons are gone from the bottom right, which is kept free for answering the party later. The N/S/E/W keys still work, and in a fight `[R]UN` handles escaping.

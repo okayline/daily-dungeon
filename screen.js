@@ -1,6 +1,8 @@
 // Renders the 80-column SMT daily dungeon screen from a save object.
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
+  // The build number: bumped with every release, so About and the changelog always match.
+  const VERSION = "v0.28";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const pad = (s, n) => (s + " ".repeat(n)).slice(0, Math.max(n, s.length));
@@ -222,6 +224,18 @@
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
       rule, money, mapHead, ...mp.map(m => " ".repeat(mapPad) + m), "", ...(mapRows === 4 ? [""] : []), rule, bottom];
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
+    // The day's omen, framed under the 3D view: a bar on top (the border below closes it), the text
+    // centered, and arrows on the edges that grow inward when the omen is short: |||> "..." <|||
+    const omenT = (st.omenText || "").replace(/^> /, "");
+    if (omenT) {
+      const OW = 47, g = Math.floor((OW - omenT.length) / 2), n = Math.max(0, Math.floor((g - 2) / 4));
+      const L = "|".repeat(n) + ">", R = "<" + "|".repeat(n);
+      let inner = " ".repeat(Math.max(0, g)) + omenT;
+      inner = (L + inner.slice(L.length)).padEnd(OW).slice(0, OW);
+      inner = inner.slice(0, OW - R.length) + R;
+      S.push("| +" + "-".repeat(43) + "+ |" + " ".repeat(30) + "|");
+      S.push("|" + inner + "|" + " ".repeat(30) + "|");
+    }
     S.push("+" + "=".repeat(78) + "+");
     // The moon line: a mysterious word on the moon, the demons, or both. No numbers; the moon bar
     // above already shows the phase. Several lines per phase, changing once per real day.
@@ -230,14 +244,15 @@
     // Picked by the real date, so it changes once a day, not with every action.
     const realDay = localDay(now, st.tz);
     // Line 1 is the day's omen when the rules provide one; otherwise the moon line.
-    const moonLine = st.omenText || "> " + lines[realDay % lines.length];
+    // Line 1 is the status report when the rules provide one; otherwise the moon line.
+    const moonLine = st.status || "> " + lines[realDay % lines.length];
     for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step on the right.
     // The day's step is the [^] button in the 3D view now; the right side waits for answers ([Y]ES [N]O, later).
-    const free = " [F]IGHT [T]ALK [I]NVOKE SE[A]RCH", daily = "|" + " ".repeat(30);
+    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = "|" + " ".repeat(30);
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " [L]OG [B]ACKUP [R]ST ";                 // system buttons tucked into the bottom border
+    const sys = " [?] [L]OG [P]ASS [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");
@@ -247,7 +262,7 @@
     return S.join("\n");
   }
 
-  const api = { renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  const api = { VERSION, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);
