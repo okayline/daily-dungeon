@@ -61,9 +61,10 @@
   // the device's. Days roll over at midnight in the run's own timezone (st.tz, set when the run starts);
   // runs without one, and the /smt-screen chat run, use Honolulu.
   const HOME = "Pacific/Honolulu";
-  let skew = 0;
+  let skew = 0, synced = false;
   const now = () => new Date(Date.now() + skew);
-  const setSkew = ms => { skew = ms || 0; };
+  const setSkew = ms => { skew = ms || 0; synced = true; };
+  const trusted = () => synced;                    // true once the server's time is known
   const zone = () => (typeof window !== "undefined" && Intl.DateTimeFormat().resolvedOptions().timeZone) || HOME;
   const fmts = {};
   // How far the timezone is from UTC at that moment, in ms (follows daylight saving).
@@ -239,7 +240,7 @@
     return S.join("\n");
   }
 
-  const api = { renderScreen, moonIndex, now, setSkew, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  const api = { renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);

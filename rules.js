@@ -337,7 +337,24 @@
   }
 
   // Bring the game up to the real date: a new day resets the step; a missed deadline ends the run.
+  // A run whose calendar ran ahead of the real date (old X presses, a wrong device clock) snaps back
+  // once, when the real time is known: its clock returns to today, and a deadline further out than a
+  // fair one (next week's Sunday) is pulled in. After that, X works again as a testing cheat.
+  function snapBack(st) {
+    if (st.timeFixed || !TIME.trusted()) return;
+    st.timeFixed = true;
+    const real = TIME.localDay(TIME.now(), st.tz);
+    if ((st.clockOffset || 0) === 0 && !(st.lastSeen > real)) return;
+    delete st.clockOffset;
+    st.lastSeen = real;
+    delete st.rewindNoted;
+    if (st.today && st.today.date > real) st.today = { date: real, stepped: !!st.today.stepped };
+    if (st.startDay > real) st.startDay = real;
+    if (st.dungeon && st.dungeon.deadline > sundayOf(real) + 7) st.dungeon.deadline = sundayOf(real) + 7;
+    st.extra = "> The calendar shudders and settles on today.";
+  }
   function sync(st) {
+    snapBack(st);
     const t = clock(st);
     if (rawClock(st) < t && !st.rewindNoted) { st.extra = "> The calendar won't turn back."; st.rewindNoted = true; }
     if (rawClock(st) >= t) delete st.rewindNoted;
@@ -619,6 +636,9 @@
     // new timezone starts the calendar guard fresh, so a zone behind the old one doesn't stall it.
     const tz = (root.SMT || require("./screen.js")).zone();
     if (st.tz !== tz) { delete st.lastSeen; delete st.rewindNoted; }
+    // A new run starts on the real calendar: the X testing cheat doesn't carry over.
+    if (st.clockOffset) { delete st.clockOffset; delete st.lastSeen; delete st.rewindNoted; }
+    st.timeFixed = true;
     st.tz = tz;
     const t = clock(st);
     Object.assign(st, {
@@ -666,7 +686,7 @@
     if (i < 0) return show(st);
     const info = ITEM_INFO[name] || {};
     // Most things can't be used (yet): a placeholder line says so, and nothing is spent.
-    if (!info.use) { st.log = `> KURA turns ${name.replace(/^an? /, "the ")} over. Nothing happens.`; return show(st); }
+    if (!info.use) { act(st); st.log = `> KURA turns ${name.replace(/^an? /, "the ")} over. Nothing happens.`; return show(st); }
     st.items.splice(i, 1);
     act(st);
     info.use(st);
