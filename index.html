@@ -82,9 +82,13 @@
   .qcell { display: inline-block; white-space: pre; vertical-align: top; }
   /* The build number, small, under the screen's lower right corner. */
   .ver { text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
-  .step { color: var(--bright); }
+  /* The day's one step: drawn bigger than the other buttons (scaled in place, so the grid doesn't move). */
+  .step { color: var(--bright); display: inline-block; transform: scale(1.6); transform-origin: center 60%;
+    text-shadow: 0 0 6px var(--bright); font-weight: bold; }
+  .step.off { text-shadow: none; }
   .ask { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
+  .t-ICHOR { color: var(--demon); }
   .t-COMMON { color: var(--fg); } .t-UNCOMMON { color: #7bd88f; } .t-RARE { color: #6aa9ff; }
   .t-MYTHIC { color: var(--gold); text-shadow: 0 0 6px var(--gold); } .t-MOON { color: #dfe9ff; text-shadow: 0 0 8px #9fc4ff; }
   .foundbox .demon { color: var(--demon); }
@@ -284,10 +288,14 @@
         `${(save.log || "").replace(/^> (Day \d+\. )?/, "")}\n\n` +
         RULES.summary(save).map(([k, v]) => "  " + (k + " ").padEnd(15, ".") + " " + v).join("\n") +
         "\n\n[R]ESET begins a new run.\n\n" : "";
-      box.querySelector("pre").textContent = end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
+      // The CODEX opens from here: a button at the top of the log.
+      const pre = box.querySelector("pre");
+      pre.textContent = end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
         // Newest first, but each action keeps its follow-up lines underneath it.
         (h.length ? h.reduce((g, l) => (/^ /.test(l) && g.length ? g[g.length - 1].push(l) : g.push([l]), g), [])
           .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.");
+      const cx = document.createElement("span"); cx.className = "btn"; cx.dataset.codex = "1"; cx.textContent = "[C]ODEX";
+      const top = document.createElement("div"); top.append(cx, "   [L] or Esc closes"); pre.prepend(top, "\n");
     }
   }
 
@@ -340,6 +348,9 @@
     if (!open) return;
     placeInView(box);
     invList = save ? RULES.inventory(save) : [];
+    // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
+    if (save && (save.ichor || 0) > 0) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
+      text: "Demon blood and old light. Heals demons. Not meant for KURA." });
     invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
     pre.innerHTML = "";
@@ -348,20 +359,22 @@
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
-      `${i === invSel ? ">" : " "} ${i < 9 ? i + 1 : " "}  ${it.name}${it.count > 1 ? " x" + it.count : ""}`.replace(/^(.{42}).{4,}$/, "$1..."),
+      `${i === invSel ? ">" : " "} ${i < 9 ? i + 1 : " "}  ${it.ichor ? `ICHOR  (${save.ichor})` : it.name + (it.count > 1 ? " x" + it.count : "")}`.replace(/^(.{42}).{4,}$/, "$1..."),
       "t-" + it.tier + " btn", i));
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
     const it = invList[invSel];
     if (it) {
       add(" ");
-      const tag = it.tier + (it.align ? ` [${it.align}]` : "");
-      const lines = [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
+      const tag = it.ichor ? `${save.ichor} in hand` : it.tier + (it.align ? ` [${it.align}]` : "");
+      const lines = it.ichor ? [it.text, "Enter feeds the wounded. [D]RINK: KURA."]
+        : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
       textBox(it.name, tag, lines, 41).forEach(l => add(l, "t-" + it.tier));
     }
     add(" ");
     // What happened on the last try to use something (cleared when another item is chosen).
     const help = add("[1-9] choose  "), btn = (t, k) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = "btn"; sp.dataset[k] = "1"; return sp; };
-    help.append(btn("[ENTER] use", "use"), "  ", btn("[C]ODEX", "codex"));
+    help.append(btn("[ENTER] use", "use"), "  ");
+    if (it && it.ichor) help.append(btn("[D]RINK", "drink"));
   }
   // ABOUT: the build, what the game is, a few numbers from this run and the codex.
   // (The full stats only show at the end of a run.)
@@ -395,7 +408,7 @@
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "  1-8 ................ pick a gift when a demon asks for one",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
-      "  [C]ODEX ............ every demon and item found, over all runs",
+      "  [C]ODEX ............ every demon and item found, over all runs (in the LOG)",
       "  [L]OG .............. the adventure log",
       "  [P]ASS ............. this run's password: copy it to keep or move the run,",
       "                       or paste one in to continue that run",
@@ -439,11 +452,11 @@
     add(" ");
     add("[D]EMONS / [I]TEMS   arrows or click choose   [C] or Esc closes");
   }
-  function useInv(i) {
+  function useInv(i, drink) {
     const it = invList[i];
     if (!it || !save) return;
     const log = save.log;
-    save = RULES.useItem(save, it.name);
+    save = it.ichor ? (drink ? RULES.drinkIchor(save) : RULES.feedIchor(save)) : RULES.useItem(save, it.name);
     logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
     // Something fell out of broken junk: close the bag and show it like any find.
@@ -604,7 +617,10 @@
   document.getElementById("screen").addEventListener("click", e => {
     const b = e.target.closest(".btn"); if (b) act(b.dataset.act);
   });
-  document.getElementById("log").addEventListener("click", () => toggleLog(false));
+  document.getElementById("log").addEventListener("click", e => {
+    toggleLog(false);
+    if (e.target.closest("[data-codex]")) { codexSel = -1; showCodex(true); }
+  });
   document.getElementById("found").addEventListener("click", e => {
     const c = e.target.closest("[data-cact]");
     if (c) return answerConfirm(c.dataset.cact === "yes");
@@ -616,6 +632,7 @@
   // Clicking an item chooses it; clicking the chosen one again uses it. Clicking elsewhere closes.
   document.getElementById("inv").addEventListener("click", e => {
     if (e.target.closest("[data-use]")) return useInv(invSel);
+    if (e.target.closest("[data-drink]")) return useInv(invSel, true);
     if (e.target.closest("[data-codex]")) { showInv(false); codexSel = -1; return showCodex(true); }
     const line = e.target.closest("[data-i]");
     if (!line) return showInv(false);
@@ -665,14 +682,15 @@
     }
     if (!document.getElementById("inv").hidden) {
       if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); }
-      else if (key === "c") { e.preventDefault(); showInv(false); showCodex(true); }
       else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; invMsg = ""; showInv(true); }
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; invMsg = ""; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
+      else if (key === "d" && invList[invSel] && invList[invSel].ichor) { e.preventDefault(); useInv(invSel, true); }
       return;
     }
     if (!document.getElementById("log").hidden) {
       if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
+      else if (key === "c") { e.preventDefault(); toggleLog(false); codexSel = -1; showCodex(true); }
       return;
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).

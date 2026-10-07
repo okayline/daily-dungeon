@@ -229,6 +229,8 @@
     const d = st.dungeon;
     if (st.dead || !d) return;
     if (d.deadline !== undefined && clock(st) === d.deadline) { st.extra = "> The air grows heavy. The way down closes tonight."; return; }
+    // Taint plays tricks: from 3 drinks KURA sometimes sees things; tripping, most of the time.
+    if ((st.taint || 0) >= ODD_AT && Math.random() < (tripping(st) ? 0.5 : 0.2)) { st.extra = "> " + pick(TRIP_LINES); return; }
     if (Math.random() < 0.3) st.extra = atmosphere(st);
   }
   // Plain flavor for the third line: party chatter, how the party is holding up, demon sounds
@@ -301,7 +303,7 @@
   const BIN = /\b[01]{8}(?: [01]{8})+\b/;
   function translate(st, line) {
     if (typeof line !== "string" || !BIN.test(line) || /\[\w[^\]]*: "/.test(line)) return line;
-    const reader = (st.party || []).slice(1).find(p => p.hp > 0 && p.family === "data");
+    const reader = (st.party || []).slice(1).find(p => p.hp > 0 && p.family === "data") || (tripping(st) && st.party[0]);
     if (!reader) return line;
     const text = line.match(BIN)[0].split(" ").map(b => String.fromCharCode(parseInt(b, 2))).join("");
     const out = `${line}  [${reader.name}: "${text}"]`;
@@ -397,8 +399,11 @@
       settled = was > 0 && heatTier(st.dungeon.heat[at]) < was;
     }
     if (st.dungeon) st.dungeon.linger = [0, 0, 0];
+    // Sleep ends a trip, and taint fades a point.
+    if (tripping(st)) comeDown(st);
+    if (st.taint) st.taint = Math.max(0, st.taint - 1);
     // A night's rest gives back some patience.
-    st.party = (st.party || []).map(p => p.patience === undefined ? p : { ...p, patience: Math.min(PATIENCE, p.patience + 3) });
+    st.party = (st.party || []).map(p => p.patience === undefined ? { ...p, chats: 0 } : { ...p, chats: 0, patience: Math.min(PATIENCE, p.patience + 3) });
     // A night's rest heals a fifth of everyone's HP (fallen allies too, slowly).
     if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
     const d = st.dungeon;
@@ -449,6 +454,11 @@
     st.unsaved = true;
     st.statusIn = (st.statusIn ?? 0) - 1;  // line 1 (the status report) changes every 5-10 actions
     if (st.question) { st.question = null; }  // a question KURA walks away from just lapses
+    if (tripping(st)) {
+      // The TURN counter goes strange: usually up, sometimes back.
+      st.turnShown = (st.turnShown ?? st.steps) + (Math.random() < 0.25 ? -1 : 1);
+      if (--st.tripLeft <= 0) comeDown(st);
+    }
   }
 
   // LINE 1: THE STATUS REPORT. Mostly news (about 7 in 10): the floor, the days left, rooms surveyed,
@@ -488,6 +498,8 @@
   }
   function status(st) {
     if (!st.dungeon || st.dead) return;
+    if (tripping(st) && (st.statusIn ?? 0) <= 0) { st.status = "> " + pick(["KURA is not herself.", "KURA is TRIPPING.",
+      "Conditions: unclear. KURA is seeing things."]); st.statusIn = R(5, 10); return; }
     const last = st.dungeon.deadline - clock(st) <= 0;
     if ((st.statusIn ?? 0) > 0 && !(last && !/tonight/.test(st.status || ""))) return;
     let line, tries = 0;
@@ -588,7 +600,7 @@
       if (st.drop) { st.extra = st.drop; delete st.drop; }
       return show(st);
     }
-    if (w.deep && w.deep.dir === dir && !w.deep.found && Math.random() < DEEP_FIND * fx.find) {
+    if (w.deep && w.deep.dir === dir && !w.deep.found && Math.random() < DEEP_FIND * fx.find * (tripping(st) ? 3 : 1)) {
       w.deep.found = true;
       gain(st, w.deep.item);
       st.log = say("Deep in the stone, something gives.");
@@ -915,7 +927,22 @@
       const e = st.encounter;
       e.stage = null;
       let total = 0;
-      for (const p of st.party) if (p.hp > 0) total += R(1, 4) + Math.floor((p.lv || 1) / 2);
+      for (const p of st.party) if (p.hp > 0) {
+        const hit = R(1, 4) + Math.floor((p.lv || 1) / 2);
+        if (p === st.party[0] && tripping(st)) {
+          // Tripping: twice as strong, but a third of her blows go wild and land on the party.
+          const friends = st.party.slice(1).filter(q => q.hp > 1);
+          if (friends.length && Math.random() < 1 / 3) {
+            const q = pick(friends), dmg = Math.min(q.hp - 1, hit * 2);
+            q.hp -= dmg; q.patience = Math.max(0, (q.patience ?? PATIENCE) - 2);
+            lines.push(`KURA swings at ${the(e.name)}... and hits ${q.name}. -${dmg}`);
+            lines.push(`${q.name}: "${pick(["OW?? KURA!!", "Watch it!", "Not me! THEM!", "What are you DOING?"])}"`);
+            continue;
+          }
+          total += hit * 2; continue;
+        }
+        total += hit + (p === st.party[0] && st.taint ? 2 : 0);   // a buzz from the ichor: KURA hits a little harder
+      }
       e.hp = Math.max(0, e.hp - total);
       lines.push(`The party strikes. -${total}`);
       st.log = `> Day ${st.day}. KURA's party fights ${the(e.name)}.`;
@@ -959,7 +986,7 @@
   //   running through a door: +0.15
   //   finding a LAW / CHAOS relic (RARE and up): -0.3 / +0.3; offering one pulls toward it (+-0.4, NEUTRAL: none)
   const LEAN = { LAW: -1, CHAOS: 1, NEUTRAL: 0, search: -0.03, hot: 0.2, talk: -0.15, fight: 0.3, kill: 0.6,
-    pay: -0.4, task: -0.4, offer: 0.4, run: 0.15, findLAW: -0.3, findCHAOS: 0.3, offerLAW: -0.4,
+    pay: -0.4, task: -0.4, offer: 0.4, run: 0.15, findLAW: -0.3, findCHAOS: 0.3, offerLAW: -0.4, drink: 0.8,
     break: 0.15, breakLAW: 0.6, breakCHAOS: -0.4 };
   function lean(st, why, lines) {
     const base = LEAN[why] || 0;
@@ -1157,7 +1184,10 @@
     if (snap(st, p)) return show(st);
     // In a calm room, a member with patience to spare sometimes asks KURA something instead (1 in 4).
     if (tier < 2 && (p.patience ?? PATIENCE) >= 3 && Math.random() < 0.25) { ask(st, p); return show(st); }
-    p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
+    // Plain chatter is easy on them: only after about 7 talks each in a day (around 30 for the party)
+    // does talking start to wear their patience down.
+    p.chats = (p.chats || 0) + 1;
+    if (p.chats > 6) p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
     // A dangerous room (nervous or worse) outranks being annoyed; otherwise a tired member says so.
     const lines = tier >= 2 ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier]
       : p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[fam])[p.patience]
@@ -1281,6 +1311,94 @@
     st.extra = st.fidgetLine = "> " + pick(lines).replace(/\{n\}/g, p.name);
   }
 
+  // ICHOR is demon blood and old light: what's left when a demon falls. It's the party's medicine:
+  // it heals demons (about 1 ICHOR per HP; bringing back a fallen one costs three times as much), but not KURA.
+  // KURA can drink it anyway. It heals her badly (10 ICHOR for 5 HP), pulls her hard toward CHAOS, and
+  // leaves TAINT, which fades a point each night. Any taint gives her a buzz (her blows land a little
+  // harder). From 3 she starts seeing things (strange thoughts on line 3). At 6 she TRIPS (a status,
+  // KURA* in the party panel) for 50-100 actions, or until she sleeps: she strikes twice as hard but a
+  // third of her blows go wild and hit the party (never knocking anyone out), she sometimes answers
+  // demons the opposite of what she meant, deep finds come three times as easily, she can read binary
+  // on her own, and the TURN counter can't be trusted (it sometimes counts backwards). Coming down
+  // costs her a third of her HP (never below 1).
+  const DRINK = 10, ODD_AT = 3, TRIP_AT = 6;
+  const tripping = st => !!(st.party && st.party[0] && st.party[0].status === "TRIP");
+  function feedIchor(st) {
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    if (!ensureFloor(st)) return show(st);
+    let have = st.ichor || 0;
+    const fed = [];
+    for (const p of st.party.slice(1)) {
+      const missing = p.hpmax - p.hp, rate = p.hp > 0 ? 1 : 3;
+      if (!missing || have < rate) continue;
+      const heal = Math.min(missing, Math.floor(have / rate));
+      p.hp += heal; have -= heal * rate; fed.push(p.name);
+    }
+    const spent = (st.ichor || 0) - have;
+    if (!spent) { st.log = (st.ichor || 0) ? "> No one in the party needs it." : "> There's no ICHOR left."; return show(st); }
+    act(st);
+    st.ichor = have;
+    tally(st, "ichorFed", spent);
+    st.log = `> ${fed.length === 1 ? fed[0] + " drinks" : "The party drinks"}. ICHOR -${spent}.`;
+    st.extra = "> " + pick([`${pick(fed)} laps it up. The wounds close.`, `${pick(fed)} drinks deep and sighs.`,
+      "The ichor glows, then is gone. So are the wounds.", `${pick(fed)}: the color comes back.`]);
+    return show(st);
+  }
+  const DRINK_REACT = {
+    ELF: ['ELF: "You shouldn\'t have done that."', "ELF watches KURA very closely now."],
+    PIXIE: ['PIXIE: "KURA?? Spit it OUT."', 'PIXIE: "That\'s not for YOU!"'],
+    "CU SITH": ["CU SITH whines and sniffs KURA's hands.", "CU SITH won't stop licking KURA's fingers."],
+    data: ['{n}: "HUMAN INTEGRITY: 97%."', '{n}: "WARNING: FOREIGN CODE IN USER."'],
+    hardware: ['{n}: "is that... allowed?"', '{n}: "you smell like us now"'],
+    hybrid: ['{n}: "Now you are a little like me."', '{n}: "Careful. It remembers where it came from."'],
+    folklore: ['{n}: "Brave. Or hungry."', '{n}: "Now you taste of us."'],
+  };
+  function drinkIchor(st) {
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    if (!ensureFloor(st)) return show(st);
+    if ((st.ichor || 0) < DRINK) { st.log = `> KURA needs ${DRINK} ICHOR to drink. There isn't enough.`; return show(st); }
+    act(st);
+    const k = st.party[0];
+    st.ichor -= DRINK;
+    k.hp = Math.min(k.hpmax, k.hp + 5);
+    st.taint = (st.taint || 0) + 1;
+    tally(st, "ichorDrunk");
+    lean(st, "drink");
+    st.log = "> " + pick(["KURA drinks the ichor. It burns going down.", "KURA drinks. It tastes like pennies and lightning.",
+      "KURA drinks. For a moment the room is very bright."]) + " +5 HP";
+    if (st.taint >= TRIP_AT && !tripping(st)) {
+      k.status = "TRIP"; st.tripLeft = R(50, 100); st.turnShown = st.steps; tally(st, "trips");
+      st.log = "> KURA drinks. Something in her head comes loose.";
+      st.extra = "> The walls lean in to listen. KURA is TRIPPING.";
+      st.statusIn = 0;
+      return show(st);
+    }
+    if (st.taint === 1) { st.extra = "> KURA can feel it in her teeth. Her hands want to hit something."; return show(st); }
+    if (st.taint === ODD_AT) { st.extra = "> The edges of things have started to shimmer."; return show(st); }
+    const friends = st.party.slice(1).filter(p => p.hp > 0);
+    if (friends.length) {
+      const p = pick(friends);
+      p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
+      st.extra = "> " + pick(DRINK_REACT[p.name] || DRINK_REACT[p.family || "folklore"]).replace(/\{n\}/g, p.name);
+    }
+    return show(st);
+  }
+  // Coming down: when the trip runs out (or overnight).
+  function comeDown(st) {
+    const k = st.party[0];
+    delete k.status; st.tripLeft = 0; delete st.turnShown;
+    const loss = Math.min(k.hp - 1, Math.ceil(k.hpmax / 3));
+    k.hp -= loss;
+    st.tell = `> KURA comes down hard. Her hands won't stop shaking. -${loss} HP`;
+    st.statusIn = 0;
+  }
+  const TRIP_LINES = ["The walls are breathing with her.", "PIXIE has three faces. All of them are kind.",
+    "Someone is whispering KURA's name in binary.", "The floor is very far away, and very close.",
+    "Every shadow here is a door, if she asks nicely.", "KURA can hear the moon. It's humming.",
+    "Her hands leave trails of light.", "The stone remembers the sea. It tells her about it."];
+
   // DEMON TALK. Before it wants anything, a demon that listens asks KURA one or two things, each family
   // its own way. Each answer it likes lifts its mood (a happier demon is easier to please and likelier
   // to join); each it dislikes sours it, and a demon in a foul mood loses its temper and strikes.
@@ -1316,6 +1434,7 @@
   }
   function demonHears(st, e, yes, lines) {
     const [, likes, good, bad] = DEMON_ASK[e.family || "folklore"][e.q];
+    if (tripping(st) && Math.random() < 0.3) { yes = !yes; lines.push("KURA meant to say the other thing."); }
     const wanted = likes === true ? true : likes === "LAW" ? e.align === "LAW" || e.align === "NEUTRAL" && Math.random() < 0.5
       : e.align === "CHAOS" || e.align === "NEUTRAL" && Math.random() < 0.5;
     const liked = likes === true ? yes : yes === wanted;
@@ -1532,13 +1651,14 @@
       ["Demons met", k.met || 0], ["Beaten", k.beaten || 0], ["Talked to", k.demonTalks || 0],
       ["Gifts given", k.gifts || 0], ["Recruited", k.recruited || 0], ["Escaped", k.fled || 0],
       ["Party talks", k.partyTalks || 0], ["Items found", k.items || 0],
+      ["ICHOR fed", k.ichorFed || 0], ["ICHOR drunk", `${k.ichorDrunk || 0} times  (${k.trips || 0} trips)`],
       ["Items broken", `${k.broken || 0}  (${k.insides || 0} had something inside)`],
       ["SILVER", `${st.silver || 0}  (${k.silverFound || 0} found)`], ["ICHOR", `${st.ichor || 0}  (${k.ichorWon || 0} won)`],
       ["Party left", (st.party || []).slice(1).map(p => p.name).join(", ") || "nobody"],
     ];
   }
 
-  const api = { summary, next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, codex, reply, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { summary, next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, codex, reply, feedIchor, drinkIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

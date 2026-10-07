@@ -2,6 +2,19 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.30 - Oct 6 2026, 20:58 HST
+
+![v0.30](screenshots/v0.30.png)
+
+- The `[^]` step button is drawn bigger and glows, since it's the one move of the day.
+- The omen on the ceiling has carets pointing in: `> "The stone dreams of the sea." <`.
+- Talking to the party is much easier on them: plain chatter only starts to wear their patience after about 7 talks each in a day (around 30 for the whole party). Questions, fiddling with junk and repeating yourself still wear on them as before.
+- **ICHOR is the party's medicine.** It sits at the top of INVOKE: Enter feeds the wounded demons (about 1 ICHOR per HP; bringing back a fallen one costs three times as much). It doesn't work on KURA, who is human.
+- **KURA can drink it anyway** (`[D]RINK` in INVOKE, 10 ICHOR): it heals her a little, pulls her hard toward CHAOS, unsettles the party ("PIXIE: "KURA?? Spit it OUT."", "HUMAN INTEGRITY: 97%."), and leaves TAINT, which fades a point each night. One drink gives her a buzz ("KURA can feel it in her teeth."): her blows land harder. After 3 she starts seeing things ("The walls are breathing with her.").
+- **TRIP, the first status effect.** At 6 drinks' worth of taint KURA TRIPS (`KURA*` in the party panel) for 50-100 actions, or until she sleeps. She strikes twice as hard, but a third of her blows go wild and hit the party ("KURA swings at the WIRE WITCH... and hits CU SITH."), never knocking anyone out. She sometimes answers demons the opposite of what she meant, strange thoughts crowd line 3, deep finds come three times as easily, she can read binary on her own, and the TURN counter can't be trusted: it sometimes counts backwards. Coming down hard costs her a third of her HP.
+- The CODEX button moved from INVOKE to the top of the LOG page (C still opens it anywhere).
+- The stray `|` to the right of `[S]EARCH` on the menu bar is gone.
+
 ## v0.29 - Oct 6 2026, 20:36 HST
 
 ![v0.29](screenshots/v0.29.png)

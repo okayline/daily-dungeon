@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.29";
+  const VERSION = "v0.30";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const pad = (s, n) => (s + " ".repeat(n)).slice(0, Math.max(n, s.length));
@@ -169,14 +169,17 @@
     const omenT = (st.omenText || "").replace(/^> /, "");
     // A long one wraps onto a second row (split at the space nearest the middle), so the walls always show.
     if (omenT) {
-      const fits = (t, y) => t.length <= 39 - 2 * y;      // room between the slanted walls on row y
+      const fits = (t, y) => t.length + 4 <= 39 - 2 * y;  // room between the slanted walls on row y (with the carets)
       let rows = [omenT];
       if (!fits(omenT, 0)) {
         const spaces = [...omenT.matchAll(/ /g)].map(m => m.index), mid = omenT.length / 2;
         const at = spaces.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
         rows = [omenT.slice(0, at), omenT.slice(at + 1)];
       }
-      rows.forEach((t, y) => overlay(y, Math.max(1, Math.floor((VW - t.length) / 2)), t.slice(0, VW - 2)));
+      // Each row gets carets pointing in: > "..." <
+      // A wrapped omen keeps both carets on the first row; the second row is plain.
+      // (The second row leans a column right, under the first row's text rather than its opening caret.)
+      rows.map((t, y) => y === 0 ? `> ${t} <` : t).forEach((t, y) => overlay(y, Math.max(1, (y ? Math.ceil : Math.floor)((VW - t.length) / 2) + y), t.slice(0, VW - 2)));
     }
     const moons = ["(     )", "(    ))", "(  ))))", "())))))", "(((O)))", "((((())", "((((  )", "((    )"];
     const names = ["NEW", "CRESC", "HALF", "GIBB", "FULL", "GIBB", "HALF", "CRESC"];
@@ -205,7 +208,8 @@
     // Name gets 9 columns, level 3, then HP and MP each as 3/3 digits, so high levels still fit.
     // Long demon names are shortened to 8 columns: CHROME HOUND -> C.HOUND, STATIC BANSHEE -> S.BANSHE
     const short = n => n.length <= 8 ? n : n.includes(" ") ? (n[0] + "." + n.split(" ").pop()).slice(0, 8) : n.slice(0, 8);
-    const mem = p => " " + ljust(short(p.name), 9) + ljust(`L${p.lv}`, 3) + " " +
+    // A status effect shows as a mark after the name: KURA* while she's TRIPPING.
+    const mem = p => " " + ljust(short(p.name) + (p.status ? "*" : ""), 9) + ljust(`L${p.lv}`, 3) + " " +
       `${rjust(String(p.hp), 3)}/${rjust(String(p.hpmax), 3)} ${rjust(String(p.mp), 3)}/${rjust(String(p.mpmax), 3)}`;
     const party = st.party.map(mem); while (party.length < 4) party.push("");
     // KURA is drawn on the minimap as an arrow showing the facing direction.
@@ -231,7 +235,8 @@
     const pull = st.pull || 0;
     const align = `ALIGN ${pull < 0 ? "<" : "["}${String(st.align).slice(0, 3).toUpperCase()}${pull > 0 ? ">" : "]"}`;
     // TURN counts every action KURA has taken (stepping, searching, turning); facing shows in the turn controls.
-    const face = `TURN ${String(st.steps || 0).padStart(3, "0")}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
+    // While KURA is tripping, the TURN counter shows what she thinks it is (st.turnShown).
+    const face = `TURN ${String(Math.max(0, st.turnShown ?? st.steps ?? 0)).padStart(3, "0")}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
     const gap = PW - 1 - align.length - face.length - dayStr.length;
     const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
@@ -256,7 +261,7 @@
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step on the right.
     // The day's step is the [^] button in the 3D view now; the right side waits for answers ([Y]ES [N]O, later).
-    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = "|" + " ".repeat(30);
+    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = " ".repeat(31);
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
     const sys = " [?] [L]OG [P]ASS [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
