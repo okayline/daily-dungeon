@@ -99,7 +99,7 @@
   function colorize(text) {
     const lines = text.split("\n");
     return lines.map((line, i) => {
-      if (i >= 16 && i <= 20) {
+      if (i >= 15 && i <= 19) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
         // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
         const map = right.replace(/\[[\^v]\]|[@^v<>&$?□=‖]/g, m => {
@@ -241,7 +241,7 @@
 
   // N/S/E/W take the day's step, SEARCH is unlimited, turning is free. NEXT (X) is a hidden testing cheat.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
-  let invList = [], invSel = 0;
+  let invList = [], invSel = 0, invMsg = "";
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
   function textBox(title, tag, lines, W = 70) {
     const out = ["+" + "-".repeat(W + 2) + "+"];
@@ -275,7 +275,7 @@
     invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
     pre.innerHTML = "";
-    const add = (txt, cls, i) => { const d = document.createElement("div"); d.textContent = txt; if (cls) d.className = cls; if (i !== undefined) d.dataset.i = i; pre.appendChild(d); };
+    const add = (txt, cls, i) => { const d = document.createElement("div"); d.textContent = txt; if (cls) d.className = cls; if (i !== undefined) d.dataset.i = i; pre.appendChild(d); return d; };
     add("INVOKE".padEnd(35) + "[I] closes", "");
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
@@ -291,7 +291,10 @@
       textBox(it.name, tag, lines, 41).forEach(l => add(l, "t-" + it.tier));
     }
     add(" ");
-    add("[1-9] choose  [ENTER] use  [C]ODEX");
+    // What happened on the last try to use something (cleared when another item is chosen).
+    if (invMsg) { add(" "); add(invMsg, "gold"); }
+    const help = add("[1-9] choose  "), btn = (t, k) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = "btn"; sp.dataset[k] = "1"; return sp; };
+    help.append(btn("[ENTER] use", "use"), "  ", btn("[C]ODEX", "codex"));
   }
   // CODEX: every demon met and item found, over all runs. Unknown ones show as ???.
   let codexTab = "demons", codexSel = 0;
@@ -331,6 +334,7 @@
     if (!it || !save) return;
     const log = save.log;
     save = RULES.useItem(save, it.name);
+    invMsg = (save.log || "").replace(/^> /, "");
     remember(log); persist(); draw();
     showInv(true);
   }
@@ -475,10 +479,12 @@
   });
   // Clicking an item chooses it; clicking the chosen one again uses it. Clicking elsewhere closes.
   document.getElementById("inv").addEventListener("click", e => {
+    if (e.target.closest("[data-use]")) return useInv(invSel);
+    if (e.target.closest("[data-codex]")) { showInv(false); codexSel = -1; return showCodex(true); }
     const line = e.target.closest("[data-i]");
     if (!line) return showInv(false);
     const i = Number(line.dataset.i);
-    if (i === invSel) useInv(i); else { invSel = i; showInv(true); }
+    if (i === invSel) useInv(i); else { invSel = i; invMsg = ""; showInv(true); }
   });
   document.getElementById("codex").addEventListener("click", e => {
     const tab = e.target.closest("[data-tab]"), line = e.target.closest("[data-i]");
@@ -519,8 +525,8 @@
     if (!document.getElementById("inv").hidden) {
       if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); }
       else if (key === "c") { e.preventDefault(); showInv(false); showCodex(true); }
-      else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; showInv(true); }
-      else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
+      else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; invMsg = ""; showInv(true); }
+      else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; invMsg = ""; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
       return;
     }

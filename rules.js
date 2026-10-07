@@ -657,7 +657,8 @@
     const i = (st.items || []).indexOf(name);
     if (i < 0) return show(st);
     const info = ITEM_INFO[name] || {};
-    if (!info.use) { st.log = `> KURA turns ${name.replace(/^an? /, "the ")} over. Not now.`; return show(st); }
+    // Most things can't be used (yet): a placeholder line says so, and nothing is spent.
+    if (!info.use) { st.log = `> KURA turns ${name.replace(/^an? /, "the ")} over. Nothing happens.`; return show(st); }
     st.items.splice(i, 1);
     act(st);
     info.use(st);
@@ -821,7 +822,7 @@
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     const e = st.encounter;
-    if (!e) { st.log = "> KURA speaks. Only the walls answer."; return show(st); }
+    if (!e) return chat(st);
     if (e.stage) return show(st);                        // waiting on a YES/NO already
     act(st);
     const lines = [];
@@ -845,6 +846,46 @@
     }
     st.round = lines;
     if (!st.encounter || st.dead) st.roundOver = true;
+    return show(st);
+  }
+
+  // TALK with no demon around: KURA talks to her party, and someone answers. Now and then something
+  // that isn't the party answers instead (more often under a full moon). Pure flavor; it counts a TURN.
+  const PARTY_TALK = {
+    ELF: ['ELF: "Hush. The walls have ears."', 'ELF: "I have walked halls like this before. They all end."',
+      'ELF: "You worry too much, little lantern."', 'ELF: "Ask me again when we are out."'],
+    PIXIE: ['PIXIE: "Are we there yet? We\'re never there."', 'PIXIE: "I\'m not scared. YOU\'RE scared."',
+      'PIXIE: "Talk louder! It keeps the dark away."', 'PIXIE: "Can the moon see us down here?"'],
+    "CU SITH": ["CU SITH thumps its tail twice.", "CU SITH presses its head under KURA's hand.",
+      "CU SITH answers with a low, happy rumble.", "CU SITH tilts its head, ears up."],
+  };
+  const FAMILY_TALK = {
+    data: ['{n}: "QUERY NOT UNDERSTOOD. RETRY?"', '{n}: "ALL SYSTEMS NOMINAL. FOR NOW."',
+      '{n}: "CONVERSATION LOGGED."', '{n}: "USER HEART RATE ELEVATED."'],
+    hardware: ['{n}: "you talk to me? nobody talks to me"', '{n}: "battery 12%. don\'t worry about it"',
+      '{n}: "is this a good room? I like it"', "{n} beeps, pleased."],
+    hybrid: ['{n}: "Something in these walls is listening."', '{n}: "Half of me agrees with you."',
+      "{n} flickers between two shapes, then shrugs.", '{n}: "Your voice carries. Careful."'],
+    folklore: ['{n}: "Mortals and their chatter."', '{n}: "Mind the old marks on the stone."',
+      '{n}: "Speak softly. Old things sleep here."', "{n} sniffs the air and says nothing."],
+  };
+  const VOICE_FROM_DARK = ['A voice answers from the stone: "Not yet."', 'Something that is not the party says: "...yes..."',
+    "The dark answers in KURA's own voice.", 'A voice, very close: "Keep going."', "Something laughs, then apologizes.",
+    "A voice below counts to seven, then stops.", 'A whisper: "We heard you the first time."'];
+  function chat(st) {
+    if (!ensureFloor(st)) return show(st);
+    act(st);
+    const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
+    const odd = moon() === 4 ? 0.25 : 0.12;
+    if (!friends.length || Math.random() < odd) {
+      st.log = `> Day ${st.day}. KURA speaks into the dark.`;
+      st.extra = "> " + pick(friends.length || Math.random() < 0.5 ? VOICE_FROM_DARK : ["Only the walls answer.", "Her voice comes back, thinner."]);
+      return show(st);
+    }
+    const p = pick(friends);
+    st.log = `> Day ${st.day}. KURA talks to ${p.name}.`;
+    const pool = (PARTY_TALK[p.name] || FAMILY_TALK[p.family || "folklore"]).map(l => "> " + l.replace(/\{n\}/g, p.name));
+    st.extra = pick(pool.filter(l => l !== st.extra));        // never the same line twice in a row
     return show(st);
   }
 

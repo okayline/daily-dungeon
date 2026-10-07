@@ -181,7 +181,7 @@
     const gap = PW - 1 - align.length - face.length - dayStr.length;
     const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
-      rule, money, mapHead, "", ...mp.map(m => " ".repeat(mapPad) + m), ...(mapRows === 4 ? [""] : []), rule, bottom];
+      rule, money, mapHead, ...mp.map(m => " ".repeat(mapPad) + m), "", ...(mapRows === 4 ? [""] : []), rule, bottom];
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");
     // The moon line: a mysterious word on the moon, the demons, or both. No numbers; the moon bar
