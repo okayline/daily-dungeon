@@ -125,6 +125,8 @@
       if (i === 1) return esc(line).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
         .replace(/([日月火水木金土])/, '<span class="kanji"><span class="g">$1</span></span>');
       if (i === 4) return esc(line).replace("^^^", '<span class="moon">^^^</span>');
+      // Log line 2 glows gold right after using an item.
+      if (i === lines.length - 5 && logGlow) return esc(line).replace(/^(\| )(.*?)(\s*\|)$/, '$1<span class="gold">$2</span>$3');
       // During a fight, "RUN?" sits in the rule just above the glowing direction buttons.
       if (i === lines.length - 3 && save && save.encounter) {
         const label = " RUN? ", at = 61;
@@ -169,7 +171,7 @@
   const KEY = "daily-dungeon-run";
   let statusUntil = 0;
   function flashStatus() { statusUntil = Date.now() + 4000; setTimeout(draw, 4100); }
-  const hstDate = () => new Date(Date.now() - 10 * 3600 * 1000).toISOString().slice(0, 10);
+  const hstDate = () => SMT.localISO(save && save.tz);
 
   // The adventure log: every line that starts with "Day N." (steps, searches, new days, descents).
   function remember(before) {
@@ -201,7 +203,20 @@
     if (JSON.stringify(save) !== before) { remember(log); persist(); }
   }
 
-  function start() {
+  // Before anything reads the clock, ask the server for the real time (the Date on its reply to a
+  // quick HEAD request for this page). The device clock is used only if that fails or takes over 3s.
+  async function syncTime() {
+    try {
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 3000);
+      const t0 = Date.now();
+      const r = await fetch(location.href, { method: "HEAD", cache: "no-store", signal: ctl.signal });
+      clearTimeout(timer);
+      const server = Date.parse(r.headers.get("Date") || "");
+      if (!isNaN(server)) SMT.setSkew(server + 500 - (t0 + Date.now()) / 2);   // the header is whole seconds
+    } catch (e) {}
+  }
+  async function start() {
+    await syncTime();
     let s = null;
     try { s = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
     if (s && s.dungeon && s.party) { save = s; tick(); flashStatus(); draw(); encounterBox(); return; }
@@ -241,7 +256,7 @@
 
   // N/S/E/W take the day's step, SEARCH is unlimited, turning is free. NEXT (X) is a hidden testing cheat.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
-  let invList = [], invSel = 0, invMsg = "";
+  let invList = [], invSel = 0, invMsg = "", logGlow = false;
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
   function textBox(title, tag, lines, W = 70) {
     const out = ["+" + "-".repeat(W + 2) + "+"];
@@ -292,7 +307,6 @@
     }
     add(" ");
     // What happened on the last try to use something (cleared when another item is chosen).
-    if (invMsg) { add(" "); add(invMsg, "gold"); }
     const help = add("[1-9] choose  "), btn = (t, k) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = "btn"; sp.dataset[k] = "1"; return sp; };
     help.append(btn("[ENTER] use", "use"), "  ", btn("[C]ODEX", "codex"));
   }
@@ -334,7 +348,7 @@
     if (!it || !save) return;
     const log = save.log;
     save = RULES.useItem(save, it.name);
-    invMsg = (save.log || "").replace(/^> /, "");
+    logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
     showInv(true);
   }
@@ -437,6 +451,7 @@
   }
 
   function act(name) {
+    if (name !== "invoke" && name !== "codex") logGlow = false;
     if (name.startsWith("go-") && save) {
       const dir = name.slice(3);
       if (armed !== dir && RULES.available(save)[dir]) {
@@ -542,9 +557,9 @@
   start();
   // Live clock: redraw the moment the minute turns over (the colon blinks on its own),
   // and catch up with the real date so midnight brings the new day.
-  let shownMinute = new Date().getMinutes();
+  let shownMinute = SMT.now().getMinutes();
   setInterval(() => {
-    const m = new Date().getMinutes();
+    const m = SMT.now().getMinutes();
     if (m !== shownMinute) { shownMinute = m; tick(); draw(); }
   }, 1000);
 </script>

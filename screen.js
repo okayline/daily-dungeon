@@ -57,8 +57,38 @@
     return c.map(row => row.join(""));
   }
 
-  function hst(date) {                   // Honolulu is UTC-10 year round
-    const d = new Date(date.getTime() - 10 * 3600 * 1000);
+  // TIME. The game's clock is the server's real time when the page could get it (SMT.setSkew), else
+  // the device's. Days roll over at midnight in the run's own timezone (st.tz, set when the run starts);
+  // runs without one, and the /smt-screen chat run, use Honolulu.
+  const HOME = "Pacific/Honolulu";
+  let skew = 0;
+  const now = () => new Date(Date.now() + skew);
+  const setSkew = ms => { skew = ms || 0; };
+  const zone = () => (typeof window !== "undefined" && Intl.DateTimeFormat().resolvedOptions().timeZone) || HOME;
+  const fmts = {};
+  // How far the timezone is from UTC at that moment, in ms (follows daylight saving).
+  function offsetMs(tz, date) {
+    try {
+      const f = fmts[tz] = fmts[tz] || new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23",
+        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const p = {}; for (const x of f.formatToParts(date)) p[x.type] = x.value;
+      return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - Math.floor(date.getTime() / 1000) * 1000;
+    } catch (e) { return -10 * 3600 * 1000; }
+  }
+  // The date and time on the wall clock in that timezone, as a Date read with getUTC*.
+  const wall = (date, tz) => new Date(date.getTime() + offsetMs(tz || HOME, date));
+  // A day number (days since 1970) counted in that timezone.
+  const localDay = (date, tz) => Math.floor(wall(date, tz).getTime() / 86400000);
+  const localISO = tz => wall(now(), tz).toISOString().slice(0, 10);
+
+  const zoneName = (date, tz) => {
+    try {
+      const p = new Intl.DateTimeFormat("en-US", { timeZone: tz || HOME, timeZoneName: "short" }).formatToParts(date);
+      return (p.find(x => x.type === "timeZoneName") || {}).value.replace(/^GMT$/, "UTC").slice(0, 9);
+    } catch (e) { return "HST"; }
+  };
+  function hst(date, tz) {               // the run's local date and time
+    const d = wall(date, tz);
     const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
     const MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
     const p2 = n => String(n).padStart(2, "0");
@@ -66,6 +96,7 @@
       date: `${DAYS[d.getUTCDay()]} ${MON[d.getUTCMonth()]} ${p2(d.getUTCDate())} ${d.getUTCFullYear()}`,
       kanji: "日月火水木金土"[d.getUTCDay()],                // the Japanese weekday
       time: `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`,
+      zone: zoneName(date, tz),                              // HST, EDT, or GMT+9 where there's no short name
     };
   }
 
@@ -120,9 +151,10 @@
       "The new moon is coming. The deep can feel it."],
   ];
 
+  const SMT_now = now;
   function renderScreen(st, extra, now) {
-    now = now || new Date(); extra = extra || "";
-    const idx = moonIndex(now), when = hst(now);
+    now = now || SMT_now(); extra = extra || "";
+    const idx = moonIndex(now), when = hst(now, st.tz);
     const v = st.view;
     const view = renderView(v.left, v.right, v.end, (v.end === "dark" || v.end === "door") ? 2 : 1);
     // Look controls at the foot of the 3D view: [<] and [>] turn KURA to look around (never move her),
@@ -136,7 +168,7 @@
     const rc = s => "|" + center(s, W - 2) + "|";
     const head = `  MOON  ${idx}/8  ${long[idx]}`;
     // The Japanese weekday kanji sits left of the date. A kanji is two columns wide on screen.
-    const tail = `${when.kanji} ${when.date}   ${when.time}  `;
+    const tail = `${when.kanji} ${when.date}   ${when.time} ${when.zone}  `;
     const S = ["+" + "=".repeat(78) + "+", "|" + head + " ".repeat(78 - head.length - tail.length - 1) + tail + "|"];
     S.push(rc(moons.map(m => center(m, 9)).join("")));
     S.push(rc(names.map(n => center(n, 9)).join("")));
@@ -168,7 +200,7 @@
     const money = ljust(` SILVER ${(st.silver ?? st.macca ?? 0).toLocaleString("en-US")}`, PW - magStr.length) + magStr;
     const WEEK = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
     // Each floor is a real week: the header shows today's weekday (Honolulu), MON to SUN.
-    const today = Math.floor((now.getTime() - 10 * 3600 * 1000) / 86400000) + (st.clockOffset || 0);
+    const today = localDay(now, st.tz) + (st.clockOffset || 0);
     const wk = st.dungeon ? WEEK[(today + 3) % 7] : "";
     const title = ` MAP  ${st.floor}${wk ? "  " + wk : ""} `, dash = PW - 1 - title.length;
     const mapHead = " " + "-".repeat(Math.floor(dash / 2)) + title + "-".repeat(Math.ceil(dash / 2));
@@ -188,8 +220,8 @@
     // above already shows the phase. Several lines per phase, changing once per real day.
     const MOONLINE = MOONLINE_ALL;
     const lines = MOONLINE[idx];
-    // Picked by the real date (Honolulu), so it changes once a day, not with every action.
-    const realDay = Math.floor((now.getTime() - 10 * 3600 * 1000) / 86400000);
+    // Picked by the real date, so it changes once a day, not with every action.
+    const realDay = localDay(now, st.tz);
     // Line 1 is the day's omen when the rules provide one; otherwise the moon line.
     const moonLine = st.omenText || "> " + lines[realDay % lines.length];
     for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
@@ -207,7 +239,7 @@
     return S.join("\n");
   }
 
-  const api = { renderScreen, moonIndex, get moonLines() { return MOONLINE_ALL; } };
+  const api = { renderScreen, moonIndex, now, setSkew, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);

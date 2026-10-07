@@ -240,7 +240,7 @@
     "> Old scratches line the walls.", "> The lamp gutters, then steadies.", "> Pipes groan inside the walls."];
   function flavor(st) {
     const hurt = (st.party || []).filter(p => p.hpmax && p.hp > 0 && p.hp < p.hpmax / 2);
-    const m = (root.SMT || require("./screen.js")).moonIndex(new Date());
+    const m = (root.SMT || require("./screen.js")).moonIndex((root.SMT || require("./screen.js")).now());
     const demonOdds = [0.08, 0.12, 0.16, 0.22, 0.32, 0.22, 0.16, 0.12][m];   // brighter moon, louder demons
     const r = Math.random();
     if (hurt.length && r < 0.25) return pick(HURT).replace("{n}", pick(hurt).name);
@@ -310,12 +310,13 @@
     return st;
   }
 
-  // The real calendar, in Honolulu time (UTC-10). A day number counts days since 1970.
-  // NEXT (key X) is a hidden testing cheat that pushes this game's clock a day ahead.
-  const dayNum = now => Math.floor((now.getTime() - 10 * 3600 * 1000) / 86400000);
+  // The real calendar, in the run's timezone (screen.js keeps the time: server time when the page has it).
+  // A day number counts days since 1970. NEXT (key X) is a hidden testing cheat that pushes this game's clock a day ahead.
+  const TIME = root.SMT || require("./screen.js");
   // The game never goes back in time: if the device clock is set earlier than a day this run has
   // already seen, the game stays on that day (so rewinding can't redo a day or dodge a deadline).
-  const rawClock = st => dayNum(new Date()) + (st.clockOffset || 0);
+  // (If the server's time can't be had, e.g. offline, this guards the device clock.)
+  const rawClock = st => TIME.localDay(TIME.now(), st.tz) + (st.clockOffset || 0);
   const clock = st => Math.max(rawClock(st), st.lastSeen || -Infinity);
   const weekday = n => (n + 3) % 7;                    // 0 = MONDAY ... 6 = SUNDAY
   const sundayOf = n => n + (6 - weekday(n));
@@ -427,7 +428,7 @@
     "Cold stone, cold hands.", "Mortar, mostly. Some is older.", "Fingers come away gray.", "A crack. It goes nowhere.",
     "Damp. The smell of old pipes.", "Someone has looked here before.", "A dead cable runs in and stops.",
     "Faded paint. A number, or a sigil.", "Old tally marks, in groups of five.", "Salt along the base, in a line."];
-  const moon = () => (root.SMT || require("./screen.js")).moonIndex(new Date());
+  const moon = () => (root.SMT || require("./screen.js")).moonIndex((root.SMT || require("./screen.js")).now());
   // Each room hides its things behind its walls (never behind a door). The stairs are always behind
   // the wall they will open in; everything else is spread over the other walls, fixed by the floor's seed.
   function walls(d, i) {
@@ -614,6 +615,11 @@
   function reset(st) {
     st = copy(st);
     delete st.macca; delete st.mag;
+    // A new run counts days in the player's own timezone (Honolulu for the chat run). Moving to a
+    // new timezone starts the calendar guard fresh, so a zone behind the old one doesn't stall it.
+    const tz = (root.SMT || require("./screen.js")).zone();
+    if (st.tz !== tz) { delete st.lastSeen; delete st.rewindNoted; }
+    st.tz = tz;
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },
