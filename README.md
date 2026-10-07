@@ -2,7 +2,7 @@
 
 **Play it here: https://okayline.github.io/daily-dungeon/**
 
-<img width="60%" alt="Daily Dungeon, build v0.28" src="screenshots/v0.28.png" />
+<img width="60%" alt="Daily Dungeon, build v0.29" src="screenshots/v0.29.png" />
 
 An 80-column ASCII roguelike dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played one step a day on the real calendar. The real moon phase impacts gameplay in different ways.
 
@@ -10,11 +10,11 @@ An 80-column ASCII roguelike dungeon crawler in the spirit of 80s CRPGs and Shin
 
 - **One step a day.** `[^]` in the 3D view walks KURA the way she faces, through a door or down the stairs once found. Turn first with `[<]` and `[>]` (free). The up arrow works too. The step comes back at midnight, your local time.
 - **Search as much as you like.** `[S]EARCH` digs at the wall KURA faces; each wall hides its own things, and finds are a matter of luck and patience. Every search heats the room up, and a hot room draws wandering demons, more often under a bright moon.
-- **Demons stay until they're dealt with.** `[F]IGHT` them, `[T]ALK` to them, or `[R]UN` through a door (that uses the day's step, and they may block it). A demon that listens asks for a gift: SILVER, any item, or nothing. Each kind wants something different, and a good gift can win it over to the party. CHAOS demons are tricksters.
+- **Demons stay until they're dealt with.** `[F]IGHT` them, `[T]ALK` to them, or `[R]UN` through a door (that uses the day's step, and they may block it). A demon that listens sizes KURA up with a question or two (`[Y]ES` / `[N]O`), then asks for a gift: SILVER, any item, or nothing. Each kind wants something different, a good mood and a good gift can win it over to the party, and CHAOS demons are tricksters. Data demons sometimes speak binary, which only a data demon in your party can read.
 - **Alignment.** Every demon is LAW, NEUTRAL or CHAOS, and so is KURA. Her choices pull her one way or the other (an arrow on `ALIGN` shows which), and demons treat her by it.
-- **Talk to your party.** With no demon around, `[T]ALK` gets a reply from the party. Their mood tells you how hot the room is getting. Don't pester them too much.
-- **Items.** `[I]NVOKE` opens the bag. Rare finds have alignments, and the `CODEX` keeps track of every demon and item you've ever found.
-- **Omens.** Every day opens with an omen. Some change the day's luck.
+- **Talk to your party.** With no demon around, `[T]ALK` gets a reply from the party, and their mood tells you how hot the room is getting. Sometimes they ask you something back (`[Y]ES` / `[N]O`). Don't pester them, fiddle with junk, or do the same thing over and over: their patience runs out, and then they lash out or leave.
+- **Items.** `[I]NVOKE` opens the bag. Rare finds have alignments, junk can break (and sometimes something was inside), and the `CODEX` keeps track of every demon and item you've ever found.
+- **Omens and reports.** Every day has an omen, written across the top of the 3D view; some change the day's luck. The first log line is a running status report: days left on the floor, rooms surveyed, the moon, and the air and smell of the room.
 - **Each floor is a real week.** Its way down closes at the end of Sunday. Find the stairs early and the next floor gives you bonus days; miss the deadline, or let KURA fall to a demon, and the run is over.
 - **Each run is a real month.** 4 weeks, 4 levels to explore.
 - **Your run lives in your browser** and saves itself after every action. `[?]` is About (with a guide to every key), `[L]OG` shows the adventure log, `[P]ASS` gives your run's password (copy it to keep or move the run, or paste one in to continue it), and `[R]ESET` starts over. The game goes by the server's real time, not your device clock.
