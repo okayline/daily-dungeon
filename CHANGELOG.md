@@ -2,6 +2,18 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.22 - Oct 6 2026, 15:20 HST
+
+- **Demons ask for anything.** A demon that listens asks for a gift, and KURA picks from a list: SILVER, any item she carries, or nothing. How it reacts depends on what it gets:
+  - **Taste by family.** Data and hardware demons like tech junk, hardware loves SILVER, hybrids love things that are both machine and spirit (most RARE items), and folklore likes old spirit things and hates tech. Data demons hate spirit things too.
+  - **Worth.** Rarer items are worth more, and a relic of the demon's own alignment is worth extra (an opposite one, less).
+  - **Reactions.** Hated gifts get thrown back and the demon attacks ("Wires and plastic? You insult me."). Too little and it keeps it and asks for more ("A crumb. Where's the rest?"), up to three times before it leaves with everything. Enough and it may offer to join; well over and it almost always does.
+- **CHAOS demons are tricksters.** They rarely join, even when pleased: mostly they demand more ("More. MORE.") or run off laughing with the gift. Only a great gift sometimes wins one over.
+- Giving SILVER leans KURA toward LAW; giving items leans CHAOS, or toward a relic's own alignment.
+- **INVOKE opens inside the 3D view** instead of over the whole screen, so the party, map and log stay visible. Pick an item with the number keys or arrows (or click it) and a box below shows what it is and what it does; Enter (or clicking it again) uses it.
+- KURA starts each run with 2-3 pieces of COMMON junk and one UNCOMMON item, so there's something to give the first demon. Very rarely there's more: 1 run in 40 starts with a RARE item and 1 in 200 with a MYTHIC ("Her bag feels heavier than it should.").
+- **CODEX** (`[C]`, in the bottom border): an encyclopedia of every demon met and item found, with `[D]EMONS` and `[I]TEMS` tabs. Unknown entries show as `???`. Demon entries have the family, alignment, a line of its voice, what it wants, and how often it's been met and recruited. Item entries have rarity, alignment, which families love or hate it, and how it pulls KURA. The codex survives RST, so it fills up across runs.
+
 ## v0.21 - Oct 6 2026, 15:00 HST
 
 - **Recruiting.** KURA is the only human; ELF, PIXIE and CU SITH are demons too, and any demon can join. TALK goes in steps: the demon decides whether to listen (moon, omen and alignment), names its price, KURA answers `[Y]ES` or `[N]O`, and once paid it may offer to join. With a full party (KURA plus 3), you choose who to send away, or keep everyone.

@@ -63,6 +63,12 @@
   .logview { position: absolute; inset: 0; background: rgba(7, 9, 10, 0.96); overflow: auto; cursor: pointer;
     border: 1px solid var(--trail); box-sizing: border-box; padding: 1.5em 2ch; }
   .logview pre { white-space: pre-wrap; }
+  .logview .sel { color: var(--bright); }
+  /* INVOKE opens inside the 3D view (rows 6-22, columns 1-47); placeInView() sizes it to that area. */
+  .viewpop { position: absolute; background: var(--bg); overflow: auto; cursor: pointer; box-sizing: border-box;
+    outline: 1px solid var(--trail); }
+  .viewpop pre { white-space: pre; }
+  .logview .dim { color: var(--trail); }
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
   .foundbox pre { white-space: pre; text-align: center; }
@@ -79,7 +85,8 @@
 <body>
   <div class="frame"><pre id="screen">LOADING...</pre>
     <div id="log" class="logview" hidden><pre></pre></div>
-    <div id="inv" class="logview" hidden><pre></pre></div>
+    <div id="inv" class="viewpop" hidden><pre></pre></div>
+    <div id="codex" class="logview" hidden><pre></pre></div>
     <div id="found" class="foundbox" hidden><pre></pre></div></div>
 <script src="screen.js"></script>
 <script src="floor.js"></script>
@@ -139,6 +146,7 @@
         // SAVED / NOT SAVED shows for a few seconds after each action, then fades back into the border.
         .replace(/ (NOT SAVED|SAVED \d{4}-\d\d-\d\d) /, (m, t) => Date.now() < statusUntil
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
+        .replace("[C]ODEX", '<span class="btn" data-act="codex">[C]ODEX</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
         .replace("[B]ACKUP", '<span class="btn" data-act="backup">[B]ACKUP</span>')
         .replace("[R]ST", '<span class="btn" data-act="reset">[R]ST</span>');
@@ -233,23 +241,90 @@
 
   // N/S/E/W take the day's step, SEARCH is unlimited, turning is free. NEXT (X) is a hidden testing cheat.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
-  let invList = [];
+  let invList = [], invSel = 0;
+  // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
+  function textBox(title, tag, lines, W = 70) {
+    const out = ["+" + "-".repeat(W + 2) + "+"];
+    const row = t => out.push("| " + t.padEnd(W) + " |");
+    title = title.toUpperCase();
+    if (title.length + tag.length + 2 <= W) row(title.padEnd(W - tag.length) + tag);
+    else { row(title.slice(0, W)); if (tag) row(tag.padStart(W)); }
+    for (const l of lines) {
+      if (l === "") { row(""); continue; }
+      let rest = l;
+      while (rest.length > W) { const cut = rest.lastIndexOf(" ", W); row(rest.slice(0, cut)); rest = rest.slice(cut + 1); }
+      row(rest);
+    }
+    out.push("+" + "-".repeat(W + 2) + "+");
+    return out;
+  }
+  // Fit a popup exactly over the 3D view: screen rows 6-22, columns 1-47.
+  function placeInView(box) {
+    const scr = document.getElementById("screen"), r = scr.getBoundingClientRect();
+    const rows = scr.textContent.split("\n").length, rh = r.height / rows, cw = r.width / 80;
+    Object.assign(box.style, { left: scr.offsetLeft + cw + "px", top: scr.offsetTop + 6 * rh + "px",
+      width: 47 * cw + "px", height: 17 * rh + "px", padding: `${rh / 2}px ${cw}px` });
+  }
+  window.addEventListener("resize", () => { const b = document.getElementById("inv"); if (!b.hidden) placeInView(b); });
   function showInv(open) {
     const box = document.getElementById("inv");
     box.hidden = !open;
     if (!open) return;
+    placeInView(box);
     invList = save ? RULES.inventory(save) : [];
+    invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
     pre.innerHTML = "";
     const add = (txt, cls, i) => { const d = document.createElement("div"); d.textContent = txt; if (cls) d.className = cls; if (i !== undefined) d.dataset.i = i; pre.appendChild(d); };
-    add("INVOKE  -  INVENTORY", "");
+    add("INVOKE".padEnd(35) + "[I] closes", "");
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
-      `${i < 9 ? i + 1 : " "}  ${it.tier.padEnd(9)} ${(it.align ? `[${it.align.slice(0, 3)}]` : "").padEnd(5)} ${(it.name + (it.count > 1 ? " x" + it.count : "")).padEnd(36)} ${it.text}`,
-      "t-" + it.tier + (it.usable ? " btn" : ""), i));
+      `${i === invSel ? ">" : " "} ${i < 9 ? i + 1 : " "}  ${it.name}${it.count > 1 ? " x" + it.count : ""}`.replace(/^(.{42}).{4,}$/, "$1..."),
+      "t-" + it.tier + " btn", i));
+    // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
+    const it = invList[invSel];
+    if (it) {
+      add(" ");
+      const tag = it.tier + (it.align ? ` [${it.align}]` : "");
+      const lines = [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
+      textBox(it.name, tag, lines, 41).forEach(l => add(l, "t-" + it.tier));
+    }
     add(" ");
-    add("Press a number or click an item to use it. [I] or Esc closes.");
+    add("[1-9] choose  [ENTER] use  [C]ODEX");
+  }
+  // CODEX: every demon met and item found, over all runs. Unknown ones show as ???.
+  let codexTab = "demons", codexSel = 0;
+  function showCodex(open) {
+    const box = document.getElementById("codex");
+    box.hidden = !open;
+    if (!open || !save) return;
+    const data = RULES.codex(save)[codexTab];
+    const flat = data.flatMap(g => g.entries.map(e => ({ ...e, group: g.group })));
+    if (codexSel === -1) codexSel = Math.max(0, flat.findIndex(x => x.known));   // a fresh tab opens on its first known entry
+    codexSel = (codexSel + flat.length) % flat.length;
+    const known = flat.filter(e => e.known).length;
+    const pre = box.querySelector("pre");
+    pre.innerHTML = "";
+    const add = (txt, cls, i) => { const d = document.createElement("div"); d.textContent = txt; if (cls) d.className = cls; if (i !== undefined) d.dataset.i = i; pre.appendChild(d); return d; };
+    // Header with the two tabs.
+    const head = add("");
+    // The open tab is bright; the other is dim.
+    const tab = (t, label) => { const sp = document.createElement("span"); sp.textContent = label; sp.className = "btn " + (codexTab === t ? "sel" : "dim"); sp.dataset.tab = t; return sp; };
+    head.append("CODEX     ", tab("demons", "[D]EMONS"), "   ", tab("items", "[I]TEMS"),
+      `          ${codexTab === "demons" ? "DEMONS MET" : "ITEMS FOUND"} ${known} / ${flat.length}`);
+    add(" ");
+    const e = flat[codexSel];
+    const cls = codexTab === "items" && e.known ? "t-" + e.group : "";
+    (e.known ? textBox(e.name, e.tag, [...e.lines, "", e.count]) : textBox("???", "", ["Not found yet."])).forEach(l => add(l, cls));
+    add(" ");
+    let last = null;
+    flat.forEach((x, i) => {
+      if (x.group !== last) { last = x.group; add(x.group.toUpperCase(), "dim"); }
+      add(`${i === codexSel ? ">" : " "}   ${x.known ? x.name : "???"}`, (i === codexSel ? "sel " : "") + (x.known ? "btn" : "dim btn"), i);
+    });
+    add(" ");
+    add("[D]EMONS / [I]TEMS   arrows or click choose   [C] or Esc closes");
   }
   function useInv(i) {
     const it = invList[i];
@@ -336,7 +411,15 @@
     if (e) {
       const opt = (label, act) => { const d = document.createElement("span"); d.textContent = label; d.className = "btn"; d.dataset.fact = act; return d; };
       const row = document.createElement("div");
-      if (e.stage === "ask" || e.stage === "join") row.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
+      if (e.stage === "gift") {
+        // The demon asks for anything: one line per choice (SILVER, then items), then NOTHING.
+        RULES.gifts(save).forEach((g, i) => {
+          const line = document.createElement("div"), o = opt(`[${i + 1}] ${g.label}`, "give-" + i);
+          if (!g.ok) o.classList.add("off");
+          line.append(o); pre.appendChild(line);
+        });
+        row.append(opt("[N]OTHING", "give-none"));
+      } else if (e.stage === "ask" || e.stage === "join") row.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
       else if (e.stage === "swap") {
         save.party.forEach((p, i) => { if (i > 0) row.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
         row.append(opt("[N]O", "swap-none"));
@@ -361,12 +444,14 @@
     disarm();
     if (name === "invoke") return showInv(document.getElementById("inv").hidden);
     if (name === "log") return toggleLog();
+    if (name === "codex") { codexSel = -1; return showCodex(document.getElementById("codex").hidden); }
     if (name === "backup") return backup();
     if (!save) return;
     if (name === "reset" && !confirm("Begin a new run? This run will be lost.")) return;
     const log = save.log, steps = save.steps;
     const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
+      : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
       : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
       : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
@@ -388,9 +473,18 @@
     if (b) act(b.dataset.fact);
     else if (document.getElementById("found").dataset.mode !== "encounter") closeFound();
   });
+  // Clicking an item chooses it; clicking the chosen one again uses it. Clicking elsewhere closes.
   document.getElementById("inv").addEventListener("click", e => {
     const line = e.target.closest("[data-i]");
-    if (line) useInv(Number(line.dataset.i)); else showInv(false);
+    if (!line) return showInv(false);
+    const i = Number(line.dataset.i);
+    if (i === invSel) useInv(i); else { invSel = i; showInv(true); }
+  });
+  document.getElementById("codex").addEventListener("click", e => {
+    const tab = e.target.closest("[data-tab]"), line = e.target.closest("[data-i]");
+    if (tab) { codexTab = tab.dataset.tab; codexSel = -1; showCodex(true); }
+    else if (line) { codexSel = Number(line.dataset.i); showCodex(true); }
+    else showCodex(false);
   });
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -406,23 +500,35 @@
       if (fbox.dataset.mode === "encounter") {
         const st2 = save.encounter && save.encounter.stage;
         let k;
-        if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
+        if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", escape: "give-none" }[key];
+        else if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
         else k = { f: "fight", t: "talk", n: "go-N", s: "go-S", e: "go-E", w: "go-W" }[key];
         if (k) act(k);
       } else if (key === "enter" || key === " " || key === "escape") closeFound();
       return;
     }
+    if (!document.getElementById("codex").hidden) {
+      e.preventDefault();
+      if (key === "c" || key === "escape") showCodex(false);
+      else if (key === "d" || key === "i") { codexTab = key === "d" ? "demons" : "items"; codexSel = -1; showCodex(true); }
+      else if (key === "arrowdown" || key === "arrowup") { codexSel += key === "arrowdown" ? 1 : -1; showCodex(true); }
+      else if (key === "arrowleft" || key === "arrowright") { codexTab = codexTab === "demons" ? "items" : "demons"; codexSel = -1; showCodex(true); }
+      return;
+    }
     if (!document.getElementById("inv").hidden) {
       if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); }
-      else if (/^[1-9]$/.test(key)) { e.preventDefault(); useInv(Number(key) - 1); }
+      else if (key === "c") { e.preventDefault(); showInv(false); showCodex(true); }
+      else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; showInv(true); }
+      else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
+      else if (key === "enter") { e.preventDefault(); useInv(invSel); }
       return;
     }
     if (!document.getElementById("log").hidden) {
       if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
       return;
     }
-    const k = { n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", f: "fight", t: "talk", i: "invoke", l: "log", b: "backup", r: "reset", 
+    const k = { c: "codex", n: "go-N", s: "go-S", e: "go-E", w: "go-W", x: "next", f: "fight", t: "talk", i: "invoke", l: "log", b: "backup", r: "reset", 
       a: "search", arrowleft: "left", arrowright: "right" }[key];
     if (k) { e.preventDefault(); act(k); }
   });

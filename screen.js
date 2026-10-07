@@ -197,7 +197,7 @@
     // Free actions on the left (unlimited, searching included); the day's one step on the right.
     const free = " [F]IGHT [T]ALK [I]NVOKE SE[A]RCH", daily = "| [N]ORTH [S]OUTH [E]AST [W]EST ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " [L]OG [B]ACKUP [R]ST ";                 // system buttons tucked into the bottom border
+    const sys = " [C]ODEX [L]OG [B]ACKUP [R]ST ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");

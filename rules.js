@@ -91,6 +91,7 @@
   // KURA picks up an item; an aligned one tugs at her.
   function gain(st, it, lines) {
     st.items = (st.items || []).concat(it);
+    note(st, "items", it, "found");
     const a = itemAlign(it);
     if (a && a !== "NEUTRAL") lean(st, "find" + a, lines);
   }
@@ -390,6 +391,7 @@
         const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * (UNIQUE[name] ? UNIQUE[name].hp : 1));
         st.encounter = { name, family: familyOf(name), align: alignOf(name), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
         st.round = [`${A(name)} blocks the way.`, STANCE_LINE[stance(st, st.encounter)](name)];
+        note(st, "demons", name, "met");
         return `${A(name)} appears!`;
       }
     }
@@ -620,9 +622,15 @@
         { name: "PIXIE", lv: 1, hp: 18, hpmax: 18, mp: 12, mpmax: 12, family: "folklore", align: "NEUTRAL", demon: true },
         { name: "CU SITH", lv: 1, hp: 26, hpmax: 26, mp: 4, mpmax: 4, family: "folklore", align: "CHAOS", demon: true }],
     });
+    // KURA starts with a few pieces of junk and one useful thing.
+    const junk = names("COMMON").sort(() => Math.random() - 0.5).slice(0, R(2, 3));
+    for (const it of [...junk, pick(names("UNCOMMON"))]) gain(st, it);
+    // Very rarely, something good is already in the bag: 1 run in 40 a RARE, 1 in 200 a MYTHIC.
+    const luck = Math.random(), lucky = luck < 0.005 ? "MYTHIC" : luck < 0.03 ? "RARE" : null;
+    if (lucky) gain(st, pick(names(lucky)));
     const deadline = firstDeadline(t);
     arrive(st, 1, deadline);
-    st.log = `> Day 1. KURA descends into B1F.`;
+    st.log = `> Day 1. KURA descends into B1F.${lucky ? " Her bag feels heavier than it should." : ""}`;
     st.extra = `> The way down from here closes ${fmt(deadline)}.`;
     st.unsaved = true;
     return show(st);
@@ -753,7 +761,7 @@
   //   recruiting:            -1 LAW demon / +1 CHAOS demon
   //   searching a cool room: -0.03 (patience)      searching a hot room: +0.2 (pushing your luck)
   //   talking to a demon:    -0.15                 fighting a round:     +0.3    finishing it off: +0.6
-  //   paying SILVER or taking a TASK: -0.4        giving an offering:    +0.4
+  //   giving SILVER:         -0.4                  giving an item:        +0.4
   //   running through a door: +0.15
   //   finding a LAW / CHAOS relic (RARE and up): -0.3 / +0.3; offering one pulls toward it (+-0.4, NEUTRAL: none)
   const LEAN = { LAW: -1, CHAOS: 1, NEUTRAL: 0, search: -0.03, hot: 0.2, talk: -0.15, fight: 0.3, kill: 0.6,
@@ -789,16 +797,20 @@
     return "folklore";
   }
   const VOICE = {
-    data: { open: ["PROCESS DETECTED", "SIGNAL FOUND", "AWAITING INPUT"], ask: "ASSIGN TASK? Y / N",
+    data: { open: ["PROCESS DETECTED", "SIGNAL FOUND", "AWAITING INPUT"], ask: "REQUEST: RESOURCES. INPUT ANY.",
+      love: "VALUE EXCEEDS EXPECTED.", like: "ACCEPTABLE.", meh: "INSUFFICIENT. MORE.", hate: "INCOMPATIBLE FORMAT.",
       join: "TASK RECEIVED. LINKED TO USER.", no: "CONNECTION LOST", scorn: "INPUT REJECTED", leave: "PROCESS ENDED" },
     hardware: { open: ["ERROR 404: owner not found", "still here. still running", "are you my replacement?"],
-      ask: "PAYMENT REQUIRED: {p} SILVER. ok?", join: "NEW OWNER ACCEPTED. ok. I'll wait with you.",
+      ask: "got anything? anything at all?",
+      love: "oh. oh! it's perfect", like: "ok. that's ok", meh: "...is there more?", hate: "what is this. take it back", join: "NEW OWNER ACCEPTED. ok. I'll wait with you.",
       no: "...ok. I'll wait here then.", scorn: "ACCESS DENIED. go away", leave: "SHUTTING DOWN. bye" },
     hybrid: { open: ["ACCESS GRANTED, traveler.", "You smell of salt and static.", "What brings flesh this far down?"],
-      ask: "A toll, traveler: {p} SILVER.", join: "LINK ESTABLISHED. I walk with you now.",
+      ask: "A toll, traveler. Coin, or something with a pulse in it.",
+      love: "Now THAT has a pulse.", like: "It'll do.", meh: "Thin. Give me more.", hate: "Dead thing. Useless.", join: "LINK ESTABLISHED. I walk with you now.",
       no: "Then we are strangers still.", scorn: "Your words are noise.", leave: "It folds back into the wires." },
     folklore: { open: ["Who comes into my hall?", "A living thing. How rare.", "You have the look of a beggar."],
-      ask: "Give me {o}, and we may speak of more.", join: "Then I am yours, little lantern.",
+      ask: "What will you give me, mortal?",
+      love: "Ohh. Old, and lovely.", like: "Hm. Acceptable.", meh: "A crumb. Where's the rest?", hate: "Wires and plastic? You insult me.", join: "Then I am yours, little lantern.",
       no: "Keep it, then. And keep away.", scorn: "Hah. Go back up, child.", leave: "It is gone like smoke." },
   };
   const say2 = (e, k) => { const v = VOICE[e.family || "folklore"][k]; return Array.isArray(v) ? pick(v) : v; };
@@ -821,13 +833,11 @@
       demonTurn(st, lines);
     } else if (Math.random() < Math.min(0.95, LISTEN[moon()] * omen(clock(st)).fx.talk * STANCE_TALK[stance(st, e)])) {
       lines.push(`${e.name}: "${say2(e, "open")}"`);
-      const price = Math.round((20 + 10 * floorNum(st) + R(0, 20)) * { same: 0.7, neutral: 1, opposite: 1.5 }[stance(st, e)]);
-      const offer = (st.items || []).length ? pick(st.items) : null;
-      if (e.family === "folklore" && !offer) { lines.push(`${e.name}: "You have nothing I want."`); e.angered = true; demonTurn(st, lines); }
-      else {
-        e.stage = "ask"; e.price = e.family === "data" ? 0 : e.family === "folklore" ? 0 : price; e.offer = e.family === "folklore" ? offer : null;
-        lines.push(`${e.name}: "${say2(e, "ask").replace("{p}", e.price).replace("{o}", e.offer || "")}"`);
-      }
+      // It asks for a gift: anything. What it gets decides how it reacts (see GIFTS below).
+      e.stage = "gift"; e.got = 0; e.asks = 1;
+      e.want = 2 + floorNum(st);
+      e.silver = Math.round((20 + 10 * floorNum(st) + R(0, 20)) * { same: 0.7, neutral: 1, opposite: 1.5 }[stance(st, e)]);
+      lines.push(`${e.name}: "${say2(e, "ask")}"`);
     } else {
       lines.push(`${e.name}: "${say2(e, "scorn")}"`);
       e.angered = Math.random() < 0.5;
@@ -844,30 +854,8 @@
     const e = st.encounter;
     if (!e || !e.stage) return show(st);
     const lines = [];
-    if (e.stage === "ask") {
-      if (!yes) {
-        lines.push(`${e.name}: "${say2(e, "no")}"`);
-        if (e.family === "data") { lines.push(`${THE(e.name)} drifts away.`); leaves(st, e); }
-        else { e.stage = null; e.angered = true; demonTurn(st, lines); }
-      } else {
-        const have = st.silver ?? 0;
-        if (e.price && have < e.price) {
-          lines.push(`KURA has only ${have} SILVER.`, `${e.name}: "${say2(e, "scorn")}"`);
-          e.stage = null; e.angered = true; demonTurn(st, lines);
-        } else {
-          if (e.price) { st.silver = have - e.price; lines.push(`KURA pays ${e.price} SILVER.`); lean(st, "pay", lines); }
-          // A plain offering leans CHAOS; an aligned relic pulls toward its own alignment instead.
-          if (e.offer) { st.items.splice(st.items.indexOf(e.offer), 1); lines.push(`KURA gives ${e.offer}.`); const ga = itemAlign(e.offer); lean(st, ga === "LAW" ? "offerLAW" : ga === "NEUTRAL" ? null : "offer", lines); }
-          if (e.family === "data") { lines.push("KURA takes the task."); lean(st, "task", lines); }
-          // Paid. Most of the time it offers to join; otherwise it's satisfied and leaves.
-          // An offering that shares the demon's alignment wins it over more often; an opposite one less.
-          const gift = e.offer && itemAlign(e.offer), likes = !gift || gift === "NEUTRAL" || e.align === "NEUTRAL" ? 0.65 : gift === e.align ? 0.85 : 0.4;
-          if (gift && likes === 0.85) lines.push(`${THE(e.name)} turns ${e.offer.replace(/^an? /, "the ")} over. It is pleased.`);
-          if (Math.random() < likes) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
-          else { lines.push(`${THE(e.name)} is satisfied. ${say2(e, "leave")}`); leaves(st, e); }
-        }
-      }
-    } else if (e.stage === "join") {
+    if (e.stage === "gift") return give(st, yes ? 0 : null);
+    if (e.stage === "join") {
       if (!yes) { lines.push(`KURA declines. ${say2(e, "leave")}`); leaves(st, e); }
       else if (st.party.length < 4) recruit(st, e, lines);
       else { e.stage = "swap"; lines.push("The party is full. Send someone away?"); }
@@ -876,6 +864,151 @@
     st.roundOver = !st.encounter || st.dead;
     return show(st);
   }
+  // GIFTS. A talking demon asks for anything. KURA picks: SILVER, any item, or nothing.
+  // Each family has a taste: data and hardware like tech, folklore likes old spirit things and hates tech,
+  // hybrids love things that are both. Rarer things are worth more, and a relic of the demon's own
+  // alignment is worth extra (an opposite one, less). Reactions:
+  //   hate (worth < 0): it throws the gift back and attacks.   meh (not enough yet): it keeps it and asks for more.
+  //   like (enough): it may offer to join.                      love (well over): it almost always does.
+  // CHAOS demons are tricksters: they rarely join. Mostly they demand more, or run off laughing with it.
+  const TECH = ["a bag of loose screws", "a spent battery", "a vending machine coin", "a subway token", "a neon tube fragment",
+    "a scratched data disc", "an ID card, face scratched", "a coil of copper wire", "a dead pager", "a cracked phone",
+    "a cassette with no label", "a VR visor, lens cracked"];
+  const SPIRIT = ["a moth-eaten glove", "a bead of smoky glass", "a cracked hand mirror", "a strip of prayer cloth",
+    "a stub of black candle", "a rusted iron key", "a bent silver charm", "a page of a burned book"];
+  const BOTH = ["a burned-out circuit board", "a tangle of fiber cable"];
+  function natureOf(it) {
+    const t = TIER[it];
+    if (t === "RARE" || BOTH.includes(it)) return "both";
+    if (t === "MYTHIC" || t === "MOON" || SPIRIT.includes(it)) return "spirit";
+    return TECH.includes(it) ? "tech" : "plain";
+  }
+  const TASTE = {
+    data:     { tech: 1.5, both: 1, spirit: -1, plain: 0.5, silver: 0.6 },
+    hardware: { tech: 1.5, both: 1, spirit: 0.5, plain: 0.5, silver: 1.5 },
+    hybrid:   { tech: 1, both: 2, spirit: 1, plain: 0.5, silver: 1 },
+    folklore: { tech: -1, both: 1, spirit: 1.5, plain: 0.5, silver: 0.6 },
+  };
+  const WORTH = { COMMON: 1, UNCOMMON: 2, RARE: 4, MYTHIC: 6, MOON: 8 };
+  // What KURA can give: SILVER first (if she has enough), then each kind of item she carries, rarest first.
+  function gifts(st) {
+    const e = st.encounter, out = [];
+    if (!e) return out;
+    out.push({ silver: e.silver, ok: (st.silver ?? 0) >= e.silver, label: `${e.silver} SILVER` });
+    for (const it of inventory(st).slice(0, 7)) out.push({ item: it.name, ok: true, label: it.name });
+    return out;
+  }
+  function worth(e, g) {
+    const taste = TASTE[e.family || "folklore"];
+    if (g.silver) return e.want * taste.silver;
+    const a = itemAlign(g.item);
+    const bonus = !a || a === "NEUTRAL" || e.align === "NEUTRAL" ? 0 : a === e.align ? 2 : -2;
+    const t = taste[natureOf(g.item)];
+    return t < 0 ? -1 : WORTH[TIER[g.item] || "COMMON"] * t + bonus;
+  }
+  // KURA gives gift i (from gifts()), or nothing (i = null).
+  // (st is already a copy: giveTo and answer make it.)
+  function give(st, i) {
+    const e = st.encounter;
+    if (!e || e.stage !== "gift") return show(st);
+    const lines = [], who = `${e.name}: `;
+    const g = i === null ? null : gifts(st)[i];
+    if (g && !g.ok) { lines.push(`KURA has only ${st.silver ?? 0} SILVER.`); st.round = lines; return show(st); }
+    if (!g) {
+      lines.push(`KURA gives nothing.`, who + `"${say2(e, "no")}"`);
+      if (e.family === "data") { lines.push(`${THE(e.name)} drifts away.`); leaves(st, e); }
+      else { e.stage = null; e.angered = true; demonTurn(st, lines); }
+      st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st);
+    }
+    const v = worth(e, g);
+    if (v < 0) {
+      // Hated: it throws the gift back (KURA keeps it) and attacks.
+      lines.push(`KURA offers ${g.label}.`, who + `"${say2(e, "hate")}"`, `${THE(e.name)} throws it back.`);
+      e.stage = null; e.angered = true; demonTurn(st, lines);
+      st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st);
+    }
+    if (g.silver) { st.silver -= g.silver; lines.push(`KURA gives ${g.label}.`); lean(st, "pay", lines); }
+    else {
+      st.items.splice(st.items.indexOf(g.item), 1); lines.push(`KURA gives ${g.item}.`);
+      const ga = itemAlign(g.item); lean(st, ga === "LAW" ? "offerLAW" : ga === "NEUTRAL" ? null : "offer", lines);
+    }
+    e.got += v;
+    const chaos = e.align === "CHAOS";
+    if (e.got < e.want) {
+      // Not enough yet. It keeps what it got. After three asks it loses patience and leaves with it all.
+      if (e.asks >= 3) { lines.push(who + `"${say2(e, "meh")}"`, `${THE(e.name)} takes it all and goes.`); leaves(st, e); }
+      else { e.asks++; lines.push(who + `"${say2(e, "meh")}"`); }
+    } else {
+      const love = v >= e.want * 1.5 || e.got >= e.want * 2;
+      lines.push(who + `"${say2(e, love ? "love" : "like")}"`);
+      const joins = chaos ? (love ? 0.3 : 0.1) : (love ? 0.9 : 0.65);
+      if (Math.random() < joins) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
+      else if (chaos && e.asks < 3 && Math.random() < 0.5) { e.asks++; lines.push(who + `"More. MORE."`); }
+      else if (chaos) { lines.push(`${THE(e.name)} runs off laughing with it.`); leaves(st, e); }
+      else { lines.push(`${THE(e.name)} is satisfied. ${say2(e, "leave")}`); leaves(st, e); }
+    }
+    st.round = lines;
+    st.roundOver = !st.encounter || st.dead;
+    return show(st);
+  }
+  function giveTo(st, i) { return give(copy(st), i); }
+
+  // CODEX: an encyclopedia of every demon met and item found. It lives in the save but RST never
+  // clears it, so it fills up over many runs. The how-it-works notes live here, not on the item itself.
+  function note(st, kind, name, what) {
+    const c = st.codex = st.codex || { demons: {}, items: {} };
+    const e = c[kind][name] = c[kind][name] || {};
+    e[what] = (e[what] || 0) + 1;
+  }
+  const FAM_NAME = { data: "data", hardware: "hardware", hybrid: "hybrid", folklore: "folklore" };
+  const NATURE_NAME = { tech: "Tech", spirit: "Old spirit thing", both: "Half machine, half spirit", plain: "Plain stuff" };
+  function tastes(nature) {
+    const by = { loves: [], likes: [], hates: [] };
+    for (const f of Object.keys(TASTE)) {
+      const t = TASTE[f][nature];
+      if (t >= 1.5) by.loves.push(f); else if (t >= 1) by.likes.push(f); else if (t < 0) by.hates.push(f);
+    }
+    const out = [], LABEL = { data: "data", hardware: "hardware", hybrid: "hybrids", folklore: "folklore" };
+    const say = (fams, verb) => fams.length && out.push(`${fams.map(f => LABEL[f]).join(", ").replace(/, ([^,]*)$/, " and $1")} ${fams.length > 1 || fams[0] === "hybrid" ? verb : verb + "s"} it`);
+    say(by.loves, "love"); say(by.likes, "like"); say(by.hates, "hate");
+    return out.length ? out.join("; ").replace(/^./, c => c.toUpperCase()) + "." : "No demon cares much for it.";
+  }
+  const WANTS = {
+    data: "Wants tech. Hates old spirit things. Shrugs at SILVER.",
+    hardware: "Loves SILVER. Likes tech.",
+    hybrid: "Loves things half machine, half spirit (most RARE finds). Takes coin.",
+    folklore: "Wants old spirit things. Hates tech. Shrugs at SILVER.",
+  };
+  function codex(st) {
+    const c = st.codex || { demons: {}, items: {} };
+    const demons = Object.keys(FAMILY).map(f => ({ group: FAM_NAME[f], entries: FAMILY[f].concat(f === "folklore" ? Object.keys(UNIQUE) : []).map(name => {
+      const seen = c.demons[name] || {}, fam = familyOf(name), al = alignOf(name);
+      const known = !!(seen.met || seen.joined || (st.party || []).some(p => p.name === name));
+      if (!known) return { name, known };
+      const lines = [];
+      if (UNIQUE[name]) lines.push("It does not talk. It does not stop.");
+      else {
+        lines.push(`"${VOICE[fam].open[0]}"`, WANTS[fam]);
+        if (al === "CHAOS") lines.push("Trickster: takes gifts, rarely joins.");
+      }
+      lines.push(al === "NEUTRAL" ? "NEUTRAL: neither friend nor foe to anyone."
+        : `${al}: friendlier to a ${al} KURA, hostile to a ${al === "LAW" ? "CHAOS" : "LAW"} one.`);
+      return { name, known, tag: `${UNIQUE[name] ? "unique" : fam}   ${al}`, lines, count: `Met ${seen.met || 0}   Recruited ${seen.joined || 0}` };
+    }) }));
+    const items = TIERS.slice().reverse().map(t => ({ group: t, entries: names(t).map(name => {
+      const seen = c.items[name] || {};
+      if (!seen.found) return { name, known: false };
+      const a = itemAlign(name), info = ITEM_INFO[name] || {}, nat = natureOf(name);
+      const lines = [info.text, `${NATURE_NAME[nat]}. ${tastes(nat)}`];
+      if (a === "LAW" || a === "CHAOS") lines.push(`${a}: finding or giving it pulls KURA toward ${a}.`,
+        `${a} demons prize it. ${a === "LAW" ? "CHAOS" : "LAW"} demons think less of it.`);
+      else if (a) lines.push("NEUTRAL: no pull either way.");
+      if (info.use) lines.push("Can be used from INVOKE.");
+      return { name, known: true, tag: `${t}${a ? "   " + a : ""}`, lines, count: `Found ${seen.found}` };
+    }) }));
+    return { demons, items };
+  }
+
   // With a full party: send member i (1-3; KURA can't leave) away to make room, or keep everyone (i = null).
   function swap(st, i) {
     st = copy(st);
@@ -894,12 +1027,13 @@
     const hpmax = 12 + lv * 5, mpmax = lv * 2 + R(0, 4);
     st.party.push({ name: e.name, lv, hp: hpmax, hpmax, mp: mpmax, mpmax, family: e.family, align: e.align, demon: true });
     lines.push(`${e.name}: "${say2(e, "join")}"`, `${e.name} joins the party.`);
+    note(st, "demons", e.name, "joined");
     lean(st, e.align, lines);
     st.log = `> Day ${st.day}. ${e.name} joins the party.`;
     st.encounter = null;
   }
 
-  const api = { next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, codex, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);
