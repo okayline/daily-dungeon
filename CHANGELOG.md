@@ -2,6 +2,11 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.20 - Oct 6 2026, 14:35 HST
+
+- The Japanese weekday kanji sits left of the date (`火 TUE OCT 06 2026`).
+- The moon panel's marker row carries a short moon update: "The moon is day 26, waning crescent." It sits on whichever side the `^^^` marker isn't.
+
 ## v0.19 - Oct 6 2026, 14:24 HST
 
 - The game never goes back in time: setting the device clock earlier than a day the run has already seen leaves the game on that day ("The calendar won't turn back."), so a day can't be redone and a deadline can't be dodged.

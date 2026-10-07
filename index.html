@@ -37,6 +37,9 @@
   .moon { color: var(--moon); }
   /* The clock's colon blinks slowly (1s on, 1s off); hidden, it still keeps its space. */
   .colon { animation: blink 2s steps(1) infinite; }
+  /* The weekday kanji takes exactly two character cells, so the frame stays straight. */
+  .kanji { display: inline-block; width: 2ch; text-align: center; overflow: visible; }
+  .kanji { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "MS Gothic", sans-serif; line-height: 0; }
   @keyframes blink { 50% { visibility: hidden; } }
   .stairs { color: var(--moon); }
   .goal { color: var(--gold); text-shadow: 0 0 6px var(--gold); }
@@ -110,7 +113,8 @@
           .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         return left + esc(line.slice(48));
       }
-      if (i === 1) return esc(line).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2');
+      if (i === 1) return esc(line).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
+        .replace(/([日月火水木金土])/, '<span class="kanji">$1</span>');
       if (i === 4) return esc(line).replace("^^^", '<span class="moon">^^^</span>');
       // During a fight, "RUN?" sits in the rule just above the glowing direction buttons.
       if (i === lines.length - 3 && save && save.encounter) {
