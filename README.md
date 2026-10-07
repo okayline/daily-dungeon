@@ -2,7 +2,8 @@
 
 **Play it here: https://okayline.github.io/daily-dungeon/**
 
-![Daily Dungeon screen](screenshot.png)
+<img width="60%" height="60%" alt="Screenshot 2026-10-06 at 16-25-22 Daily Dungeon" src="https://github.com/user-attachments/assets/cd7c038d-e306-4f0f-82a7-f45fd878ed80" />
+
 
 An 80-column ASCII rougelike dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played one step a day on the real calendar. The real moon phase impacts gameplay in different ways.
 
