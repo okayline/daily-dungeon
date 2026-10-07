@@ -165,7 +165,8 @@
   function omen(t) {
     const h = hash(t), o = (h % 100) < 50 ? OMENS[0] : OMENS[1 + (h >>> 8) % (OMENS.length - 1)];
     const fx = { data: 1, folk: 1, heat: 1, find: 1, talk: 1, loot: 1, ...o.fx };
-    return { key: o.key, fx, text: '> "' + o.lines[(h >>> 16) % o.lines.length] + '"' };
+    const pool = o.lines;
+    return { key: o.key, fx, text: '> "' + pool[(h >>> 16) % pool.length] + '"' };
   }
 
   // HEAT: every search warms the room, and the hotter it is the likelier something comes.
@@ -295,8 +296,21 @@
   }
 
   // Draw the minimap and the first-person view from where KURA stands and faces.
+  // BINARY. Data demons sometimes speak in binary (real ASCII). Only a data demon in the party can read
+  // it: with one along, each binary line gets a translation, e.g. 01001000 01001001  [PACKET: "HI"].
+  const BIN = /\b[01]{8}(?: [01]{8})+\b/;
+  function translate(st, line) {
+    if (typeof line !== "string" || !BIN.test(line) || /\[\w[^\]]*: "/.test(line)) return line;
+    const reader = (st.party || []).slice(1).find(p => p.hp > 0 && p.family === "data");
+    if (!reader) return line;
+    const text = line.match(BIN)[0].split(" ").map(b => String.fromCharCode(parseInt(b, 2))).join("");
+    const out = `${line}  [${reader.name}: "${text}"]`;
+    return out.length > 77 && line.startsWith("> ") ? line : out;
+  }
   function show(st) {
     const d = st.dungeon, room = d.floor.rooms[d.at];
+    if (st.round) st.round = st.round.map(l => translate(st, l));
+    if (st.extra) st.extra = translate(st, st.extra);
     st.omenText = omen(clock(st)).text;                 // the omen, framed under the 3D view
     status(st);                                         // line 1
     if (st.tell) { st.extra = st.tell; delete st.tell; } // a heat tell takes line 3 right away
@@ -434,6 +448,7 @@
     st.steps = (st.steps || 0) + 1;
     st.unsaved = true;
     st.statusIn = (st.statusIn ?? 0) - 1;  // line 1 (the status report) changes every 5-10 actions
+    if (st.question) { st.question = null; }  // a question KURA walks away from just lapses
   }
 
   // LINE 1: THE STATUS REPORT. Mostly news (about 7 in 10): the floor, the days left, rooms surveyed,
@@ -467,6 +482,7 @@
       `${name}. ${seen} of 3 rooms surveyed. Stairs ${stairs ? "confirmed" : "unconfirmed"}.`,
       `Day ${onFloor}. ${party}.`,
       `${name}. ${party}. Today's step ${(st.today || {}).stepped ? "spent" : "unused"}.`,
+      TIME.moonNote(TIME.now()).replace(/\.$/, "") + ".",          // "The moon is day 26, waning crescent."
     ];
     return "> " + (left <= 1 ? news[pick([0, 1])] : pick(news));
   }
@@ -529,7 +545,15 @@
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
     const d = st.dungeon, room = d.floor.rooms[d.at], found = d.found[d.at], dir = st.facing;
-    if (dir in room.doors) { st.log = "> Only a door here. Nothing to search."; return show(st); }
+    // A door can't be searched: a few ways of saying so, never the same twice in a row. Costs nothing.
+    if (dir in room.doors) {
+      const DOOR = ["Only a door here. Nothing to search.", "KURA runs a hand along the door frame. Just a door.",
+        "A door. Whatever's hidden, it isn't here.", "The door gives nothing away. It only opens.",
+        "KURA checks the hinges. Old, but only hinges.", "Nothing behind the door but the way on."];
+      st.log = "> " + pick(DOOR.filter(l => "> " + l !== st.log));
+      nag(st, "door");
+      return show(st);
+    }
     if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { st.log = "> The stairs wait. Nothing more here."; return show(st); }
     act(st);
     // Heat, and what kind of noise KURA is making: the same wall again and again, or just staying.
@@ -574,7 +598,7 @@
     // A near-miss line only when it's true: this wall still hides something.
     const warm = w.taken[dir] < pile.length && Math.random() < 0.12;
     st.log = say(warm ? "The wall is warmer than the others." : pick(MISSES));
-    drift(st);
+    if (!nag(st, `search:${d.at}:${dir}`)) drift(st);
     return show(st);
   }
 
@@ -651,7 +675,7 @@
     st.facing = how === "L" ? LEFT[st.facing] : RIGHT[st.facing];
     act(st);
     st.log = `> KURA turns to face ${NAME[st.facing]}. ${sight(st)}`;
-    drift(st);
+    if (!nag(st, "turn")) drift(st);
     return show(st);
   }
 
@@ -739,7 +763,8 @@
   // Lines must fit the 77 columns of a log line: with a long item name, say "it" instead.
   const fitIt = (line, the) => line.length <= 77 ? line
     : line.replace("> " + the.replace(/^t/, "T"), "> It").replace(the, "it").slice(0, 77);
-  const BREAK = { COMMON: 0.3, UNCOMMON: 0.22, RARE: 0.1, MYTHIC: 0.03, MOON: 0 };
+  // Per try. Things are hard to break by hand: about 12 tries on average for COMMON, 17 UNCOMMON, 33 RARE, 100 MYTHIC.
+  const BREAK = { COMMON: 0.08, UNCOMMON: 0.06, RARE: 0.03, MYTHIC: 0.01, MOON: 0 };
   // When KURA breaks something a party member loves (folklore: old spirit things; data and
   // hardware: tech; hybrids: things that are both), they take it hard.
   const GRIEF = {
@@ -762,7 +787,6 @@
     const info = ITEM_INFO[name] || {};
     // Most things can't be used (yet). Trying anyway can break it: every try is a roll, so one battery
     // survives a dozen tries and the next snaps on the first. Rarer things are sturdier; MOON things never break.
-    // Odds per try: COMMON 30%, UNCOMMON 22%, RARE 10%, MYTHIC 3% (about 3, 5, 10 and 33 tries on average).
     if (!info.use) {
       act(st);
       const the = name.replace(/^an? /, "the "), tier = TIER[name] || "COMMON", nat = natureOf(name), m = moon();
@@ -804,12 +828,14 @@
           st.log += " Something was inside.";
         }
         st.log = fitIt(st.log, the);
-        // Someone who loved it takes it hard: an extra hit to their patience, and a line of grief.
+        // The break itself wears on everyone: each member loses a point of patience (a CHAOS one
+        // at zero may lash out). Someone who loved it takes it harder, with a line of grief.
+        for (const q of st.party.slice(1)) if (q.hp > 0) q.patience = Math.max(0, (q.patience ?? PATIENCE) - 1);
         if (fans.length) {
           const p = pick(fans);
-          p.patience = Math.max(0, (p.patience ?? PATIENCE) - 2);
+          p.patience = Math.max(0, p.patience - 1);
           st.extra = st.fidgetLine = "> " + pick(GRIEF[p.name] || GRIEF[p.family || "folklore"]).replace(/\{n\}/g, p.name);
-        } else fidget(st);
+        } else fidget(st, 20);
         if (Math.random() < encounterChance(st) && !st.encounter) {
           st.extra = "> " + reveal(st, "demon").replace(" appears!", " comes to see what broke.");
         }
@@ -821,7 +847,7 @@
           `KURA bangs ${the} against the wall. It holds.`, `KURA twists ${the}. It creaks.`]));
       st.log = fitIt(st.log, the);
       heatUp(st, 0.5);                 // fiddling makes a little noise too
-      fidget(st);
+      fidget(st, w);
       return show(st);
     }
     st.items.splice(i, 1);
@@ -966,9 +992,13 @@
     return "folklore";
   }
   const VOICE = {
-    data: { open: ["PROCESS DETECTED", "SIGNAL FOUND", "AWAITING INPUT"], ask: "REQUEST: RESOURCES. INPUT ANY.",
-      love: "VALUE EXCEEDS EXPECTED.", like: "ACCEPTABLE.", meh: "INSUFFICIENT. MORE.", hate: "INCOMPATIBLE FORMAT.",
-      join: "TASK RECEIVED. LINKED TO USER.", no: "CONNECTION LOST", scorn: "INPUT REJECTED", leave: "PROCESS ENDED" },
+    // (Data demons sometimes slip into binary. It's real ASCII: 01001000 01001001 is "HI".)
+    data: { open: ["PROCESS DETECTED", "SIGNAL FOUND", "AWAITING INPUT", "01001000 01001001", "01001000 01001001 00111111"], ask: "REQUEST: RESOURCES. INPUT ANY.",
+      love: ["VALUE EXCEEDS EXPECTED.", "01011001 01000101 01010011"], like: ["ACCEPTABLE.", "01001111 01001011"],
+      meh: "INSUFFICIENT. MORE.", hate: "INCOMPATIBLE FORMAT.",
+      join: ["TASK RECEIVED. LINKED TO USER.", "01001100 01001001 01001110 01001011"],
+      no: ["CONNECTION LOST", "01001110 01001111"], scorn: ["INPUT REJECTED", "0000000000000000"],
+      leave: ["PROCESS ENDED", "01000010 01011001 01000101"] },
     hardware: { open: ["ERROR 404: owner not found", "still here. still running", "are you my replacement?"],
       ask: "got anything? anything at all?",
       love: "oh. oh! it's perfect", like: "ok. that's ok", meh: "...is there more?", hate: "what is this. take it back", join: "NEW OWNER ACCEPTED. ok. I'll wait with you.",
@@ -1003,11 +1033,13 @@
       demonTurn(st, lines);
     } else if (Math.random() < Math.min(0.95, LISTEN[moon()] * omen(clock(st)).fx.talk * STANCE_TALK[stance(st, e)])) {
       lines.push(`${e.name}: "${say2(e, "open")}"`);
-      // It asks for a gift: anything. What it gets decides how it reacts (see GIFTS below).
-      e.stage = "gift"; e.got = 0; e.asks = 1;
+      // First it sizes KURA up: one or two questions, answered YES or NO (see DEMON TALK below).
+      // Then it asks for a gift: anything. What it gets decides how it reacts (see GIFTS below).
+      e.got = 0; e.asks = 1; e.mood = 0;
       e.want = 2 + floorNum(st);
       e.silver = Math.round((20 + 10 * floorNum(st) + R(0, 20)) * { same: 0.7, neutral: 1, opposite: 1.5 }[stance(st, e)]);
-      lines.push(`${e.name}: "${say2(e, "ask")}"`);
+      e.left = R(1, 2); e.asked = [];
+      demonAsks(st, e, lines);
     } else {
       lines.push(`${e.name}: "${say2(e, "scorn")}"`);
       e.angered = Math.random() < 0.5;
@@ -1030,7 +1062,8 @@
   };
   const FAMILY_TALK = {
     data: ['{n}: "QUERY NOT UNDERSTOOD. RETRY?"', '{n}: "ALL SYSTEMS NOMINAL. FOR NOW."',
-      '{n}: "CONVERSATION LOGGED."', '{n}: "USER HEART RATE ELEVATED."'],
+      '{n}: "CONVERSATION LOGGED."', '{n}: "USER HEART RATE ELEVATED."', '{n}: "01101000 01101001"',
+      "{n} hums to itself in binary: 0110... 0110..."],
     hardware: ['{n}: "you talk to me? nobody talks to me"', '{n}: "battery 12%. don\'t worry about it"',
       '{n}: "is this a good room? I like it"', "{n} beeps, pleased."],
     hybrid: ['{n}: "Something in these walls is listening."', '{n}: "Half of me agrees with you."',
@@ -1122,6 +1155,8 @@
     // Out of patience and still being talked to: half the time they snap. CHAOS members lash out at
     // KURA (it never kills her); LAW and NEUTRAL ones leave the party for good.
     if (snap(st, p)) return show(st);
+    // In a calm room, a member with patience to spare sometimes asks KURA something instead (1 in 4).
+    if (tier < 2 && (p.patience ?? PATIENCE) >= 3 && Math.random() < 0.25) { ask(st, p); return show(st); }
     p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
     // A dangerous room (nervous or worse) outranks being annoyed; otherwise a tired member says so.
     const lines = tier >= 2 ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier]
@@ -1129,6 +1164,64 @@
       : tier ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier] : (PARTY_TALK[p.name] || FAMILY_TALK[fam]);
     const pool = lines.map(l => "> " + l.replace(/\{n\}/g, p.name));
     st.extra = pick(pool.filter(l => l !== st.extra));        // never the same line twice in a row
+    return show(st);
+  }
+
+  // QUESTIONS. Now and then, talking to a party member, they ask KURA something instead, and [Y]ES / [N]O
+  // appear in the bottom right. Answers shift their patience, can lean KURA's alignment, and get a reply.
+  // Doing anything else lets the question lapse. Each: [question, [yes reply, patience, lean], [no reply, patience, lean]].
+  const ASK = {
+    ELF: [
+      ['ELF: "Do you trust me?"', ['ELF: "Foolish. But thank you."', 2], ['ELF: "Good. Don\'t."', 0, "talk"]],
+      ['ELF: "Shall we take what we find, and ask nothing?"', ["ELF smiles, a little.", 1, "offer"], ['ELF: "As you like."', 0, "pay"]],
+      ['ELF: "Would you leave us behind, to get out?"', ['ELF: "Honest, at least."', -2], ["ELF says nothing. She seems pleased.", 1]],
+    ],
+    PIXIE: [
+      ['PIXIE: "Are we going to be okay?"', ['PIXIE: "Okay. OKAY. Good."', 2], ['PIXIE: "...Wow. Okay."', -1]],
+      ['PIXIE: "Can I have the next shiny thing?"', ['PIXIE: "PROMISE."', 2], ['PIXIE: "Rude."', -1]],
+      ['PIXIE: "Do you think the moon misses us?"', ['PIXIE: "Me too."', 1], ['PIXIE: "Hmph. It does."', 0]],
+    ],
+    "CU SITH": [
+      ["CU SITH drops a bone at KURA's feet. Throw it?", ["CU SITH bounds off and comes back, delighted.", 2], ["CU SITH picks the bone back up, dignified.", 0]],
+      ["CU SITH stares into the dark, then at KURA. Go look?", ["CU SITH charges into the dark and comes back proud.", 1, "offer"], ["CU SITH settles, ears still up.", -1]],
+    ],
+    data: [
+      ['{n}: "QUERY: IS THIS A TEST? Y / N"', ['{n}: "UNDERSTOOD. PERFORMING."', 1, "pay"], ['{n}: "THEN WHAT IS THIS."', -1]],
+      ['{n}: "PERMISSION TO LOG YOUR THOUGHTS? Y / N"', ['{n}: "LOGGING."', 1, "pay"], ['{n}: "PRIVACY MODE."', 0]],
+    ],
+    hardware: [
+      ['{n}: "will you keep me? even when I\'m old?"', ['{n}: "ok. ok. thank you"', 2], ['{n}: "...ok"', -2]],
+      ['{n}: "can I hum? I like humming"', ["{n} hums happily at mains frequency.", 1], ['{n}: "ok. quiet mode"', -1]],
+    ],
+    hybrid: [
+      ['{n}: "Do you ever wish you were more than flesh?"', ['{n}: "We could arrange that."', 1, "offer"], ['{n}: "Pity."', 0, "pay"]],
+      ['{n}: "Shall I listen to the walls for you?"', ['{n} listens. "...They\'re listening back."', 1], ['{n}: "Your choice, traveler."', 0]],
+    ],
+    folklore: [
+      ['{n}: "Will you remember my name when this is over?"', ['{n}: "We will see."', 2], ['{n}: "Then I will remember yours."', -2]],
+      ['{n}: "Do you fear the moon?"', ['{n}: "Wise."', 0, "pay"], ['{n}: "Good. Neither do I."', 0, "offer"]],
+    ],
+  };
+  function ask(st, p) {
+    const pool = ASK[p.name] || ASK[p.family || "folklore"];
+    const k = R(0, pool.length - 1);
+    st.question = { who: p.name, pool: ASK[p.name] ? p.name : (p.family || "folklore"), k };
+    st.extra = "> " + pool[k][0].replace(/\{n\}/g, p.name);
+  }
+  // KURA answers the question: YES (true) or NO (false). Free, like turning.
+  function reply(st, yes) {
+    st = copy(st);
+    const q = st.question;
+    if (!q) return show(st);
+    const p = (st.party || []).find(m => m.name === q.who);
+    st.question = null;
+    if (!p) return show(st);
+    const [line, dp, why] = ASK[q.pool][q.k][yes ? 1 : 2];
+    p.patience = Math.max(0, Math.min(PATIENCE + 2, (p.patience ?? PATIENCE) + dp));
+    if (why) lean(st, why);
+    tally(st, "answers");
+    st.log = `> KURA answers ${p.name}: ${yes ? "yes" : "no"}.`;
+    st.extra = "> " + line.replace(/\{n\}/g, p.name);
     return show(st);
   }
 
@@ -1148,18 +1241,95 @@
     }
     return true;
   }
+  // DOING THE SAME THING OVER AND OVER (the same wall, turning round and round, searching a door):
+  // after a few repeats the party starts to say something, more often the longer it goes on, and
+  // each remark costs that member a point of patience (so it can end in a snap, like any pestering).
+  const LOOPED = {
+    ELF: ['ELF: "You have searched that wall a hundred times."', 'ELF: "Are you well?"', "ELF watches KURA, then the wall, then KURA."],
+    PIXIE: ['PIXIE: "Are you CRAZY? What are you DOING??"', 'PIXIE: "It\'s the SAME WALL."', 'PIXIE: "Okay. I\'m counting now."'],
+    "CU SITH": ["CU SITH lies down. It knows this will take a while.", "CU SITH tilts its head at KURA, then at the wall."],
+    data: ['{n}: "LOOP DETECTED."', '{n}: "INFINITE LOOP? Y / N"'],
+    hardware: ['{n}: "you\'re doing the thing again"', '{n}: "same input, same output. trust me"'],
+    hybrid: ['{n}: "Even machines know when to stop."', '{n}: "You are stuck in a loop, flesh."'],
+    folklore: ['{n}: "Madness, or patience. I cannot tell."', '{n}: "The wall will not change its mind."'],
+  };
+  function nag(st, key) {
+    st.loop = st.loop && st.loop.key === key ? { key, n: st.loop.n + 1 } : { key, n: 1 };
+    const n = st.loop.n, friends = (st.party || []).slice(1).filter(p => p.hp > 0);
+    if (n < 8 || !friends.length || Math.random() >= Math.min(0.5, 0.04 * (n - 7))) return false;
+    const p = pick(friends), log = st.log;
+    if (snap(st, p)) { st.log = log; return true; }
+    p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
+    const lines = p.patience <= 1 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[p.patience] : (LOOPED[p.name] || LOOPED[p.family || "folklore"]);
+    st.extra = "> " + pick(lines.filter(l => "> " + l.replace(/\{n\}/g, p.name) !== st.extra)).replace(/\{n\}/g, p.name);
+    return true;
+  }
+
   // Fiddling with something useless, over and over, wears on the party too.
   const FIDDLE = ['{n} watches KURA fiddle with it.', '{n}: "What are you doing?"', "{n} pretends not to notice.",
     '{n}: "It\'s not going to do anything."'];
-  function fidget(st) {
+  // w = how many times KURA has tried this thing: the longer she keeps at it, the likelier someone reacts
+  // (rarely at first, then up to half the time after a couple dozen tries).
+  function fidget(st, w = 1) {
     const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
     // Nobody reacts this time: clear an earlier reaction so it doesn't look like a new one.
-    if (!friends.length || Math.random() < 0.5) { if (st.extra === st.fidgetLine) st.extra = ""; return; }
+    if (!friends.length || Math.random() >= Math.min(0.5, 0.03 + 0.02 * w)) { if (st.extra === st.fidgetLine) st.extra = ""; return; }
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; st.fidgetLine = st.extra; return; }   // line 2 keeps the item; line 3 the snap
     p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
     const lines = p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[p.patience] : FIDDLE;
     st.extra = st.fidgetLine = "> " + pick(lines).replace(/\{n\}/g, p.name);
+  }
+
+  // DEMON TALK. Before it wants anything, a demon that listens asks KURA one or two things, each family
+  // its own way. Each answer it likes lifts its mood (a happier demon is easier to please and likelier
+  // to join); each it dislikes sours it, and a demon in a foul mood loses its temper and strikes.
+  // Each entry: [question, which answer it likes (true = YES, or "LAW"/"CHAOS" = what its alignment likes), reply if liked, reply if not].
+  const DEMON_ASK = {
+    data: [
+      ["QUERY: ARE YOU HUMAN? Y / N", true, "CONFIRMED. LOGGING ANOMALY.", "LIE DETECTED."],
+      ["QUERY: DO YOU FOLLOW RULES? Y / N", "LAW", "COMPATIBLE.", "INCOMPATIBLE."],
+      ["QUERY: ARE YOU LOST? Y / N", true, "ROUTE UNKNOWN. RELATABLE.", "DISAGREE. YOU ARE LOST."],
+      ["01000110 01010010 01001001 01000101 01001110 01000100 00111111 Y / N", true, "01011001 01000101 01010011", "01001110 01001111"],
+    ],
+    hardware: [
+      ["do you have a charger? anything?", true, "really?? ok. ok.", "...nobody ever does"],
+      ["are you here to fix me?", true, "finally. finally.", "oh. ok. sure."],
+      ["is it still raining up there?", true, "I liked the rain. on my casing.", "oh. that's worse somehow"],
+    ],
+    hybrid: [
+      ["Do you hear the wires sing too?", true, "Then you're half like me.", "Pity. They sing of you."],
+      ["Would you trade a memory for a secret?", "CHAOS", "A fair trade. Later.", "Clever. Or dull."],
+      ["Is the flesh worth keeping?", "LAW", "Sentimental. I like that.", "Then we agree."],
+    ],
+    folklore: [
+      ["Do you fear me?", true, "Good. Manners, at last.", "Bold. Or foolish."],
+      ["Have you come with an offering?", true, "Then we may yet be friends.", "Then why speak to me at all?"],
+      ["Do you know my name?", "CHAOS", "Liar. But a pleasing one.", "Good. Keep it that way."],
+    ],
+  };
+  function demonAsks(st, e, lines) {
+    const pool = DEMON_ASK[e.family || "folklore"], free = pool.map((_, i) => i).filter(i => !e.asked.includes(i));
+    const k = pick(free);
+    e.asked.push(k); e.q = k; e.stage = "chat";
+    lines.push(`${e.name}: "${pool[k][0]}"`);
+  }
+  function demonHears(st, e, yes, lines) {
+    const [, likes, good, bad] = DEMON_ASK[e.family || "folklore"][e.q];
+    const wanted = likes === true ? true : likes === "LAW" ? e.align === "LAW" || e.align === "NEUTRAL" && Math.random() < 0.5
+      : e.align === "CHAOS" || e.align === "NEUTRAL" && Math.random() < 0.5;
+    const liked = likes === true ? yes : yes === wanted;
+    lines.push(`KURA: ${yes ? "\"Yes.\"" : "\"No.\""}`, `${e.name}: "${liked ? good : bad}"`);
+    e.mood += liked ? 1 : -1;
+    tally(st, "demonAnswers");
+    if (e.mood <= -2) {                               // two sour answers: it loses its temper
+      lines.push(`${THE(e.name)} has heard enough.`);
+      e.stage = null; e.angered = true; demonTurn(st, lines);
+      return;
+    }
+    if (--e.left > 0) return demonAsks(st, e, lines);
+    e.stage = "gift";                                  // sized up: now it wants something
+    lines.push(`${e.name}: "${say2(e, "ask")}"`);
   }
 
   // KURA's answer to a demon's price or offer.
@@ -1169,6 +1339,7 @@
     if (!e || !e.stage) return show(st);
     const lines = [];
     if (e.stage === "gift") return give(st, yes ? 0 : null);
+    if (e.stage === "chat") { demonHears(st, e, yes, lines); st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st); }
     if (e.stage === "join") {
       if (!yes) { lines.push(`KURA declines. ${say2(e, "leave")}`); leaves(st, e); }
       else if (st.party.length < 4) recruit(st, e, lines);
@@ -1247,7 +1418,7 @@
       st.items.splice(st.items.indexOf(g.item), 1); lines.push(`KURA gives ${g.item}.`);
       const ga = itemAlign(g.item); lean(st, ga === "LAW" ? "offerLAW" : ga === "NEUTRAL" ? null : "offer", lines);
     }
-    e.got += v;
+    e.got += v * (1 + 0.2 * (e.mood || 0));           // a demon in a good mood is easier to please
     const chaos = e.align === "CHAOS";
     if (e.got < e.want) {
       // Not enough yet. It keeps what it got. After three asks it loses patience and leaves with it all.
@@ -1256,7 +1427,7 @@
     } else {
       const love = v >= e.want * 1.5 || e.got >= e.want * 2;
       lines.push(who + `"${say2(e, love ? "love" : "like")}"`);
-      const joins = chaos ? (love ? 0.3 : 0.1) : (love ? 0.9 : 0.65);
+      const joins = Math.max(0, Math.min(0.95, (chaos ? (love ? 0.3 : 0.1) : (love ? 0.9 : 0.65)) + 0.05 * (e.mood || 0)));
       if (Math.random() < joins) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
       else if (chaos && e.asks < 3 && Math.random() < 0.5) { e.asks++; lines.push(who + `"More. MORE."`); }
       else if (chaos) { lines.push(`${THE(e.name)} runs off laughing with it.`); leaves(st, e); }
@@ -1367,7 +1538,7 @@
     ];
   }
 
-  const api = { summary, next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, codex, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { summary, next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, codex, reply, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

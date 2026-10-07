@@ -77,9 +77,13 @@
   .lit { color: var(--moon); text-shadow: 0 0 6px var(--moon); animation: breathe 4s ease-in-out infinite; }
   @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
   .mframe { color: var(--trail); }
+  .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
+  .logline.q { width: 55ch; }
+  .qcell { display: inline-block; white-space: pre; vertical-align: top; }
   /* The build number, small, under the screen's lower right corner. */
   .ver { text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
   .step { color: var(--bright); }
+  .ask { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .t-COMMON { color: var(--fg); } .t-UNCOMMON { color: #7bd88f; } .t-RARE { color: #6aa9ff; }
   .t-MYTHIC { color: var(--gold); text-shadow: 0 0 6px var(--gold); } .t-MOON { color: #dfe9ff; text-shadow: 0 0 8px #9fc4ff; }
@@ -138,8 +142,20 @@
         .replace(/([日月火水木金土])/, '<span class="kanji"><span class="g">$1</span></span>');
       if (i === 2 || i === 3) return moonBox(esc(line));
       if (i === 4) return moonBox(esc(line)).replace("^^^", '<span class="moon">^^^</span>');
-      // Log line 2 glows gold right after using an item.
-      if (i === lines.length - 5 && logGlow) return esc(line).replace(/^(\| )(.*?)(\s*\|)$/, '$1<span class="gold">$2</span>$3');
+      // The three log lines: their text sits in a box exactly 78 cells wide, so the right border stays
+      // straight even if a glyph in the font (an apostrophe, say) isn't exactly one cell wide.
+      // Line 2 glows gold right after using an item.
+      if (i >= lines.length - 6 && i <= lines.length - 4) {
+        // With a question open, the right side holds [Y]ES | [N]O, each the full height of the box.
+        if (save && save.question) {
+          const k = i - (lines.length - 6), gold = k === 1 && logGlow;
+          const cell = (t, act) => `<span class="btn ask qcell" data-act="${act}">${esc(t)}</span>`;
+          const yes = ["          ", "  [Y]ES   ", "          "][k], no = ["           ", "   [N]O    ", "           "][k];
+          return `|<span class="logline q${gold ? " gold" : ""}">${esc(line.slice(1, 56))}</span>|` + cell(yes, "qyes") + "|" + cell(no, "qno") + "|";
+        }
+        const inner = esc(line.slice(1, -1)), gold = i === lines.length - 5 && logGlow;
+        return `|<span class="logline${gold ? " gold" : ""}">${inner}</span>|`;
+      }
       if (i === lines.length - 2) {
         // Daily actions dim once used (or when there's no door that way).
         const can = save ? RULES.available(save) : {};
@@ -149,6 +165,7 @@
           .replace("[T]ALK", '<span class="btn" data-act="talk">[T]ALK</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace("[S]EARCH", b("[S]EARCH", "search", can.search))
+
           .replace(/\[([NSEW])\](ORTH|OUTH|AST|EST)/g, (m, x) =>
             b(m, "go-" + x, can[x]).replace('class="btn', 'class="btn' + (armed === x ? " armed" : save && save.encounter && can[x] ? " flee" : "")));
       }
@@ -375,7 +392,8 @@
       "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
       "  [R]UN .............. in a fight: run through a door (uses the day's step)",
-      "  [Y]ES  [N]O ........ answer a question; 1-8 picks a gift",
+      "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
+      "  1-8 ................ pick a gift when a demon asks for one",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
       "  [C]ODEX ............ every demon and item found, over all runs",
       "  [L]OG .............. the adventure log",
@@ -522,7 +540,7 @@
           line.append(o); pre.appendChild(line);
         });
         row.append(opt("[N]OTHING", "give-none"));
-      } else if (e.stage === "ask" || e.stage === "join") row.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
+      } else if (e.stage === "ask" || e.stage === "join" || e.stage === "chat") row.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
       else if (e.stage === "swap") {
         save.party.forEach((p, i) => { if (i > 0) row.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
         row.append(opt("[N]O", "swap-none"));
@@ -543,6 +561,12 @@
 
   function act(name) {
     if (name === "forward" && save) name = "go-" + save.facing;
+    if ((name === "qyes" || name === "qno") && save) {
+      const log = save.log;
+      save = RULES.reply(save, name === "qyes");
+      remember(log); persist(); draw();
+      return;
+    }
     if (name === "run" && save && save.encounter) {
       const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]);
       name = "go-" + (out.includes(save.facing) ? save.facing : out[0] || save.facing);
@@ -619,7 +643,7 @@
         const st2 = save.encounter && save.encounter.stage;
         let k;
         if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", escape: "give-none" }[key];
-        else if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
+        else if (st2 === "ask" || st2 === "join" || st2 === "chat") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
         else k = { f: "fight", t: "talk", r: "run", arrowup: "run" }[key];
         if (k) act(k);
@@ -652,6 +676,7 @@
       return;
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
+    if (save && save.question && (key === "y" || key === "n")) { e.preventDefault(); return act(key === "y" ? "qyes" : "qno"); }
     const k = { "?": "about", c: "codex", x: "next", f: "fight", t: "talk", i: "invoke", l: "log", p: "backup", r: "reset",
       s: "search", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (k) { e.preventDefault(); act(k); }

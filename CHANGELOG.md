@@ -2,6 +2,21 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.29 - Oct 6 2026, 20:36 HST
+
+![v0.29](screenshots/v0.29.png)
+
+- **The omen moved to the top of the 3D view**, centered across the ceiling. A long omen wraps onto a second row, so the walls always show. The moon panel's bottom row is back to just the `^^^` marker, and the frame under the 3D view is gone, so the screen is back to its old height.
+- "The moon is day 26, waning crescent." is now one of the status reports on log line 1.
+- **Things are much harder to break by hand:** about 12 tries on average for COMMON things, 17 for UNCOMMON, 33 for RARE and 100 for MYTHIC (MOON things still never break). The party's patience goes as it gets close instead: reactions are rare at first and come more and more often the longer KURA keeps at it, and the break itself costs everyone a point of patience (more for whoever loved the thing).
+- Searching while facing a door has a few different replies now ("KURA checks the hinges. Old, but only hinges."), never the same twice in a row.
+- **Doing the same thing over and over gets noticed.** Searching the same wall again and again, turning round and round, or searching a door: after a few repeats the party starts to say something, more often the longer it goes on, and each remark costs that member a point of patience. "PIXIE: "Are you CRAZY? What are you DOING??"", "ELF: "You have searched that wall a hundred times."", "CU SITH lies down. It knows this will take a while.", "LOOP DETECTED."
+- **The party asks questions.** Talking to a member in a calm room, about 1 time in 4 they ask KURA something instead, and big `[Y]ES | [N]O` buttons appear on the right side of the log box (or press Y / N). "PIXIE: "Can I have the next shiny thing?"", "ELF: "Do you trust me?"", "CU SITH drops a bone at KURA's feet. Throw it?", "QUERY: IS THIS A TEST? Y / N". Answers change their patience (a kind answer can win some back), some lean KURA's alignment, and each gets a reply. Doing anything else lets the question lapse.
+- Party remarks about doing the same thing over and over now take longer to start.
+- **Demons talk before they bargain.** A demon that listens now sizes KURA up with a question or two first, each family its own way ("QUERY: ARE YOU HUMAN? Y / N", "do you have a charger? anything?", "Do you hear the wires sing too?", "Do you fear me?"), answered `[Y]ES` / `[N]O` in the fight box. Answers it likes put it in a better mood (gifts go further and it's likelier to join); two it dislikes and it loses its temper and strikes. Then it asks for a gift as before.
+- Data demons sometimes slip into binary (real ASCII, if you decode it): `01001000 01001001`, and one even asks a question in it. Only a data demon in the party can read binary: with one along, each binary line comes with a translation (`01001000 01001001  [PACKET: "HI"]`); without one, it's just 1s and 0s.
+- Fixed the right border of a log line sitting one cell short in the page font (an apostrophe, as in "Today's", wasn't exactly one cell wide). Each log line's text now sits in a box exactly 78 cells wide.
+
 ## v0.28 - Oct 6 2026, 20:03 HST
 
 ![v0.28](screenshots/v0.28.png)

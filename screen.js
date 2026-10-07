@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.28";
+  const VERSION = "v0.29";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const pad = (s, n) => (s + " ".repeat(n)).slice(0, Math.max(n, s.length));
@@ -165,6 +165,19 @@
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 18, `[<]  ${st.facing || "?"}  [>]`);
     overlay(VH - 2, 22, "[^]");          // the day's step: forward, the way KURA faces
+    // The day's omen, centered across the top of the 3D view, like writing on the ceiling.
+    const omenT = (st.omenText || "").replace(/^> /, "");
+    // A long one wraps onto a second row (split at the space nearest the middle), so the walls always show.
+    if (omenT) {
+      const fits = (t, y) => t.length <= 39 - 2 * y;      // room between the slanted walls on row y
+      let rows = [omenT];
+      if (!fits(omenT, 0)) {
+        const spaces = [...omenT.matchAll(/ /g)].map(m => m.index), mid = omenT.length / 2;
+        const at = spaces.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
+        rows = [omenT.slice(0, at), omenT.slice(at + 1)];
+      }
+      rows.forEach((t, y) => overlay(y, Math.max(1, Math.floor((VW - t.length) / 2)), t.slice(0, VW - 2)));
+    }
     const moons = ["(     )", "(    ))", "(  ))))", "())))))", "(((O)))", "((((())", "((((  )", "((    )"];
     const names = ["NEW", "CRESC", "HALF", "GIBB", "FULL", "GIBB", "HALF", "CRESC"];
     const long = ["NEW", "WAX CRESC", "1ST QTR", "WAX GIBB", "FULL", "WANE GIBB", "LAST QTR", "WANE CRESC"];
@@ -184,8 +197,8 @@
     // The marker row also carries a short moon update ("The moon is day 25, waning crescent."),
     // placed on whichever side of the row the ^^^ marker isn't, so the two never touch.
     const marks = bar(moons.map((_, i) => center(i === idx ? "^^^" : "", 8)).join(""));
-    const note = moonNote(now), left = marks.indexOf("^^^") > 34;
-    S.push("|" + box[3] + (left ? " " + note + marks.slice(1 + note.length) : marks.slice(0, BW - 1 - note.length) + note + " ") + "|");
+    // The marker row holds only the ^^^ (the moon's day and phase are a line 1 status report).
+    S.push("|" + box[3] + marks + "|");
     S.push("+" + "=".repeat(78) + "+");
     // Right panel is 29 characters wide: a leading space plus 28.
     const PW = 29, rule = " " + "-".repeat(PW - 1);
@@ -224,18 +237,6 @@
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
       rule, money, mapHead, ...mp.map(m => " ".repeat(mapPad) + m), "", ...(mapRows === 4 ? [""] : []), rule, bottom];
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
-    // The day's omen, framed under the 3D view: a bar on top (the border below closes it), the text
-    // centered, and arrows on the edges that grow inward when the omen is short: |||> "..." <|||
-    const omenT = (st.omenText || "").replace(/^> /, "");
-    if (omenT) {
-      const OW = 47, g = Math.floor((OW - omenT.length) / 2), n = Math.max(0, Math.floor((g - 2) / 4));
-      const L = "|".repeat(n) + ">", R = "<" + "|".repeat(n);
-      let inner = " ".repeat(Math.max(0, g)) + omenT;
-      inner = (L + inner.slice(L.length)).padEnd(OW).slice(0, OW);
-      inner = inner.slice(0, OW - R.length) + R;
-      S.push("| +" + "-".repeat(43) + "+ |" + " ".repeat(30) + "|");
-      S.push("|" + inner + "|" + " ".repeat(30) + "|");
-    }
     S.push("+" + "=".repeat(78) + "+");
     // The moon line: a mysterious word on the moon, the demons, or both. No numbers; the moon bar
     // above already shows the phase. Several lines per phase, changing once per real day.
@@ -246,7 +247,12 @@
     // Line 1 is the day's omen when the rules provide one; otherwise the moon line.
     // Line 1 is the status report when the rules provide one; otherwise the moon line.
     const moonLine = st.status || "> " + lines[realDay % lines.length];
-    for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
+    // While a party member's question is open, [Y]ES and [N]O sit in the log box's right side,
+    // divided down all three lines, and the log lines are cut to fit beside them.
+    if (st.question) {
+      const btn = ["|          |           ", "|  [Y]ES   |   [N]O    ", "|          |           "];
+      [moonLine, st.log || "", extra].forEach((m, k) => S.push("|" + ljust((" " + m).slice(0, 55), 55) + btn[k] + "|"));
+    } else for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step on the right.
     // The day's step is the [^] button in the 3D view now; the right side waits for answers ([Y]ES [N]O, later).
@@ -262,7 +268,7 @@
     return S.join("\n");
   }
 
-  const api = { VERSION, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  const api = { VERSION, moonNote, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);
