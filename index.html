@@ -143,7 +143,7 @@
   function draw() {
     if (!save) return;
     // While a step is waiting for its second press, line 3 asks for confirmation (never saved).
-    const extra = armed ? `> Use today's step to go ${NAMES[armed]}? Press [${armed}] again.` : save.extra || "";
+    const extra = save.extra || "";
     document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extra));
   }
 
@@ -256,6 +256,26 @@
   const NAMES = { N: "NORTH", S: "SOUTH", E: "EAST", W: "WEST" };
   let armed = null, armTimer = null;
   function disarm() { armed = null; clearTimeout(armTimer); }
+  // The step confirmation is a popup: YES (Enter, Y, or the same direction again) or NO (Esc, anything else).
+  function confirmBox(dir) {
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
+    add(`GO ${NAMES[dir]}?`, "gold");
+    add(" ");
+    add("This uses today's one step.");
+    add(" ");
+    const row = document.createElement("div"), opt = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.cact = a; return e; };
+    row.append(opt("[ YES ]", "yes"), "    ", opt("[ NO ]", "no"));
+    pre.appendChild(row);
+    box.dataset.mode = "confirm";
+    box.hidden = false;
+  }
+  function answerConfirm(yes) {
+    const dir = armed;
+    document.getElementById("found").hidden = true;
+    if (yes && dir) act("go-" + dir); else { disarm(); draw(); }
+  }
   // When a search turns something up, a box says what it was and waits for Enter, Space, Esc or a
   // click, so a quick run of searches can't skip past it. Holding A won't dismiss it.
   function foundBox(before) {
@@ -321,8 +341,8 @@
       const dir = name.slice(3);
       if (armed !== dir && RULES.available(save)[dir]) {
         disarm(); armed = dir;
-        armTimer = setTimeout(() => { armed = null; draw(); }, 6000);
-        return draw();
+        draw(); confirmBox(dir);
+        return;
       }
     }
     disarm();
@@ -346,6 +366,9 @@
   });
   document.getElementById("log").addEventListener("click", () => toggleLog(false));
   document.getElementById("found").addEventListener("click", e => {
+    const c = e.target.closest("[data-cact]");
+    if (c) return answerConfirm(c.dataset.cact === "yes");
+    if (document.getElementById("found").dataset.mode === "confirm") return answerConfirm(false);
     const b = e.target.closest("[data-fact]");
     if (b) act(b.dataset.fact);
     else if (document.getElementById("found").dataset.mode !== "encounter") closeFound();
@@ -360,6 +383,11 @@
     const fbox = document.getElementById("found");
     if (!fbox.hidden) {
       e.preventDefault();
+      if (fbox.dataset.mode === "confirm") {
+        const same = armed && key === armed.toLowerCase();
+        answerConfirm(key === "enter" || key === "y" || same);
+        return;
+      }
       if (fbox.dataset.mode === "encounter") {
         const k = { f: "fight", t: "talk", n: "go-N", s: "go-S", e: "go-E", w: "go-W" }[key];
         if (k) act(k);

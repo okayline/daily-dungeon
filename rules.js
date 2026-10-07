@@ -77,9 +77,10 @@
   const ITEMS = names("COMMON").concat(names("UNCOMMON"));       // what a talked-down demon may leave
   const MOON_DROPS = names("MOON");
   // A found item's rarity: mostly common, sometimes uncommon, rarely rare.
-  function rollItem() {
-    const r = Math.random();
-    return pick(names(r < 0.6 ? "COMMON" : r < 0.92 ? "UNCOMMON" : "RARE"));
+  function rollItem(st) {
+    const loot = st ? omen(clock(st)).fx.loot : 1, r = Math.random();
+    const rare = 0.08 * loot;                            // a generous day makes rares three times as likely
+    return pick(names(r < rare ? "RARE" : r < rare + 0.32 ? "UNCOMMON" : "COMMON"));
   }
 
   // DEMONS by family. The deeper the floor, the more data becomes flesh: pure data near the top,
@@ -118,19 +119,26 @@
   // DAILY OMENS (line 1). One per real day, seeded from the date, so a reload can't reroll it.
   // About half the days are ordinary. Every omen is true: its effect is real all day.
   const OMENS = [
-    { key: "none", fx: {}, lines: ["The light is almost gone. So is the anger.", "Nothing stirs. Nothing waits.", "The dust lies flat today."] },
+    // Ordinary days still read like omens: ambiguous, and they promise nothing that won't happen.
+    { key: "none", fx: {}, lines: ["What you carry will be counted.", "The deep remembers a name. Not yours, yet.",
+      "Someone walked this way before you.", "Count the doors. Then count them again.", "The ninth bell has not rung.",
+      "What is below was once above.", "Somewhere a light is left on for you.", "The stone dreams of the sea.",
+      "Not every silence is empty.", "A promise kept, a long way down."] },
     { key: "data", fx: { data: 2 }, lines: ["The wires remember.", "Something is counting down.", "A dial tone, far away."] },
     { key: "folk", fx: { folk: 2 }, lines: ["Old things walk early.", "Salt on the wind.", "The old ones stir."] },
     { key: "heat", fx: { heat: 2 }, lines: ["Do not linger.", "The room is listening today.", "Short stays. Quiet feet."] },
     { key: "hard", fx: { find: 0.5 }, lines: ["The walls keep their secrets.", "Every seam is sealed today.", "The stone stays shut."] },
     { key: "easy", fx: { find: 1.6 }, lines: ["A door is open somewhere.", "Something is loose in the stone.", "The seams are soft today."] },
     { key: "talk", fx: { talk: 1.6 }, lines: ["Strangers listen.", "Today, they will hear you out.", "Speak first. They are lonely."] },
+    // Good days, plainly good.
+    { key: "calm", fx: { heat: 0.5 }, lines: ["The halls are sleeping.", "Soft steps go unheard.", "Even the walls are tired."] },
+    { key: "loot", fx: { loot: 3 }, lines: ["The deep is generous today.", "Something precious is near the surface.", "Fortune favors the patient."] },
   ];
   const hash = n => { let x = (n * 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return x >>> 0; };
   function omen(t) {
     const h = hash(t), o = (h % 100) < 50 ? OMENS[0] : OMENS[1 + (h >>> 8) % (OMENS.length - 1)];
-    const fx = { data: 1, folk: 1, heat: 1, find: 1, talk: 1, ...o.fx };
-    return { key: o.key, fx, text: "> " + o.lines[(h >>> 16) % o.lines.length] };
+    const fx = { data: 1, folk: 1, heat: 1, find: 1, talk: 1, loot: 1, ...o.fx };
+    return { key: o.key, fx, text: '> "' + o.lines[(h >>> 16) % o.lines.length] + '"' };
   }
 
   // HEAT: every search warms the room, and the hotter it is the likelier something comes.
@@ -276,7 +284,10 @@
   // The real calendar, in Honolulu time (UTC-10). A day number counts days since 1970.
   // NEXT (key X) is a hidden testing cheat that pushes this game's clock a day ahead.
   const dayNum = now => Math.floor((now.getTime() - 10 * 3600 * 1000) / 86400000);
-  const clock = st => dayNum(new Date()) + (st.clockOffset || 0);
+  // The game never goes back in time: if the device clock is set earlier than a day this run has
+  // already seen, the game stays on that day (so rewinding can't redo a day or dodge a deadline).
+  const rawClock = st => dayNum(new Date()) + (st.clockOffset || 0);
+  const clock = st => Math.max(rawClock(st), st.lastSeen || -Infinity);
   const weekday = n => (n + 3) % 7;                    // 0 = MONDAY ... 6 = SUNDAY
   const sundayOf = n => n + (6 - weekday(n));
   const WD = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -298,6 +309,9 @@
   // Bring the game up to the real date: a new day resets the step; a missed deadline ends the run.
   function sync(st) {
     const t = clock(st);
+    if (rawClock(st) < t && !st.rewindNoted) { st.extra = "> The calendar won't turn back."; st.rewindNoted = true; }
+    if (rawClock(st) >= t) delete st.rewindNoted;
+    st.lastSeen = t;
     if (st.startDay === undefined) st.startDay = t - ((st.day || 1) - 1);
     if (!st.today || st.today.date === undefined) st.today = { date: t, stepped: !!(st.today && st.today.stepped) };
     if (st.dungeon && st.dungeon.deadline === undefined) st.dungeon.deadline = firstDeadline(t);
@@ -341,7 +355,7 @@
         st.items = (st.items || []).concat(it); return `A locker holds ${it}.`;
       }
       case "silver": { const n = R(20, 150); st.silver = silver + n; return `Coins in the rubble. ${n} SILVER.`; }
-      case "item": { const it = rollItem(); st.items = (st.items || []).concat(it); return `KURA finds ${it}.`; }
+      case "item": { const it = rollItem(st); st.items = (st.items || []).concat(it); return `KURA finds ${it}.`; }
       case "demon": {
         // A demon appears and stays until it's fought, talked down, or escaped (see the ENCOUNTER section).
         const name = pickDemon(st);

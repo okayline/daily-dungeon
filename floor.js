@@ -41,8 +41,8 @@
 
     // The stairs down: usually the farthest room, sometimes the middle one. Never the start.
     const stairs = rand() < 0.7 ? 2 : 1;
-    // The ? lure (a shop, special room or rare item): most floors have one, never in the start room.
-    const lure = rand() < 0.75 ? pick([1, 2]) : -1;
+    // The ? locker (a rare item for now): about 1 floor in 4 has one, never in the start room.
+    const lure = rand() < 0.25 ? pick([1, 2]) : -1;
 
     // Hidden things: 1-3 per room, in a random order. SEARCH reveals them front to back.
     for (let i = 0; i < 3; i++) {
