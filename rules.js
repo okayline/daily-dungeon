@@ -92,6 +92,7 @@
   function gain(st, it, lines) {
     st.items = (st.items || []).concat(it);
     note(st, "items", it, "found");
+    tally(st, "items");
     const a = itemAlign(it);
     if (a && a !== "NEUTRAL") lean(st, "find" + a, lines);
   }
@@ -188,6 +189,7 @@
     const before = heatTier(d.heat[d.at] || 0);
     d.heat[d.at] = Math.min(HEAT_MAX + 4, (d.heat[d.at] || 0) + amount * omen(clock(st)).fx.heat);
     const after = heatTier(d.heat[d.at]);
+    st.stats = st.stats || {}; st.stats.maxHeat = Math.max(st.stats.maxHeat || 0, d.heat[d.at]);
     if (after > before) {
       const streak = d.streak && d.streak.room === d.at ? d.streak.count : 0, linger = (d.linger || [])[d.at] || 0;
       const kind = streak >= 4 ? "data" : linger >= 15 ? "folk" : "plain";
@@ -206,6 +208,8 @@
   // so a new action clears it; the page's once-a-minute catch-up (tick) keeps it.
   const clone = st => JSON.parse(JSON.stringify(st));
   const copy = st => { const c = clone(st); delete c.pull; return c; };
+  // Run stats for the end-of-run summary: counts kept in st.stats (steps, searches, demons, finds...).
+  const tally = (st, k, n = 1) => { st.stats = st.stats || {}; st.stats[k] = (st.stats[k] || 0) + n; };
 
   const CLUE = {
     stairsHere: ["> The stones underfoot ring hollow.", "> KURA's steps echo too long here.",
@@ -403,7 +407,7 @@
         const it = moon() === 4 && Math.random() < 0.5 ? pick(MOON_DROPS) : pick(names(Math.random() < 0.7 ? "RARE" : "MYTHIC"));
         gain(st, it); return `A locker holds ${it}.`;
       }
-      case "silver": { const n = R(20, 150); st.silver = silver + n; return `Coins in the rubble. ${n} SILVER.`; }
+      case "silver": { const n = R(20, 150); st.silver = silver + n; tally(st, "silverFound", n); return `Coins in the rubble. ${n} SILVER.`; }
       case "item": { const it = rollItem(st); gain(st, it); return `KURA finds ${it}.`; }
       case "demon": {
         // A demon appears and stays until it's fought, talked down, or escaped (see the ENCOUNTER section).
@@ -411,7 +415,7 @@
         const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * (UNIQUE[name] ? UNIQUE[name].hp : 1));
         st.encounter = { name, family: familyOf(name), align: alignOf(name), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
         st.round = [`${A(name)} blocks the way.`, STANCE_LINE[stance(st, st.encounter)](name)];
-        note(st, "demons", name, "met");
+        note(st, "demons", name, "met"); tally(st, "met");
         return `${A(name)} appears!`;
       }
     }
@@ -482,6 +486,7 @@
     d.streak = d.streak && d.streak.room === d.at && d.streak.dir === dir ? { ...d.streak, count: d.streak.count + 1 } : { room: d.at, dir, count: 1 };
     d.linger = d.linger || [0, 0, 0]; d.linger[d.at]++;
     const chance = encounterChance(st);
+    tally(st, "searches");
     lean(st, heatTier((d.heat || [])[d.at] || 0) >= 2 ? "hot" : "search");
     heatUp(st, 1);
     const fx = omen(clock(st)).fx;
@@ -564,10 +569,12 @@
       st.encounter = null;
       st.roundOver = true;
       st.round = [`KURA runs ${NAME[dir]} and leaves ${the(e.name)} behind.`, ...lines];
+      tally(st, "fled");
     } else act(st);
     const descending = d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at);
     // Taking the stairs down doesn't use the day's step; walking to another room does.
-    if (!descending) st.today.stepped = true;
+    if (!descending) { st.today.stepped = true; tally(st, "steps"); }
+    else tally(st, "floors");
     st.facing = dir;
     if (descending) {
       // Bonus days: the next floor belongs to next week, so going down early banks the rest of this one.
@@ -643,7 +650,7 @@
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },
-      align: "NEUTRAL", alignScore: 0, alignShifts: 0, alignTold: false, silver: 0, ichor: 0, items: [], encounter: null,
+      endShown: false, stats: {}, align: "NEUTRAL", alignScore: 0, alignShifts: 0, alignTold: false, silver: 0, ichor: 0, items: [], encounter: null,
       party: [
         { name: "KURA", lv: 1, hp: 30, hpmax: 30, mp: 8, mpmax: 8 },
         { name: "ELF", lv: 1, hp: 22, hpmax: 22, mp: 14, mpmax: 14, family: "folklore", align: "CHAOS", demon: true },
@@ -656,6 +663,7 @@
     // Very rarely, something good is already in the bag: 1 run in 40 a RARE, 1 in 200 a MYTHIC.
     const luck = Math.random(), lucky = luck < 0.005 ? "MYTHIC" : luck < 0.03 ? "RARE" : null;
     if (lucky) gain(st, pick(names(lucky)));
+    st.stats = {};                                     // the starting bag doesn't count as finds
     const deadline = firstDeadline(t);
     arrive(st, 1, deadline);
     st.log = `> Day 1. KURA descends into B1F.${lucky ? " Her bag feels heavier than it should." : ""}`;
@@ -720,6 +728,7 @@
     const e = st.encounter;
     const n = R(5, 30) + 3 * floorNum(st);
     st.ichor = (st.ichor ?? st.mag ?? 0) + n;
+    tally(st, "beaten"); tally(st, "ichorWon", n);
     lines.push(`${THE(e.name)} falls.  +${n} ICHOR`);
     const dropOdds = [0, 0, 0, 0.1, 0.25, 0.1, 0, 0][moon()];
     if (Math.random() < dropOdds) {
@@ -856,6 +865,7 @@
     const lines = [];
     st.roundOver = false;
     st.log = `> Day ${st.day}. KURA speaks to ${the(e.name)}.`;
+    tally(st, "demonTalks");
     lean(st, "talk", lines);
     if (e.angered || (UNIQUE[e.name] && !UNIQUE[e.name].talks)) {
       lines.push(`${THE(e.name)} won't listen.`);
@@ -967,6 +977,7 @@
   function chat(st) {
     if (!ensureFloor(st)) return show(st);
     act(st);
+    tally(st, "partyTalks");
     const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
     const odd = moon() === 4 ? 0.25 : 0.12;
     if (!friends.length || Math.random() < odd) {
@@ -1081,6 +1092,7 @@
       e.stage = null; e.angered = true; demonTurn(st, lines);
       st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st);
     }
+    tally(st, "gifts");
     if (g.silver) { st.silver -= g.silver; lines.push(`KURA gives ${g.label}.`); lean(st, "pay", lines); }
     else {
       st.items.splice(st.items.indexOf(g.item), 1); lines.push(`KURA gives ${g.item}.`);
@@ -1181,13 +1193,31 @@
     const hpmax = 12 + lv * 5, mpmax = lv * 2 + R(0, 4);
     st.party.push({ name: e.name, lv, hp: hpmax, hpmax, mp: mpmax, mpmax, family: e.family, align: e.align, demon: true });
     lines.push(`${e.name}: "${say2(e, "join")}"`, `${e.name} joins the party.`);
-    note(st, "demons", e.name, "joined");
+    note(st, "demons", e.name, "joined"); tally(st, "recruited");
     lean(st, e.align, lines);
     st.log = `> Day ${st.day}. ${e.name} joins the party.`;
     st.encounter = null;
   }
 
-  const api = { next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, codex, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  // The end-of-run summary: label/value pairs for the log screen.
+  function summary(st) {
+    const k = st.stats || {}, d = st.dungeon, heat = d && d.heat ? d.heat[d.at] || 0 : 0;
+    const TIER = ["calm", "uneasy", "nervous", "wrong"];
+    const fixed = n => (n > 0 ? "+" : "") + (Math.round((n || 0) * 10) / 10);
+    return [
+      ["Reached", `${st.floor}  (${k.floors || 0} floor${k.floors === 1 ? "" : "s"} descended)`],
+      ["Days", st.day], ["Turns", st.steps || 0], ["Steps walked", k.steps || 0], ["Searches", k.searches || 0],
+      ["Alignment", `${st.align}  (lean ${fixed(st.alignScore)}, LAW - / CHAOS +)`],
+      ["Heat here", `${Math.round(heat)}  (${TIER[heatTier(heat)]})`], ["Hottest room", Math.round(k.maxHeat || 0)],
+      ["Demons met", k.met || 0], ["Beaten", k.beaten || 0], ["Talked to", k.demonTalks || 0],
+      ["Gifts given", k.gifts || 0], ["Recruited", k.recruited || 0], ["Escaped", k.fled || 0],
+      ["Party talks", k.partyTalks || 0], ["Items found", k.items || 0],
+      ["SILVER", `${st.silver || 0}  (${k.silverFound || 0} found)`], ["ICHOR", `${st.ichor || 0}  (${k.ichorWon || 0} won)`],
+      ["Party left", (st.party || []).slice(1).map(p => p.name).join(", ") || "nobody"],
+    ];
+  }
+
+  const api = { summary, next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, codex, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

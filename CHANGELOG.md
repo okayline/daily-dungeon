@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.27 - Oct 6 2026, 19:16 HST
+
+- **A block moon** sits at the far left of the top panel, showing today's phase: lit columns fill in as it waxes and empty as it wanes, and on the page the lit part glows and slowly breathes. The phase bar shifts over to make room.
+- **The day's step is the `[^]` button** above the facing letter in the 3D view: it walks KURA the way she faces (dimmed when that's a wall or the step is spent). The NSEW buttons are gone from the bottom right, which is kept free for answering the party later. The N/S/E/W keys still work, and in a fight `[R]UN` handles escaping.
+- `[C]ODEX` left the bottom border; it's still in INVOKE (and on the C key).
+- **The end-of-run log has the whole run's stats:** floor reached, days, turns, steps walked, searches, alignment and its hidden lean, heat (here and hottest), demons met, beaten, talked to, gifted, recruited and escaped, party talks, items found, SILVER and ICHOR, and who was left in the party.
+- On a run's first day, taking the step asks twice: "GO WEST?" and then "ARE YOU REALLY SURE? This is your only move for the day."
+- The fight box has a `[R]UN` button (or R): KURA runs through the door she faces, or another open one. It's dimmed when today's step is already spent.
+- When the run ends, the adventure log opens by itself (after the fight box is closed), topped with where and when it ended: "THE RUN IS OVER. B2F, day 4, turn 61."
+
 ## v0.26 - Oct 6 2026, 16:02 HST
 
 - Trying to use an item that does nothing still counts a TURN, like any other action.

@@ -74,6 +74,10 @@
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
   /* Rarity colors, Diablo-style. */
+  .lit { color: var(--moon); text-shadow: 0 0 6px var(--moon); animation: breathe 4s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
+  .mframe { color: var(--trail); }
+  .step { color: var(--bright); }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .t-COMMON { color: var(--fg); } .t-UNCOMMON { color: #7bd88f; } .t-RARE { color: #6aa9ff; }
   .t-MYTHIC { color: var(--gold); text-shadow: 0 0 6px var(--gold); } .t-MOON { color: #dfe9ff; text-shadow: 0 0 8px #9fc4ff; }
@@ -119,19 +123,19 @@
         const left = esc(line.slice(0, 48))
           .replace("[&lt;]", '<span class="btn" data-act="left">[&lt;]</span>')
           .replace("[&gt;]", '<span class="btn" data-act="right">[&gt;]</span>')
+          // [^] takes the day's step forward; dim when that way is a wall or the step is spent.
+          .replace("[^]", `<span class="btn step${save && RULES.available(save)[save.facing] ? "" : " off"}" data-act="forward">[^]</span>`)
           .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         return left + esc(line.slice(48));
       }
-      if (i === 1) return esc(line).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
+      // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
+      const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);
+      if (i === 1) return moonBox(esc(line)).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
         .replace(/([日月火水木金土])/, '<span class="kanji"><span class="g">$1</span></span>');
-      if (i === 4) return esc(line).replace("^^^", '<span class="moon">^^^</span>');
+      if (i === 2 || i === 3) return moonBox(esc(line));
+      if (i === 4) return moonBox(esc(line)).replace("^^^", '<span class="moon">^^^</span>');
       // Log line 2 glows gold right after using an item.
       if (i === lines.length - 5 && logGlow) return esc(line).replace(/^(\| )(.*?)(\s*\|)$/, '$1<span class="gold">$2</span>$3');
-      // During a fight, "RUN?" sits in the rule just above the glowing direction buttons.
-      if (i === lines.length - 3 && save && save.encounter) {
-        const label = " RUN? ", at = 61;
-        return esc(line.slice(0, at)) + `<span class="runlabel">${label}</span>` + esc(line.slice(at + label.length));
-      }
       if (i === lines.length - 2) {
         // Daily actions dim once used (or when there's no door that way).
         const can = save ? RULES.available(save) : {};
@@ -201,6 +205,14 @@
     const before = JSON.stringify(save), log = save.log;
     save = RULES.tick(save);
     if (JSON.stringify(save) !== before) { remember(log); persist(); }
+    endLog();
+  }
+  // When the run ends (KURA falls, or a deadline passes), the log opens once by itself,
+  // after any fight box has been closed.
+  function endLog() {
+    if (!save || !save.dead || save.endShown || !document.getElementById("found").hidden) return;
+    save.endShown = true; persist();
+    setTimeout(() => toggleLog(true), 300);
   }
 
   // Before anything reads the clock, ask the server for the real time (the Date on its reply to a
@@ -233,7 +245,12 @@
     box.hidden = !open;
     if (open) {
       const h = (save && save.history) || [];
-      box.querySelector("pre").textContent = "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
+      // After the run ends, the log opens on its own with a short epitaph on top.
+      const end = save && save.dead ? `THE RUN IS OVER.  ${save.floor}, day ${save.day}, turn ${save.steps || 0}.\n` +
+        `${(save.log || "").replace(/^> (Day \d+\. )?/, "")}\n\n` +
+        RULES.summary(save).map(([k, v]) => "  " + (k + " ").padEnd(15, ".") + " " + v).join("\n") +
+        "\n\n[R]ST begins a new run.\n\n" : "";
+      box.querySelector("pre").textContent = end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
         (h.length ? h.slice().reverse().join("\n") : "Nothing yet.");
     }
   }
@@ -359,13 +376,16 @@
   let armed = null, armTimer = null;
   function disarm() { armed = null; clearTimeout(armTimer); }
   // The step confirmation is a popup: YES (Enter, Y, or the same direction again) or NO (Esc, anything else).
-  function confirmBox(dir) {
+  // On a run's first day, a second box makes sure the player knows what a step costs.
+  let reallySure = false;
+  function confirmBox(dir, again) {
+    reallySure = !!again;
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     pre.innerHTML = "";
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
-    add(`GO ${NAMES[dir]}?`, "gold");
+    add(again ? "ARE YOU REALLY SURE?" : `GO ${NAMES[dir]}?`, "gold");
     add(" ");
-    add("This uses today's one step.");
+    add(again ? "This is your only move for the day." : "This uses today's one step.");
     add(" ");
     const row = document.createElement("div"), opt = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.cact = a; return e; };
     row.append(opt("[ YES ]", "yes"), "    ", opt("[ NO ]", "no"));
@@ -376,6 +396,7 @@
   function answerConfirm(yes) {
     const dir = armed;
     document.getElementById("found").hidden = true;
+    if (yes && dir && save && save.day === 1 && !reallySure && !save.encounter) return confirmBox(dir, true);
     if (yes && dir) act("go-" + dir); else { disarm(); draw(); }
   }
   // When a search turns something up, a box says what it was and waits for Enter, Space, Esc or a
@@ -409,6 +430,7 @@
   function closeFound() {
     document.getElementById("found").hidden = true;
     if (save && save.roundOver) { delete save.round; delete save.roundOver; persist(); draw(); }
+    endLog();
   }
 
   // ENCOUNTER box: the demon, its HP, what happened this round, and the choices. It stays open until
@@ -441,7 +463,13 @@
       else if (e.stage === "swap") {
         save.party.forEach((p, i) => { if (i > 0) row.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
         row.append(opt("[N]O", "swap-none"));
-      } else row.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"));
+      } else {
+        // RUN takes today's step through a door (the one KURA faces if she can, else any open one).
+        const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]);
+        const run = opt("[R]UN", "run");
+        if (!out.length) run.classList.add("off");
+        row.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", run);
+      }
       pre.appendChild(row);
 
     } else add("[ OK ]", "btn");
@@ -451,6 +479,11 @@
   }
 
   function act(name) {
+    if (name === "forward" && save) name = "go-" + save.facing;
+    if (name === "run" && save && save.encounter) {
+      const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]);
+      name = "go-" + (out.includes(save.facing) ? save.facing : out[0] || save.facing);
+    }
     if (name !== "invoke" && name !== "codex") logGlow = false;
     if (name.startsWith("go-") && save) {
       const dir = name.slice(3);
@@ -524,7 +557,7 @@
         if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", escape: "give-none" }[key];
         else if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", n: "go-N", s: "go-S", e: "go-E", w: "go-W" }[key];
+        else k = { f: "fight", t: "talk", r: "run", n: "go-N", s: "go-S", e: "go-E", w: "go-W" }[key];
         if (k) act(k);
       } else if (key === "enter" || key === " " || key === "escape") closeFound();
       return;

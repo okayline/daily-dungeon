@@ -162,22 +162,28 @@
     // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 18, `[<]  ${st.facing || "?"}  [>]`);
+    overlay(VH - 2, 22, "[^]");          // the day's step: forward, the way KURA faces
     const moons = ["(     )", "(    ))", "(  ))))", "())))))", "(((O)))", "((((())", "((((  )", "((    )"];
     const names = ["NEW", "CRESC", "HALF", "GIBB", "FULL", "GIBB", "HALF", "CRESC"];
     const long = ["NEW", "WAX CRESC", "1ST QTR", "WAX GIBB", "FULL", "WANE GIBB", "LAST QTR", "WANE CRESC"];
     const r = s => "|" + ljust(s, W - 2) + "|";
     const rc = s => "|" + center(s, W - 2) + "|";
-    const head = `  MOON  ${idx}/8  ${long[idx]}`;
+    // The block moon at the far left: 4 rows, lit columns filling in as it waxes and emptying as it wanes.
+    const LIT = ["    ", "░   ", "▓▓  ", "███ ", "████", " ███", "  ▓▓", "   ░"][idx];
+    const box = [" ╭────╮ ", ` │${LIT}│ `, ` │${LIT}│ `, " ╰────╯ "];
+    const BW = W - 2 - box[0].length;      // 70 columns to the right of the moon
+    const bar = s => box[0] && center(s, BW);
+    const head = ` MOON  ${idx}/8  ${long[idx]}`;
     // The Japanese weekday kanji sits left of the date. A kanji is two columns wide on screen.
     const tail = `${when.kanji} ${when.date}   ${when.time} ${when.zone}  `;
-    const S = ["+" + "=".repeat(78) + "+", "|" + head + " ".repeat(78 - head.length - tail.length - 1) + tail + "|"];
-    S.push(rc(moons.map(m => center(m, 9)).join("")));
-    S.push(rc(names.map(n => center(n, 9)).join("")));
+    const S = ["+" + "=".repeat(78) + "+", "|" + box[0] + head + " ".repeat(BW - head.length - tail.length - 1) + tail + "|"];
+    S.push("|" + box[1] + bar(moons.map(m => center(m, 8)).join("")) + "|");
+    S.push("|" + box[2] + bar(names.map(n => center(n, 8)).join("")) + "|");
     // The marker row also carries a short moon update ("The moon is day 25, waning crescent."),
     // placed on whichever side of the row the ^^^ marker isn't, so the two never touch.
-    const marks = rc(moons.map((_, i) => center(i === idx ? "^^^" : "", 9)).join(""));
-    const note = moonNote(now), left = marks.indexOf("^^^") > 40;
-    S.push(left ? "|  " + note + marks.slice(3 + note.length) : marks.slice(0, 77 - note.length) + note + "  |");
+    const marks = bar(moons.map((_, i) => center(i === idx ? "^^^" : "", 8)).join(""));
+    const note = moonNote(now), left = marks.indexOf("^^^") > 34;
+    S.push("|" + box[3] + (left ? " " + note + marks.slice(1 + note.length) : marks.slice(0, BW - 1 - note.length) + note + " ") + "|");
     S.push("+" + "=".repeat(78) + "+");
     // Right panel is 29 characters wide: a leading space plus 28.
     const PW = 29, rule = " " + "-".repeat(PW - 1);
@@ -228,9 +234,10 @@
     for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step on the right.
-    const free = " [F]IGHT [T]ALK [I]NVOKE SE[A]RCH", daily = "| [N]ORTH [S]OUTH [E]AST [W]EST ";
+    // The day's step is the [^] button in the 3D view now; the right side waits for answers ([Y]ES [N]O, later).
+    const free = " [F]IGHT [T]ALK [I]NVOKE SE[A]RCH", daily = "|" + " ".repeat(30);
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " [C]ODEX [L]OG [B]ACKUP [R]ST ";                 // system buttons tucked into the bottom border
+    const sys = " [L]OG [B]ACKUP [R]ST ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");
