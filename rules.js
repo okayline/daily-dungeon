@@ -357,6 +357,8 @@
       settled = was > 0 && heatTier(st.dungeon.heat[at]) < was;
     }
     if (st.dungeon) st.dungeon.linger = [0, 0, 0];
+    // A night's rest gives back some patience.
+    st.party = (st.party || []).map(p => p.patience === undefined ? p : { ...p, patience: Math.min(PATIENCE, p.patience + 3) });
     // A night's rest heals a fifth of everyone's HP (fallen allies too, slowly).
     if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
     const d = st.dungeon;
@@ -869,6 +871,70 @@
     folklore: ['{n}: "Mortals and their chatter."', '{n}: "Mind the old marks on the stone."',
       '{n}: "Speak softly. Old things sleep here."', "{n} sniffs the air and says nothing."],
   };
+  // The room's heat colors the answer: calm (tier 0) gets the lines above; as heat climbs, whoever
+  // answers grows uneasy, then nervous, then alarmed. Talking is how KURA can read the room.
+  const PARTY_HEAT = {
+    ELF: [, ['ELF: "Something has noticed us. Not much yet."', 'ELF: "Lower your voice. The room is waking."'],
+      ['ELF: "I can feel it watching. It has been for a while."', 'ELF: "Enough noise. Something is coming closer."'],
+      ["ELF says nothing. Her hand stays on her blade.", 'ELF: "...Listen."']],
+    PIXIE: [, ['PIXIE: "Did you hear that? ...No? Okay. Okay."', 'PIXIE: "It\'s getting a little crowded in here."'],
+      ['PIXIE: "I don\'t like this room anymore. It doesn\'t like us either."', 'PIXIE: "Something keeps breathing. It isn\'t us."'],
+      ["PIXIE hides in KURA's hood and won't come out.", "PIXIE tries to answer. Her voice won't come."]],
+    "CU SITH": [, ["CU SITH's ears flick toward the walls.", "CU SITH answers, but keeps watching the corners."],
+      ["CU SITH growls low at nothing KURA can see.", "CU SITH won't sit. Its hackles are up."],
+      ["CU SITH stands between KURA and the dark, snarling.", "CU SITH's growl doesn't stop, even to breathe."]],
+  };
+  const FAMILY_HEAT = {
+    data: [, ['{n}: "BACKGROUND ACTIVITY DETECTED."', '{n}: "MINOR SIGNAL NEARBY. MONITORING."'],
+      ['{n}: "MULTIPLE SIGNALS. ORIGIN: EVERYWHERE."', '{n}: "WARNING: TRACE DETECTED."'],
+      ['{n}: "0101 0101 0101 0101"', "{n}'s cursor blinks faster and faster."]],
+    hardware: [, ['{n}: "fan\'s spinning up. probably nothing"', '{n}: "do you hear humming? not me. other humming"'],
+      ['{n}: "something keeps pinging me. I don\'t like it"', '{n}: "temperature rising. not mine. the room\'s"'],
+      ['{n}: "it\'s so loud in here. is it loud? it\'s loud"', "{n} sparks and refuses to answer."]],
+    hybrid: [, ['{n}: "The wires here are starting to hum."', '{n}: "Static in the air. Someone\'s awake."'],
+      ['{n}: "Both halves of me are cold."', '{n}: "The walls are listening harder now."'],
+      ["{n} answers in a voice that isn't its own.", "{n} goes rigid, half its shape crackling."]],
+    folklore: [, ['{n}: "The old things are stirring."', '{n}: "Mind your voice. We are being noticed."'],
+      ['{n}: "This hall is hungry. We should not feed it."', '{n}: "I smell something old coming closer."'],
+      ['{n}: "Hush. It knows our names now."', "{n} bares its teeth at the dark."]],
+  };
+  // PATIENCE. Each party member has a little (5); every time KURA talks to them it drops by one.
+  // At 2 and below they get short with her, and at 0 they ignore her. A night's rest gives back 3.
+  // (A hidden value with a tell: only the replies show it. May fold into Dissonance later.)
+  const PATIENCE = 5;
+  const PARTY_TIRED = {
+    ELF: [['ELF pretends not to hear.', 'ELF has turned her back.'],
+      ['ELF sighs, long and pointed.', 'ELF: "Talk to the dog."'],
+      ['ELF: "You\'ve asked me that already."', 'ELF: "Must you?"']],
+    PIXIE: [['PIXIE flies to the far side of the room.', 'PIXIE hums loudly over KURA.'],
+      ['PIXIE: "I\'m not talking to you right now."', 'PIXIE sticks out her tongue.'],
+      ['PIXIE: "You talk a LOT, you know that?"', 'PIXIE: "Again? Okay. Fine. Hi."']],
+    "CU SITH": [['CU SITH pretends to be asleep.', 'CU SITH looks at KURA, then away.'],
+      ['CU SITH lies down facing the wall.', 'CU SITH flattens its ears.'],
+      ['CU SITH yawns at KURA.', 'CU SITH thumps its tail once. Just once.']],
+  };
+  const FAMILY_TIRED = {
+    data: [['{n} does not respond. 0 bars.', '{n}: "429"'],
+      ['{n}: "RATE LIMIT EXCEEDED."', '{n}: "PLEASE WAIT."'],
+      ['{n}: "QUERY ALREADY ANSWERED."', '{n}: "REPEAT REQUEST DETECTED."']],
+    hardware: [['{n} has switched itself off.', '{n}: "..."'],
+      ['{n}: "sleep mode. sleep mode."', '{n} plays a hold tone.'],
+      ['{n}: "you said that already. it\'s ok"', '{n}: "buffer full. sorry"']],
+    hybrid: [['{n} folds into the wires and stays there.', '{n} is pretending to be furniture.'],
+      ['{n} answers only in static.', '{n} turns half its face away.'],
+      ['{n}: "Your voice is wearing a groove in me."', '{n}: "We have spoken. Enough."']],
+    folklore: [['{n} will not look at KURA.', '{n} has gone very, very still.'],
+      ['{n}: "Speak once more and I bite."', '{n} glares.'],
+      ['{n}: "Mortals never know when to stop."', '{n}: "Again? Truly?"']],
+  };
+  const SNAP = { ELF: "ELF's blade flicks out. A thin cut on KURA's arm.", "CU SITH": "CU SITH bites KURA's hand. Not hard. Hard enough." };
+  const QUIT = {
+    PIXIE: 'PIXIE: "FINE. Bye!" She flies off and doesn\'t come back.',
+    data: '{n}: "SESSION TERMINATED." {n} is gone.',
+    hardware: '{n}: "ok. bye." {n} wanders off into the dark.',
+    hybrid: "{n} unlinks without a word and is gone.",
+    folklore: '{n}: "Find another servant." {n} is gone.',
+  };
   const VOICE_FROM_DARK = ['A voice answers from the stone: "Not yet."', 'Something that is not the party says: "...yes..."',
     "The dark answers in KURA's own voice.", 'A voice, very close: "Keep going."', "Something laughs, then apologizes.",
     "A voice below counts to seven, then stops.", 'A whisper: "We heard you the first time."'];
@@ -884,7 +950,28 @@
     }
     const p = pick(friends);
     st.log = `> Day ${st.day}. KURA talks to ${p.name}.`;
-    const pool = (PARTY_TALK[p.name] || FAMILY_TALK[p.family || "folklore"]).map(l => "> " + l.replace(/\{n\}/g, p.name));
+    const tier = heatTier((st.dungeon.heat || [])[st.dungeon.at] || 0), fam = p.family || "folklore";
+    // Out of patience and still being talked to: half the time they snap. CHAOS members lash out at
+    // KURA (it never kills her); LAW and NEUTRAL ones leave the party for good.
+    if (p.patience === 0 && Math.random() < 0.5) {
+      if (p.align === "CHAOS") {
+        const kura = st.party[0], dmg = Math.min(kura.hp - 1, R(2, Math.ceil(kura.hpmax / 5)));
+        st.party = st.party.map((q, i) => i === 0 ? { ...q, hp: q.hp - Math.max(0, dmg) } : q);
+        st.log = `> Day ${st.day}. ${p.name} has had enough.`;
+        st.extra = "> " + (SNAP[p.name] || `${p.name} strikes KURA.`) + (dmg > 0 ? ` -${dmg} HP` : "");
+      } else {
+        st.party = st.party.filter(q => q !== p);
+        st.log = `> Day ${st.day}. ${p.name} leaves the party.`;
+        st.extra = "> " + (QUIT[p.name] || QUIT[fam]).replace(/\{n\}/g, p.name);
+      }
+      return show(st);
+    }
+    p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
+    // A dangerous room (nervous or worse) outranks being annoyed; otherwise a tired member says so.
+    const lines = tier >= 2 ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier]
+      : p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[fam])[p.patience]
+      : tier ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier] : (PARTY_TALK[p.name] || FAMILY_TALK[fam]);
+    const pool = lines.map(l => "> " + l.replace(/\{n\}/g, p.name));
     st.extra = pick(pool.filter(l => l !== st.extra));        // never the same line twice in a row
     return show(st);
   }
