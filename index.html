@@ -38,8 +38,9 @@
   /* The clock's colon blinks slowly (1s on, 1s off); hidden, it still keeps its space. */
   .colon { animation: blink 2s steps(1) infinite; }
   /* The weekday kanji takes exactly two character cells, so the frame stays straight. */
-  .kanji { display: inline-block; width: 2ch; text-align: center; overflow: visible; }
-  .kanji { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "MS Gothic", sans-serif; line-height: 0; }
+  /* Like .cell: the box keeps the screen font so 2ch is two grid cells; only the glyph switches font. */
+  .kanji { display: inline-block; width: 2ch; text-align: center; overflow: visible; white-space: nowrap; }
+  .kanji .g { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "MS Gothic", sans-serif; line-height: 0; }
   @keyframes blink { 50% { visibility: hidden; } }
   .stairs { color: var(--moon); }
   .goal { color: var(--gold); text-shadow: 0 0 6px var(--gold); }
@@ -67,6 +68,7 @@
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
   /* Rarity colors, Diablo-style. */
+  .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .t-COMMON { color: var(--fg); } .t-UNCOMMON { color: #7bd88f; } .t-RARE { color: #6aa9ff; }
   .t-MYTHIC { color: var(--gold); text-shadow: 0 0 6px var(--gold); } .t-MOON { color: #dfe9ff; text-shadow: 0 0 8px #9fc4ff; }
   .foundbox .demon { color: var(--demon); }
@@ -114,7 +116,7 @@
         return left + esc(line.slice(48));
       }
       if (i === 1) return esc(line).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
-        .replace(/([日月火水木金土])/, '<span class="kanji">$1</span>');
+        .replace(/([日月火水木金土])/, '<span class="kanji"><span class="g">$1</span></span>');
       if (i === 4) return esc(line).replace("^^^", '<span class="moon">^^^</span>');
       // During a fight, "RUN?" sits in the rule just above the glowing direction buttons.
       if (i === lines.length - 3 && save && save.encounter) {
@@ -141,7 +143,10 @@
         .replace("[B]ACKUP", '<span class="btn" data-act="backup">[B]ACKUP</span>')
         .replace("[R]ST", '<span class="btn" data-act="reset">[R]ST</span>');
       return esc(line);
-    }).join("\n");
+    }).join("\n")
+      // The ALIGN arrow (which way the last action pulled KURA) glows white.
+      .replace(/ALIGN (&lt;|\[)(LAW|NEU|CHA)(&gt;|\])/, (m, l, t, r) => "ALIGN " +
+        (l === "&lt;" ? '<span class="pull">&lt;</span>' : l) + t + (r === "&gt;" ? '<span class="pull">&gt;</span>' : r));
   }
 
   function draw() {
@@ -241,7 +246,7 @@
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
-      `${i < 9 ? i + 1 : " "}  ${it.tier.padEnd(9)} ${(it.name + (it.count > 1 ? " x" + it.count : "")).padEnd(36)} ${it.text}`,
+      `${i < 9 ? i + 1 : " "}  ${it.tier.padEnd(9)} ${(it.align ? `[${it.align.slice(0, 3)}]` : "").padEnd(5)} ${(it.name + (it.count > 1 ? " x" + it.count : "")).padEnd(36)} ${it.text}`,
       "t-" + it.tier + (it.usable ? " btn" : ""), i));
     add(" ");
     add("Press a number or click an item to use it. [I] or Esc closes.");
@@ -299,7 +304,7 @@
     add(" ");
     for (const l of lines) {
       if (typeof l === "string") add(l, "gold");
-      else { add(l.text, "t-" + l.tier); add(l.tier, "t-" + l.tier); }
+      else { const a = RULES.itemAlign(l.text); add(l.text, "t-" + l.tier); add(l.tier + (a ? `  [${a.slice(0, 3)}]` : ""), "t-" + l.tier); }
     }
     const notes = newItems.map(n => (RULES.inventory({ items: [n] })[0] || {}).text).filter(Boolean);
     if (notes.length) { add(" "); notes.forEach(n => add(n)); }
@@ -331,7 +336,11 @@
     if (e) {
       const opt = (label, act) => { const d = document.createElement("span"); d.textContent = label; d.className = "btn"; d.dataset.fact = act; return d; };
       const row = document.createElement("div");
-      row.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"));
+      if (e.stage === "ask" || e.stage === "join") row.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
+      else if (e.stage === "swap") {
+        save.party.forEach((p, i) => { if (i > 0) row.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
+        row.append(opt("[N]O", "swap-none"));
+      } else row.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"));
       pre.appendChild(row);
 
     } else add("[ OK ]", "btn");
@@ -357,7 +366,9 @@
     if (name === "reset" && !confirm("Begin a new run? This run will be lost.")) return;
     const log = save.log, steps = save.steps;
     const before = { items: (save.items || []).slice(), silver: save.silver };
-    save = name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
+    save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
+      : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
+      : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
     if (name === "reset") save.history = [];
     remember(name === "reset" || save.steps !== steps ? "" : log);
@@ -393,7 +404,11 @@
         return;
       }
       if (fbox.dataset.mode === "encounter") {
-        const k = { f: "fight", t: "talk", n: "go-N", s: "go-S", e: "go-E", w: "go-W" }[key];
+        const st2 = save.encounter && save.encounter.stage;
+        let k;
+        if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
+        else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
+        else k = { f: "fight", t: "talk", n: "go-N", s: "go-S", e: "go-E", w: "go-W" }[key];
         if (k) act(k);
       } else if (key === "enter" || key === " " || key === "escape") closeFound();
       return;

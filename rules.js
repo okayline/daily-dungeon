@@ -70,6 +70,30 @@
       ["a silver-veined horn", "Hums a note only the moon can hear."],
     ],
   };
+  // High-rarity items carry an alignment (commons and uncommons don't). Finding one pulls KURA a little
+  // toward it, and offering one to a demon of the same alignment makes it likelier to join.
+  const ITEM_ALIGN = {
+    // RARE: hybrids and odd tech
+    "a rune scratched into a circuit board": "NEUTRAL", "a salt-crusted network cable": "NEUTRAL",
+    "a candle stub in a soda can": "CHAOS", "a charm bracelet of old keycards": "LAW",
+    "a rosary of fiber optic beads": "LAW", "a sealed jar, humming faintly": "CHAOS",
+    "a SIM card in red thread": "CHAOS", "a graffiti-stained saint's medal": "NEUTRAL",
+    "a bullet casing on a leather cord": "CHAOS", "a keycard, one corner burned": "LAW",
+    "an old COMP chip": "LAW", "a black pearl": "NEUTRAL",
+    // MYTHIC: old-layer relics
+    "a jar of grave salt": "LAW", "a wax seal, unbroken": "LAW", "a chipped bone die": "CHAOS",
+    "a sealed reliquary": "LAW", "a ring of red gold": "CHAOS", "a sword in a rotted sheath": "NEUTRAL",
+    // MOON
+    "a moonstone": "NEUTRAL", "a shard of pale moonlight": "LAW", "a fang still warm": "CHAOS",
+    "a silver-veined horn": "CHAOS",
+  };
+  const itemAlign = name => ITEM_ALIGN[name] || null;
+  // KURA picks up an item; an aligned one tugs at her.
+  function gain(st, it, lines) {
+    st.items = (st.items || []).concat(it);
+    const a = itemAlign(it);
+    if (a && a !== "NEUTRAL") lean(st, "find" + a, lines);
+  }
   const TIERS = ["COMMON", "UNCOMMON", "RARE", "MYTHIC", "MOON"];
   const ITEM_INFO = {}, TIER = {};
   for (const t of TIERS) for (const [name, text, use, say] of CATALOG[t]) { ITEM_INFO[name] = { text, use, say }; TIER[name] = t; }
@@ -90,7 +114,8 @@
     hardware: ["STATIC RAT", "PAGER GHOUL", "VENDOR", "SCRAPPER", "DEADLINK", "LOOP SHADE"],
     hybrid: ["CHROME HOUND", "WIRE WITCH", "HEX DRONE", "SERVER GOLEM", "NEON DRYAD", "COIN WRAITH",
       "CHROME ONI", "KITSUNE.EXE", "PIXEL SPRITE", "STATIC BANSHEE", "LOOP LICH"],
-    folklore: ["REDCAP", "GAKI", "BANSHEE", "BARGHEST", "TROLL", "GHOUL", "ONI", "KAPPA", "LAMIA", "WRAITH", "IMP"],
+    folklore: ["REDCAP", "GAKI", "BANSHEE", "BARGHEST", "TROLL", "GHOUL", "ONI", "KAPPA", "LAMIA", "WRAITH", "IMP",
+      "PIXIE", "ELF", "CU SITH"],
   };
   const LADDER = [                                      // family weights by floor (B1F, B2F, B3F, B4F and deeper)
     { data: 7, hardware: 3, hybrid: 0, folklore: 0 },
@@ -176,7 +201,10 @@
   const doorList = room => Object.keys(room.doors).length > 1 ? "Two doors." : "A single door.";
   // The third log line. About half the time it carries a faint clue about the room KURA is in
   // or the door she faces (never a direction word); otherwise it's pure atmosphere.
-  const copy = st => JSON.parse(JSON.stringify(st));
+  // Every action starts from a copy. The ALIGN arrow (st.pull) belongs to the action that set it,
+  // so a new action clears it; the page's once-a-minute catch-up (tick) keeps it.
+  const clone = st => JSON.parse(JSON.stringify(st));
+  const copy = st => { const c = clone(st); delete c.pull; return c; };
 
   const CLUE = {
     stairsHere: ["> The stones underfoot ring hollow.", "> KURA's steps echo too long here.",
@@ -352,16 +380,16 @@
       // The ? is a hidden locker: usually a RARE, sometimes MYTHIC; under a full moon, half the time a MOON item.
       case "lure": {
         const it = moon() === 4 && Math.random() < 0.5 ? pick(MOON_DROPS) : pick(names(Math.random() < 0.7 ? "RARE" : "MYTHIC"));
-        st.items = (st.items || []).concat(it); return `A locker holds ${it}.`;
+        gain(st, it); return `A locker holds ${it}.`;
       }
       case "silver": { const n = R(20, 150); st.silver = silver + n; return `Coins in the rubble. ${n} SILVER.`; }
-      case "item": { const it = rollItem(st); st.items = (st.items || []).concat(it); return `KURA finds ${it}.`; }
+      case "item": { const it = rollItem(st); gain(st, it); return `KURA finds ${it}.`; }
       case "demon": {
         // A demon appears and stays until it's fought, talked down, or escaped (see the ENCOUNTER section).
         const name = pickDemon(st);
         const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * (UNIQUE[name] ? UNIQUE[name].hp : 1));
-        st.encounter = { name, hp: hpmax, hpmax, round: 0, angered: false };
-        st.round = [`${A(name)} blocks the way.`];
+        st.encounter = { name, family: familyOf(name), align: alignOf(name), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
+        st.round = [`${A(name)} blocks the way.`, STANCE_LINE[stance(st, st.encounter)](name)];
         return `${A(name)} appears!`;
       }
     }
@@ -432,6 +460,7 @@
     d.streak = d.streak && d.streak.room === d.at && d.streak.dir === dir ? { ...d.streak, count: d.streak.count + 1 } : { room: d.at, dir, count: 1 };
     d.linger = d.linger || [0, 0, 0]; d.linger[d.at]++;
     const chance = encounterChance(st);
+    lean(st, heatTier((d.heat || [])[d.at] || 0) >= 2 ? "hot" : "search");
     heatUp(st, 1);
     const fx = omen(clock(st)).fx;
     const where = `KURA searches the ${NAME[dir]} wall.`;
@@ -460,7 +489,7 @@
     }
     if (w.deep && w.deep.dir === dir && !w.deep.found && Math.random() < DEEP_FIND * fx.find) {
       w.deep.found = true;
-      st.items = (st.items || []).concat(w.deep.item);
+      gain(st, w.deep.item);
       st.log = say("Deep in the stone, something gives.");
       st.extra = `> KURA pulls out ${w.deep.item}.`;
       return show(st);
@@ -499,6 +528,7 @@
       const e = st.encounter, lines = [];
       act(st);
       today(st).stepped = true;
+      lean(st, "run", lines);
       st.facing = dir;
       st.roundOver = false;
       if (Math.random() < 0.5) {
@@ -511,7 +541,7 @@
       }
       st.encounter = null;
       st.roundOver = true;
-      st.round = [`KURA runs ${NAME[dir]} and leaves ${the(e.name)} behind.`];
+      st.round = [`KURA runs ${NAME[dir]} and leaves ${the(e.name)} behind.`, ...lines];
     } else act(st);
     const descending = d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at);
     // Taking the stairs down doesn't use the day's step; walking to another room does.
@@ -559,7 +589,7 @@
 
   // Catch the game up with the real date without taking an action (the page calls this as it draws).
   function tick(st) {
-    st = copy(st);
+    st = clone(st);
     if (!st.dungeon) return st;
     sync(st);
     return show(st);
@@ -583,12 +613,12 @@
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },
-      align: "NEUTRAL", silver: 0, ichor: 0, items: [], encounter: null,
+      align: "NEUTRAL", alignScore: 0, alignShifts: 0, alignTold: false, silver: 0, ichor: 0, items: [], encounter: null,
       party: [
         { name: "KURA", lv: 1, hp: 30, hpmax: 30, mp: 8, mpmax: 8 },
-        { name: "ELF", lv: 1, hp: 22, hpmax: 22, mp: 14, mpmax: 14 },
-        { name: "PIXIE", lv: 1, hp: 18, hpmax: 18, mp: 12, mpmax: 12 },
-        { name: "CU SITH", lv: 1, hp: 26, hpmax: 26, mp: 4, mpmax: 4 }],
+        { name: "ELF", lv: 1, hp: 22, hpmax: 22, mp: 14, mpmax: 14, family: "folklore", align: "CHAOS", demon: true },
+        { name: "PIXIE", lv: 1, hp: 18, hpmax: 18, mp: 12, mpmax: 12, family: "folklore", align: "NEUTRAL", demon: true },
+        { name: "CU SITH", lv: 1, hp: 26, hpmax: 26, mp: 4, mpmax: 4, family: "folklore", align: "CHAOS", demon: true }],
     });
     const deadline = firstDeadline(t);
     arrive(st, 1, deadline);
@@ -608,7 +638,7 @@
     for (const it of st.items || []) counts[it] = (counts[it] || 0) + 1;
     return Object.keys(counts).sort((x, y) => TIERS.indexOf(TIER[y]) - TIERS.indexOf(TIER[x])).map(name => {
       const info = ITEM_INFO[name] || { text: "" };
-      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON" };
+      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON", align: itemAlign(name) };
     });
   }
   // Use one of an item. Things that can't be used yet just get looked at.
@@ -657,8 +687,8 @@
     const dropOdds = [0, 0, 0, 0.1, 0.25, 0.1, 0, 0][moon()];
     if (Math.random() < dropOdds) {
       const it = pick(MOON_DROPS);
-      st.items = (st.items || []).concat(it);
       lines.push(`It leaves ${it}.`);
+      gain(st, it, lines);
     }
     st.log = `> Day ${st.day}. ${THE(e.name)} falls. ${n} ICHOR.`;
     st.encounter = null;
@@ -681,38 +711,195 @@
   function fight(st) {
     return round(st, (st, lines) => {
       const e = st.encounter;
+      e.stage = null;
       let total = 0;
       for (const p of st.party) if (p.hp > 0) total += R(1, 4) + Math.floor((p.lv || 1) / 2);
       e.hp = Math.max(0, e.hp - total);
       lines.push(`The party strikes. -${total}`);
       st.log = `> Day ${st.day}. KURA's party fights ${the(e.name)}.`;
-      if (e.hp <= 0) win(st, lines);
+      if (e.hp <= 0) { win(st, lines); lean(st, "kill", lines); } else lean(st, "fight", lines);
     }, "> Nothing here to fight.");
   }
   // TALK: the demon may listen and leave (sometimes with a gift), ask a price, or take offense.
-  function talk(st) {
-    return round(st, (st, lines) => {
-      const e = st.encounter;
-      st.log = `> Day ${st.day}. KURA speaks to ${the(e.name)}.`;
-      if (e.angered || (UNIQUE[e.name] && !UNIQUE[e.name].talks)) { lines.push(`${THE(e.name)} won't listen.`); return; }
-      const r = Math.random(), ok = Math.min(0.95, LISTEN[moon()] * omen(clock(st)).fx.talk);
-      if (r < ok * 0.6) {
-        lines.push(`${THE(e.name)} listens, and slips away.`);
-        if (Math.random() < 0.4) { const it = pick(ITEMS); st.items = (st.items || []).concat(it); lines.push(`It leaves ${it} behind.`); }
-        st.log = `> Day ${st.day}. KURA talks ${the(e.name)} down. It leaves.`;
-        st.encounter = null;
-      } else if (r < ok) {
-        const price = 20 + 10 * floorNum(st) + R(0, 20), have = st.silver ?? st.macca ?? 0;
-        if (have >= price) {
-          st.silver = have - price;
-          lines.push(`${THE(e.name)} wants ${price} SILVER. KURA pays. It leaves.`);
-          st.log = `> Day ${st.day}. KURA pays ${the(e.name)} ${price} SILVER. It leaves.`;
-          st.encounter = null;
-        } else { lines.push(`${THE(e.name)} wants ${price} SILVER. KURA has too little.`); e.angered = true; }
-      } else { lines.push(`${THE(e.name)} laughs at KURA.`); e.angered = Math.random() < 0.5; }
-    }, "> KURA speaks. Only the walls answer.");
+  // RECRUITING. KURA is the only human; everyone else in the party is a demon (ELF, PIXIE and CU SITH too).
+  // Talking can turn a demon into an ally. Each family speaks its own way and wants something different:
+  //   data:      system messages; wants a TASK (just say yes)
+  //   hardware:  corrupted memory; wants what it lost (SILVER buys it a "home")
+  //   hybrid:    half and half; wants SILVER
+  //   folklore:  old words; wants an offering (an item from the inventory)
+  // ALIGNMENT. Every demon has one: data things and clean machines are LAW, folklore is CHAOS,
+  // hybrids and haunted hardware are NEUTRAL (with a few outliers). KURA starts NEUTRAL and leans
+  // toward whatever she recruits, and her other choices nudge her too (see lean below).
+  const ALIGN_OUTLIERS = { "WORM": "CHAOS", "VENDOR": "LAW", "PAGER GHOUL": "NEUTRAL", "KITSUNE.EXE": "CHAOS", "PIXIE": "NEUTRAL" };
+  function alignOf(name) {
+    if (ALIGN_OUTLIERS[name]) return ALIGN_OUTLIERS[name];
+    const f = familyOf(name);
+    return f === "data" ? "LAW" : f === "folklore" ? "CHAOS" : "NEUTRAL";
   }
-  const api = { next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON" };
+  // How a demon sees KURA: "same", "neutral" or "opposite".
+  function stance(st, e) {
+    const me = String(st.align || "NEUTRAL").toUpperCase(), it = e.align || "NEUTRAL";
+    if (me === it) return "same";
+    if (me === "NEUTRAL" || it === "NEUTRAL") return "neutral";
+    return "opposite";
+  }
+  const STANCE_LINE = { same: n => `KURA is recognized. ${THE(n)} lowers its guard.`,
+    neutral: n => `${THE(n)} watches. Undecided.`, opposite: n => `${THE(n)} bares its teeth.` };
+  const STANCE_TALK = { same: 1.5, neutral: 1, opposite: 0.6 };
+  // KURA's lean. One hidden score (negative = LAW, positive = CHAOS) that choices nudge as she makes them.
+  // Early choices weigh more (each shift counts a little less than the last, down to 40%), the score is
+  // capped at +-6, and the tag only changes at thresholds: -3 LAW, +3 CHAOS, back to NEU within 1 of zero,
+  // so it never flickers. Walking, turning and using items don't count; choices do.
+  //   recruiting:            -1 LAW demon / +1 CHAOS demon
+  //   searching a cool room: -0.03 (patience)      searching a hot room: +0.2 (pushing your luck)
+  //   talking to a demon:    -0.15                 fighting a round:     +0.3    finishing it off: +0.6
+  //   paying SILVER or taking a TASK: -0.4        giving an offering:    +0.4
+  //   running through a door: +0.15
+  //   finding a LAW / CHAOS relic (RARE and up): -0.3 / +0.3; offering one pulls toward it (+-0.4, NEUTRAL: none)
+  const LEAN = { LAW: -1, CHAOS: 1, NEUTRAL: 0, search: -0.03, hot: 0.2, talk: -0.15, fight: 0.3, kill: 0.6,
+    pay: -0.4, task: -0.4, offer: 0.4, run: 0.15, findLAW: -0.3, findCHAOS: 0.3, offerLAW: -0.4 };
+  function lean(st, why, lines) {
+    const base = LEAN[why] || 0;
+    if (!base) return;
+    st.alignShifts = (st.alignShifts || 0) + 1;
+    const w = Math.max(0.4, 1 - 0.02 * (st.alignShifts - 1));
+    st.alignScore = Math.max(-6, Math.min(6, Math.round(((st.alignScore || 0) + base * w) * 1000) / 1000));
+    // Which way this action pulled, for the arrow on the ALIGN tag: <NEU] toward LAW, [NEU> toward CHAOS.
+    // Only real choices show an arrow; tiny nudges (patient searching) move the score quietly.
+    if (Math.abs(base) >= 0.1) st.pull = Math.round(((st.pull || 0) + base * w) * 1000) / 1000;
+    const before = String(st.align || "NEUTRAL").toUpperCase(), s = st.alignScore;
+    let after = before;
+    if (s <= -3) after = "LAW"; else if (s >= 3) after = "CHAOS";
+    else if (Math.abs(s) <= 1) after = "NEUTRAL";
+    let say = null;
+    if (after !== before) {
+      st.align = after;
+      st.alignTold = false;
+      say = after === "LAW" ? "The system takes notice. [LAW]" : after === "CHAOS" ? "The old things take notice. [CHA]" : "KURA finds her balance. [NEU]";
+    } else if (after === "NEUTRAL" && Math.abs(s) >= 2.4 && !st.alignTold) {
+      // A tell just before a flip, once each time she drifts that close.
+      st.alignTold = true;
+      say = "Something is pulling at you.";
+    } else if (Math.abs(s) < 1.5) st.alignTold = false;
+    if (!say) return;
+    if (lines) lines.push(say); else st.tell = "> " + say;
+  }
+  function familyOf(name) {
+    for (const f of Object.keys(FAMILY)) if (FAMILY[f].includes(name)) return f;
+    return "folklore";
+  }
+  const VOICE = {
+    data: { open: ["PROCESS DETECTED", "SIGNAL FOUND", "AWAITING INPUT"], ask: "ASSIGN TASK? Y / N",
+      join: "TASK RECEIVED. LINKED TO USER.", no: "CONNECTION LOST", scorn: "INPUT REJECTED", leave: "PROCESS ENDED" },
+    hardware: { open: ["ERROR 404: owner not found", "still here. still running", "are you my replacement?"],
+      ask: "PAYMENT REQUIRED: {p} SILVER. ok?", join: "NEW OWNER ACCEPTED. ok. I'll wait with you.",
+      no: "...ok. I'll wait here then.", scorn: "ACCESS DENIED. go away", leave: "SHUTTING DOWN. bye" },
+    hybrid: { open: ["ACCESS GRANTED, traveler.", "You smell of salt and static.", "What brings flesh this far down?"],
+      ask: "A toll, traveler: {p} SILVER.", join: "LINK ESTABLISHED. I walk with you now.",
+      no: "Then we are strangers still.", scorn: "Your words are noise.", leave: "It folds back into the wires." },
+    folklore: { open: ["Who comes into my hall?", "A living thing. How rare.", "You have the look of a beggar."],
+      ask: "Give me {o}, and we may speak of more.", join: "Then I am yours, little lantern.",
+      no: "Keep it, then. And keep away.", scorn: "Hah. Go back up, child.", leave: "It is gone like smoke." },
+  };
+  const say2 = (e, k) => { const v = VOICE[e.family || "folklore"][k]; return Array.isArray(v) ? pick(v) : v; };
+
+  // TALK, step by step. 1) The demon decides whether to listen (moon and omen). 2) It names its price.
+  // 3) KURA answers YES or NO. 4) Paid, it may offer to join. Talking rounds are peaceful unless it's scorned.
+  function talk(st) {
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    const e = st.encounter;
+    if (!e) { st.log = "> KURA speaks. Only the walls answer."; return show(st); }
+    if (e.stage) return show(st);                        // waiting on a YES/NO already
+    act(st);
+    const lines = [];
+    st.roundOver = false;
+    st.log = `> Day ${st.day}. KURA speaks to ${the(e.name)}.`;
+    lean(st, "talk", lines);
+    if (e.angered || (UNIQUE[e.name] && !UNIQUE[e.name].talks)) {
+      lines.push(`${THE(e.name)} won't listen.`);
+      demonTurn(st, lines);
+    } else if (Math.random() < Math.min(0.95, LISTEN[moon()] * omen(clock(st)).fx.talk * STANCE_TALK[stance(st, e)])) {
+      lines.push(`${e.name}: "${say2(e, "open")}"`);
+      const price = Math.round((20 + 10 * floorNum(st) + R(0, 20)) * { same: 0.7, neutral: 1, opposite: 1.5 }[stance(st, e)]);
+      const offer = (st.items || []).length ? pick(st.items) : null;
+      if (e.family === "folklore" && !offer) { lines.push(`${e.name}: "You have nothing I want."`); e.angered = true; demonTurn(st, lines); }
+      else {
+        e.stage = "ask"; e.price = e.family === "data" ? 0 : e.family === "folklore" ? 0 : price; e.offer = e.family === "folklore" ? offer : null;
+        lines.push(`${e.name}: "${say2(e, "ask").replace("{p}", e.price).replace("{o}", e.offer || "")}"`);
+      }
+    } else {
+      lines.push(`${e.name}: "${say2(e, "scorn")}"`);
+      e.angered = Math.random() < 0.5;
+      demonTurn(st, lines);
+    }
+    st.round = lines;
+    if (!st.encounter || st.dead) st.roundOver = true;
+    return show(st);
+  }
+
+  // KURA's answer to a demon's price or offer.
+  function answer(st, yes) {
+    st = copy(st);
+    const e = st.encounter;
+    if (!e || !e.stage) return show(st);
+    const lines = [];
+    if (e.stage === "ask") {
+      if (!yes) {
+        lines.push(`${e.name}: "${say2(e, "no")}"`);
+        if (e.family === "data") { lines.push(`${THE(e.name)} drifts away.`); leaves(st, e); }
+        else { e.stage = null; e.angered = true; demonTurn(st, lines); }
+      } else {
+        const have = st.silver ?? 0;
+        if (e.price && have < e.price) {
+          lines.push(`KURA has only ${have} SILVER.`, `${e.name}: "${say2(e, "scorn")}"`);
+          e.stage = null; e.angered = true; demonTurn(st, lines);
+        } else {
+          if (e.price) { st.silver = have - e.price; lines.push(`KURA pays ${e.price} SILVER.`); lean(st, "pay", lines); }
+          // A plain offering leans CHAOS; an aligned relic pulls toward its own alignment instead.
+          if (e.offer) { st.items.splice(st.items.indexOf(e.offer), 1); lines.push(`KURA gives ${e.offer}.`); const ga = itemAlign(e.offer); lean(st, ga === "LAW" ? "offerLAW" : ga === "NEUTRAL" ? null : "offer", lines); }
+          if (e.family === "data") { lines.push("KURA takes the task."); lean(st, "task", lines); }
+          // Paid. Most of the time it offers to join; otherwise it's satisfied and leaves.
+          // An offering that shares the demon's alignment wins it over more often; an opposite one less.
+          const gift = e.offer && itemAlign(e.offer), likes = !gift || gift === "NEUTRAL" || e.align === "NEUTRAL" ? 0.65 : gift === e.align ? 0.85 : 0.4;
+          if (gift && likes === 0.85) lines.push(`${THE(e.name)} turns ${e.offer.replace(/^an? /, "the ")} over. It is pleased.`);
+          if (Math.random() < likes) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
+          else { lines.push(`${THE(e.name)} is satisfied. ${say2(e, "leave")}`); leaves(st, e); }
+        }
+      }
+    } else if (e.stage === "join") {
+      if (!yes) { lines.push(`KURA declines. ${say2(e, "leave")}`); leaves(st, e); }
+      else if (st.party.length < 4) recruit(st, e, lines);
+      else { e.stage = "swap"; lines.push("The party is full. Send someone away?"); }
+    }
+    st.round = lines;
+    st.roundOver = !st.encounter || st.dead;
+    return show(st);
+  }
+  // With a full party: send member i (1-3; KURA can't leave) away to make room, or keep everyone (i = null).
+  function swap(st, i) {
+    st = copy(st);
+    const e = st.encounter;
+    if (!e || e.stage !== "swap") return show(st);
+    const lines = [];
+    if (i === null || !st.party[i] || i === 0) { lines.push(`KURA keeps the party. ${say2(e, "leave")}`); leaves(st, e); }
+    else { const gone = st.party.splice(i, 1)[0]; lines.push(`${gone.name} leaves the party.`); recruit(st, e, lines); }
+    st.round = lines;
+    st.roundOver = true;
+    return show(st);
+  }
+  function leaves(st, e) { st.log = `> Day ${st.day}. ${THE(e.name)} leaves.`; st.encounter = null; }
+  function recruit(st, e, lines) {
+    const lv = Math.max(1, 2 * floorNum(st) + R(-1, 2));
+    const hpmax = 12 + lv * 5, mpmax = lv * 2 + R(0, 4);
+    st.party.push({ name: e.name, lv, hp: hpmax, hpmax, mp: mpmax, mpmax, family: e.family, align: e.align, demon: true });
+    lines.push(`${e.name}: "${say2(e, "join")}"`, `${e.name} joins the party.`);
+    lean(st, e.align, lines);
+    st.log = `> Day ${st.day}. ${e.name} joins the party.`;
+    st.encounter = null;
+  }
+
+  const api = { next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

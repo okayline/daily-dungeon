@@ -149,7 +149,9 @@
     // Right panel is 29 characters wide: a leading space plus 28.
     const PW = 29, rule = " " + "-".repeat(PW - 1);
     // Name gets 9 columns, level 3, then HP and MP each as 3/3 digits, so high levels still fit.
-    const mem = p => " " + ljust(p.name, 9) + ljust(`L${p.lv}`, 3) + " " +
+    // Long demon names are shortened to 8 columns: CHROME HOUND -> C.HOUND, STATIC BANSHEE -> S.BANSHE
+    const short = n => n.length <= 8 ? n : n.includes(" ") ? (n[0] + "." + n.split(" ").pop()).slice(0, 8) : n.slice(0, 8);
+    const mem = p => " " + ljust(short(p.name), 9) + ljust(`L${p.lv}`, 3) + " " +
       `${rjust(String(p.hp), 3)}/${rjust(String(p.hpmax), 3)} ${rjust(String(p.mp), 3)}/${rjust(String(p.mpmax), 3)}`;
     const party = st.party.map(mem); while (party.length < 4) party.push("");
     // KURA is drawn on the minimap as an arrow showing the facing direction.
@@ -170,7 +172,10 @@
     const wk = st.dungeon ? WEEK[(today + 3) % 7] : "";
     const title = ` MAP  ${st.floor}${wk ? "  " + wk : ""} `, dash = PW - 1 - title.length;
     const mapHead = " " + "-".repeat(Math.floor(dash / 2)) + title + "-".repeat(Math.ceil(dash / 2));
-    const align = `ALIGN [${String(st.align).slice(0, 3).toUpperCase()}]`;
+    // The ALIGN tag shows which way the last action pulled KURA: a bracket turns into an arrow,
+    // <NEU] toward LAW, [NEU> toward CHAOS, so the width never changes.
+    const pull = st.pull || 0;
+    const align = `ALIGN ${pull < 0 ? "<" : "["}${String(st.align).slice(0, 3).toUpperCase()}${pull > 0 ? ">" : "]"}`;
     // TURN counts every action KURA has taken (stepping, searching, turning); facing shows in the turn controls.
     const face = `TURN ${String(st.steps || 0).padStart(3, "0")}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
     const gap = PW - 1 - align.length - face.length - dayStr.length;

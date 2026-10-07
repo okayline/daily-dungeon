@@ -2,6 +2,19 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.21 - Oct 6 2026, 15:00 HST
+
+- **Recruiting.** KURA is the only human; ELF, PIXIE and CU SITH are demons too, and any demon can join. TALK goes in steps: the demon decides whether to listen (moon, omen and alignment), names its price, KURA answers `[Y]ES` or `[N]O`, and once paid it may offer to join. With a full party (KURA plus 3), you choose who to send away, or keep everyone.
+- **Each family speaks and bargains its own way.** Data demons talk in system messages and just want a task ("ASSIGN TASK? Y / N", "TASK RECEIVED. LINKED TO USER."). Haunted hardware speaks in corrupted memory and wants SILVER ("ERROR 404: owner not found"). Hybrids mix the two and take a SILVER toll ("ACCESS GRANTED, traveler."). Folklore speaks in old words and wants an offering from the inventory.
+- **Alignments.** Every demon is LAW (data, clean machines), NEUTRAL (hybrids, haunted hardware) or CHAOS (folklore), with a few outliers. The encounter box shows how it sees KURA: "KURA is recognized." (same), "Undecided." (neutral) or "bares its teeth." (opposite). Same-alignment demons listen more and charge less; opposite ones listen less and charge more.
+- **KURA's alignment moves with her choices.** A hidden score shifts with nearly every action: talking, paying SILVER and taking tasks lean LAW, as does patient searching; fighting, finishing demons off, giving offerings, running, and searching a room that's already hot lean CHAOS. Recruits pull hardest, toward their own alignment. Early choices weigh more than late ones. The ALIGN tag only flips at a threshold ("The system takes notice. [LAW]" / "The old things take notice. [CHA]"), returns to [NEU] near the middle ("KURA finds her balance."), and "Something is pulling at you." warns once when a flip is close.
+- **The ALIGN tag shows each action's pull.** A bracket turns into a glowing arrow for the action that just happened: `<NEU]` pulled toward LAW, `[NEU>` toward CHAOS. Only bigger pulls show an arrow: tiny nudges like searching a cool room move the score quietly.
+- **High-rarity items have alignments.** RARE, MYTHIC and MOON items are LAW, NEUTRAL or CHAOS (commons and uncommons have none), shown in INVOKE and in the found popup. Finding a LAW or CHAOS relic tugs KURA toward it; offering one to a demon pulls toward the relic's alignment, and a demon offered a relic of its own alignment is pleased and joins more often (an opposite one, less often).
+- A new run now resets KURA's alignment fully.
+- PIXIE, ELF and CU SITH can now also turn up as wild demons.
+- Long demon names are shortened in the party panel (STATIC BANSHEE shows as S.BANSHE).
+- Fixed the right border on the clock line sticking out past the rest of the frame (the weekday kanji was taking more than its two cells).
+
 ## v0.20 - Oct 6 2026, 14:35 HST
 
 - The Japanese weekday kanji sits left of the date (`火 TUE OCT 06 2026`).
