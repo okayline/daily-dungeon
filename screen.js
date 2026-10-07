@@ -75,6 +75,42 @@
     return Math.floor(age / syn * 8 + 0.5) % 8;
   }
 
+  // Moon and demon lines by phase: line 1 before omens existed, and line 3 now and then.
+  const MOONLINE_ALL = [
+    [ // new
+      "The sky is empty. Below, the demons hold their breath.", "No moon. The dark listens.",
+      "Demons sleep with one eye open.", "A black sky. Even old hungers rest tonight.",
+      "Something below would rather talk than bite."],
+    [ // waxing crescent
+      "A thin blade of light cuts the dark.", "Demons stir in their sleep.",
+      "The moon opens one eye. The deep begins to wake.", "Something below turns over, restless.",
+      "A pale hook hangs overhead. Claws flex in the dark."],
+    [ // first quarter
+      "Half the moon watches. Half the dark watches back.", "Demons pace the edges of the light.",
+      "The light and the dark weigh each other.", "Patient eyes follow from the corners.",
+      "Demons will listen, but not for long."],
+    [ // waxing gibbous
+      "The moon swells. So does something below.", "The halls hum with a low growl.",
+      "Light pours in. Tempers rise to meet it.", "Demons scratch at the walls, impatient.",
+      "Almost full. The deep grows loud."],
+    [ // full
+      "The moon is a white eye, wide open.", "Full light. The deep howls back.",
+      "Demons run wild beneath the open moon.", "No bargains tonight. Only hunger.",
+      "Every shadow has teeth."],
+    [ // waning gibbous
+      "The moon bleeds slowly. The fever lingers.", "The howling fades, but the anger stays.",
+      "Demons nurse their fury in the dark.", "The white eye begins to close.",
+      "Something below still remembers the light."],
+    [ // last quarter
+      "Half the moon turns away.", "Demons tire of the hunt.",
+      "The dark grows heavy and slow.", "Tempers cool in the waning light.",
+      "Some below may hear an offer now."],
+    [ // waning crescent
+      "A thin moon. The deep grows drowsy.", "Demons drowse in the corners.",
+      "The light is almost gone. So is the anger.", "Only a sliver left. The dark softens.",
+      "The new moon is coming. The deep can feel it."],
+  ];
+
   function renderScreen(st, extra, now) {
     now = now || new Date(); extra = extra || "";
     const idx = moonIndex(now), when = hst(now);
@@ -131,44 +167,12 @@
     S.push("+" + "=".repeat(78) + "+");
     // The moon line: a mysterious word on the moon, the demons, or both. No numbers; the moon bar
     // above already shows the phase. Several lines per phase, changing once per real day.
-    const MOONLINE = [
-      [ // new
-        "The sky is empty. Below, the demons hold their breath.", "No moon. The dark listens.",
-        "Demons sleep with one eye open.", "A black sky. Even old hungers rest tonight.",
-        "Something below would rather talk than bite."],
-      [ // waxing crescent
-        "A thin blade of light cuts the dark.", "Demons stir in their sleep.",
-        "The moon opens one eye. The deep begins to wake.", "Something below turns over, restless.",
-        "A pale hook hangs overhead. Claws flex in the dark."],
-      [ // first quarter
-        "Half the moon watches. Half the dark watches back.", "Demons pace the edges of the light.",
-        "The light and the dark weigh each other.", "Patient eyes follow from the corners.",
-        "Demons will listen, but not for long."],
-      [ // waxing gibbous
-        "The moon swells. So does something below.", "The halls hum with a low growl.",
-        "Light pours in. Tempers rise to meet it.", "Demons scratch at the walls, impatient.",
-        "Almost full. The deep grows loud."],
-      [ // full
-        "The moon is a white eye, wide open.", "Full light. The deep howls back.",
-        "Demons run wild beneath the open moon.", "No bargains tonight. Only hunger.",
-        "Every shadow has teeth."],
-      [ // waning gibbous
-        "The moon bleeds slowly. The fever lingers.", "The howling fades, but the anger stays.",
-        "Demons nurse their fury in the dark.", "The white eye begins to close.",
-        "Something below still remembers the light."],
-      [ // last quarter
-        "Half the moon turns away.", "Demons tire of the hunt.",
-        "The dark grows heavy and slow.", "Tempers cool in the waning light.",
-        "Some below may hear an offer now."],
-      [ // waning crescent
-        "A thin moon. The deep grows drowsy.", "Demons drowse in the corners.",
-        "The light is almost gone. So is the anger.", "Only a sliver left. The dark softens.",
-        "The new moon is coming. The deep can feel it."],
-    ];
+    const MOONLINE = MOONLINE_ALL;
     const lines = MOONLINE[idx];
     // Picked by the real date (Honolulu), so it changes once a day, not with every action.
     const realDay = Math.floor((now.getTime() - 10 * 3600 * 1000) / 86400000);
-    const moonLine = "> " + lines[realDay % lines.length];
+    // Line 1 is the day's omen when the rules provide one; otherwise the moon line.
+    const moonLine = st.omenText || "> " + lines[realDay % lines.length];
     for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step on the right.
@@ -182,7 +186,7 @@
     return S.join("\n");
   }
 
-  const api = { renderScreen, moonIndex };
+  const api = { renderScreen, moonIndex, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);

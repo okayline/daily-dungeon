@@ -2,6 +2,23 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.18 - Oct 6 2026, 14:13 HST
+
+- **Daily omens** on line 1: one per real day, seeded from the date, always true. About half are ordinary days; the rest make data or folklore demons more common, make heat rise faster, make secrets harder or easier to find, or make demons easier to talk down.
+- **Heat:** every search warms the room. Encounter odds climb from about 1 in 24 per search when cold to about 1 in 4 at the hottest. Heat halves each night and never fully resets. Line 3 tells you when it rises ("Your footsteps sound louder than before." / "Something in the walls goes quiet." / "The room is listening."), and "The room settles." when it cools.
+- **Noise:** searching the same wall again and again draws data demons (and data tells: a dial tone, counting, SIGNAL DETECTED); lingering in one room draws older things (wet iron, humming, salt underfoot).
+- **Demon ladder by depth:** pure data near the top (PING, DAEMON, CRON, NULL, PACKET, WORM, TRACER), then haunted hardware, then hybrids (CHROME HOUND, WIRE WITCH, KITSUNE.EXE…), then folklore (REDCAP, BANSHEE, TROLL…) deeper down.
+- **Rarity tiers:** COMMON, UNCOMMON, RARE, MYTHIC, MOON, each with its own color in the found box and inventory. Searches mostly turn up commons, sometimes uncommons, rarely rares. New RARE hybrids (a rune scratched into a circuit board, a rosary of fiber optic beads, a sealed jar humming faintly…). Deep caches hold MYTHIC relics; lockers hold RARE or MYTHIC items.
+- **Taking the stairs down is free:** it no longer uses the day's step.
+- More search misses ("Old tally marks, in groups of five."), and a true near-miss: "The wall is warmer than the others." only when that wall still hides something.
+- The moon shows up on line 3 now and then. The black candle now cools the room it's lit in.
+
+- During a fight, the directions you can run through glow white, with a `RUN?` label above them; the long explanation in the fight box is gone.
+- Popup boxes close with `[ OK ]` (click it, or press Enter, Space or Esc).
+- The `?` is now a hidden locker holding a rare item ("A locker holds a black pearl."). Only under a full moon can it hold a moon drop instead (half the time). Shops and special rooms behind it come later.
+- New demons: half old folklore (GHOUL, ONI, KAPPA, LAMIA…), half born in the city's wires (GLITCH, STATIC, CHROMEDOG, WIREWRAITH, NEON ONI, DATAGHOUL, RUST KAPPA, BLACK ICE).
+- ATOM SLASHER: a rare named demon (3% of encounters), twice as tough, hits harder, and won't talk.
+
 ## v0.17 - Oct 6 2026, 11:06 HST
 
 - SE[A]RCH moved to the free actions on the left, since it can be used any number of times.

@@ -9,40 +9,159 @@
   const NAME = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
   const CW = ["N", "E", "S", "W"];
   const LEFT = { N: "W", E: "N", S: "E", W: "S" }, RIGHT = { N: "E", E: "S", S: "W", W: "N" };
-  // Rare things. MOON_DROPS only fall from demons under a gibbous or full moon; DEEP ones sit far
-  // inside a wall and take dozens of searches to reach.
-  // Demons from old folklore (none borrowed from the SMT games).
-  const DEMONS = ["GHOUL", "IMP", "BOGEY", "WRAITH", "KAPPA", "ONI", "GAKI", "BARGHEST", "REDCAP", "LAMIA", "NUE", "DULLAHAN"];
-  const MOON_DROPS = ["a moonstone", "a shard of pale moonlight", "a fang still warm", "a silver-veined horn"];
-  const DEEP = ["a sealed reliquary", "a black pearl", "an old COMP chip", "a ring of red gold", "a sword in a rotted sheath"];
-  const ITEMS = [
-    "a vial of medicine",
-    "a bead of smoky glass",
-    "a bent silver charm",
-    "a stub of black candle",
-    "a cracked hand mirror",
-    "a strip of prayer cloth",
-    "a rusted iron key",
-    "a chipped bone die",
-    "a tin of old matches",
-    "a moth-eaten glove",
-    "a page of a burned book",
-    "a jar of grave salt",
-    "a wax seal, unbroken",
-    "a dead pager",
-    "a cracked phone",
-    "a spent battery",
-    "a subway token",
-    "a tangle of fiber cable",
-    "a scratched data disc",
-    "a burned-out circuit board",
-    "a cassette with no label",
-    "a neon tube fragment",
-    "an ID card, face scratched",
-    "a vending machine coin",
-    "a VR visor, lens cracked",
-    "a bag of loose screws",
+  // ITEMS by rarity. COMMON: plain ruined-city junk. UNCOMMON: junk with a use. RARE: hybrids and odd tech.
+  // MYTHIC: old-layer relics, deep in the walls and in lockers. MOON: only under a bright moon.
+  // Each entry: [name, note, use?, what line 2 says when used].
+  const CATALOG = {
+    COMMON: [
+      ["a bag of loose screws", "Rattles like teeth."],
+      ["a spent battery", "Still faintly warm."],
+      ["a vending machine coin", "The machines down here still take it."],
+      ["a subway token", "For a line that was never built."],
+      ["a burned-out circuit board", "Smells of ozone and incense."],
+      ["a neon tube fragment", "Flickers pink in the dark."],
+      ["a tangle of fiber cable", "It glows when nobody looks."],
+      ["a scratched data disc", "Labelled in a hand you almost know."],
+      ["an ID card, face scratched", "Clearance level: none."],
+      ["a moth-eaten glove", "Too small for any hand you know."],
+      ["a bead of smoky glass", "Something moves inside it."],
+      ["a cracked hand mirror", "Shows a room that isn't here."],
+    ],
+    UNCOMMON: [
+      ["a vial of medicine", "Heals everyone by a third.", st => heal(st, 1 / 3, false), "The party breathes easier."],
+      ["a strip of prayer cloth", "Raises fallen allies a little.", st => heal(st, 1 / 4, true), "Fallen allies stir."],
+      ["a stub of black candle", "Burns for a while. Calms the room.", st => calm(st), "The room settles a little."],
+      ["a tin of old matches", "Half of them still strike."],
+      ["a coil of copper wire", "Good for something. Probably."],
+      ["a dead pager", "It buzzes once, every new moon."],
+      ["a cracked phone", "The screen shows a map of somewhere else."],
+      ["a cassette with no label", "Hiss, then breathing."],
+      ["a VR visor, lens cracked", "Shows the room, but emptier."],
+      ["a rusted iron key", "It opens nothing here."],
+      ["a bent silver charm", "Warm to the touch at night."],
+      ["a page of a burned book", 'One line survives: "down is not away."'],
+    ],
+    RARE: [
+      ["a rune scratched into a circuit board", "Nobody taught the scratcher to read either language. It still works."],
+      ["a salt-crusted network cable", "Whatever it carried, it carried something else too."],
+      ["a candle stub in a soda can", "Somebody's shrine, somebody's lunch."],
+      ["a charm bracelet of old keycards", "Every card opened a door that isn't there now."],
+      ["a rosary of fiber optic beads", "It lights up one bead per prayer."],
+      ["a sealed jar, humming faintly", "The label peeled off years ago. The hum changes pitch when you lie."],
+      ["a SIM card in red thread", "The number still rings. Nobody answers."],
+      ["a graffiti-stained saint's medal", "Somebody tagged a saint. The saint didn't mind."],
+      ["a bullet casing on a leather cord", "Worn by someone who knew what it stopped."],
+      ["a keycard, one corner burned", "Level 9. There is no level 9."],
+      ["an old COMP chip", "Its last program is still running, very slowly."],
+      ["a black pearl", "It reflects the wrong room."],
+    ],
+    MYTHIC: [
+      ["a jar of grave salt", "Spirits don't like it."],
+      ["a wax seal, unbroken", "Pressed with a sigil you don't know."],
+      ["a chipped bone die", "Always lands on six."],
+      ["a sealed reliquary", "Something inside knocks, politely."],
+      ["a ring of red gold", "Heavier than it should be."],
+      ["a sword in a rotted sheath", "The blade is clean. It always was."],
+    ],
+    MOON: [
+      ["a moonstone", "Cold, and full of light that isn't from here."],
+      ["a shard of pale moonlight", "It casts a shadow of its own."],
+      ["a fang still warm", "Whatever it came from is still looking for it."],
+      ["a silver-veined horn", "Hums a note only the moon can hear."],
+    ],
+  };
+  const TIERS = ["COMMON", "UNCOMMON", "RARE", "MYTHIC", "MOON"];
+  const ITEM_INFO = {}, TIER = {};
+  for (const t of TIERS) for (const [name, text, use, say] of CATALOG[t]) { ITEM_INFO[name] = { text, use, say }; TIER[name] = t; }
+  const names = t => CATALOG[t].map(x => x[0]);
+  const ITEMS = names("COMMON").concat(names("UNCOMMON"));       // what a talked-down demon may leave
+  const MOON_DROPS = names("MOON");
+  // A found item's rarity: mostly common, sometimes uncommon, rarely rare.
+  function rollItem() {
+    const r = Math.random();
+    return pick(names(r < 0.6 ? "COMMON" : r < 0.92 ? "UNCOMMON" : "RARE"));
+  }
+
+  // DEMONS by family. The deeper the floor, the more data becomes flesh: pure data near the top,
+  // haunted hardware, then hybrids, then old folklore. ATOM SLASHER is the rare named horror.
+  const FAMILY = {
+    data: ["PING", "DAEMON", "CRON", "NULL", "PACKET", "WORM", "TRACER"],
+    hardware: ["STATIC RAT", "PAGER GHOUL", "VENDOR", "SCRAPPER", "DEADLINK", "LOOP SHADE"],
+    hybrid: ["CHROME HOUND", "WIRE WITCH", "HEX DRONE", "SERVER GOLEM", "NEON DRYAD", "COIN WRAITH",
+      "CHROME ONI", "KITSUNE.EXE", "PIXEL SPRITE", "STATIC BANSHEE", "LOOP LICH"],
+    folklore: ["REDCAP", "GAKI", "BANSHEE", "BARGHEST", "TROLL", "GHOUL", "ONI", "KAPPA", "LAMIA", "WRAITH", "IMP"],
+  };
+  const LADDER = [                                      // family weights by floor (B1F, B2F, B3F, B4F and deeper)
+    { data: 7, hardware: 3, hybrid: 0, folklore: 0 },
+    { data: 4, hardware: 5, hybrid: 1, folklore: 0 },
+    { data: 1, hardware: 3, hybrid: 5, folklore: 2 },
+    { data: 0, hardware: 1, hybrid: 4, folklore: 6 },
   ];
+  const UNIQUE = { "ATOM SLASHER": { hp: 2, hit: 1.5, talks: false } };
+  const A = n => (UNIQUE[n] ? n : (/^[AEIOU]/.test(n) ? "An " : "A ") + n), THE = n => (UNIQUE[n] ? n : "The " + n), the = n => (UNIQUE[n] ? n : "the " + n);
+  // Pick a demon: the floor sets the families; noise and today's omen tilt them.
+  // Repeating one wall draws data things; lingering in a room draws older things.
+  function pickDemon(st) {
+    if (Math.random() < 0.03) return "ATOM SLASHER";
+    const d = st.dungeon, w = { ...LADDER[Math.min(floorNum(st), 4) - 1] }, om = omen(clock(st)).fx;
+    const streak = d && d.streak && d.streak.room === d.at ? d.streak.count : 0;
+    const linger = d && d.linger ? d.linger[d.at] || 0 : 0;
+    if (streak >= 4) { w.data += 3; w.hardware += 2; }
+    if (linger >= 15) { w.folklore += 3; w.hybrid += 2; }
+    w.data *= om.data; w.hardware *= om.data; w.folklore *= om.folk; w.hybrid *= om.folk;
+    const fams = Object.keys(w).filter(f => w[f] > 0), total = fams.reduce((n, f) => n + w[f], 0);
+    let r = Math.random() * total;
+    for (const f of fams) { if ((r -= w[f]) < 0) return pick(FAMILY[f]); }
+    return pick(FAMILY.data);
+  }
+
+  // DAILY OMENS (line 1). One per real day, seeded from the date, so a reload can't reroll it.
+  // About half the days are ordinary. Every omen is true: its effect is real all day.
+  const OMENS = [
+    { key: "none", fx: {}, lines: ["The light is almost gone. So is the anger.", "Nothing stirs. Nothing waits.", "The dust lies flat today."] },
+    { key: "data", fx: { data: 2 }, lines: ["The wires remember.", "Something is counting down.", "A dial tone, far away."] },
+    { key: "folk", fx: { folk: 2 }, lines: ["Old things walk early.", "Salt on the wind.", "The old ones stir."] },
+    { key: "heat", fx: { heat: 2 }, lines: ["Do not linger.", "The room is listening today.", "Short stays. Quiet feet."] },
+    { key: "hard", fx: { find: 0.5 }, lines: ["The walls keep their secrets.", "Every seam is sealed today.", "The stone stays shut."] },
+    { key: "easy", fx: { find: 1.6 }, lines: ["A door is open somewhere.", "Something is loose in the stone.", "The seams are soft today."] },
+    { key: "talk", fx: { talk: 1.6 }, lines: ["Strangers listen.", "Today, they will hear you out.", "Speak first. They are lonely."] },
+  ];
+  const hash = n => { let x = (n * 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return x >>> 0; };
+  function omen(t) {
+    const h = hash(t), o = (h % 100) < 50 ? OMENS[0] : OMENS[1 + (h >>> 8) % (OMENS.length - 1)];
+    const fx = { data: 1, folk: 1, heat: 1, find: 1, talk: 1, ...o.fx };
+    return { key: o.key, fx, text: "> " + o.lines[(h >>> 16) % o.lines.length] };
+  }
+
+  // HEAT: every search warms the room, and the hotter it is the likelier something comes.
+  // From about 1 in 24 per search when cold, up to about 1 in 4 at its hottest. Heat fades by
+  // half each night and never fully resets. Tiers are told on line 3, and the tells never lie.
+  const HEAT_MAX = 20;
+  const heatTier = h => (h >= 18 ? 3 : h >= 12 ? 2 : h >= 6 ? 1 : 0);
+  const MOON_PULL = [0.8, 0.9, 1, 1.1, 1.25, 1.1, 1, 0.9];       // the moon still stirs things a little
+  function encounterChance(st) {
+    const d = st.dungeon, h = (d.heat || [])[d.at] || 0;
+    return (1 / 24 + (1 / 4 - 1 / 24) * Math.min(1, h / HEAT_MAX)) * MOON_PULL[moon()];
+  }
+  const HEAT_TELL = {
+    1: { plain: "> Your footsteps sound louder than before.", data: "> A dial tone, somewhere in the walls.", folk: "> The air smells of wet iron." },
+    2: { plain: "> Something in the walls goes quiet.", data: "> Something is counting, very softly.", folk: "> Humming. Low, and getting closer." },
+    3: { plain: "> The room is listening.", data: "> SIGNAL DETECTED", folk: "> Salt underfoot. You didn't spill it." },
+  };
+  function heatUp(st, amount) {
+    const d = st.dungeon;
+    d.heat = d.heat || [0, 0, 0];
+    const before = heatTier(d.heat[d.at] || 0);
+    d.heat[d.at] = Math.min(HEAT_MAX + 4, (d.heat[d.at] || 0) + amount * omen(clock(st)).fx.heat);
+    const after = heatTier(d.heat[d.at]);
+    if (after > before) {
+      const streak = d.streak && d.streak.room === d.at ? d.streak.count : 0, linger = (d.linger || [])[d.at] || 0;
+      const kind = streak >= 4 ? "data" : linger >= 15 ? "folk" : "plain";
+      st.tell = HEAT_TELL[after][kind];
+    }
+  }
+  // A stub of black candle calms the room it's lit in.
+  function calm(st) { const d = st.dungeon; if (d && d.heat) d.heat[d.at] = Math.max(0, (d.heat[d.at] || 0) - 8); }
 
   const floorNum = st => parseInt(String(st.floor).replace(/\D/g, ""), 10) || 1;
   // Log lines only name a direction when stating a character's action ("KURA goes WEST"), never for hints or doors.
@@ -89,7 +208,9 @@
     const r = Math.random();
     if (hurt.length && r < 0.25) return pick(HURT).replace("{n}", pick(hurt).name);
     if (r < 0.25 + demonOdds) return pick(DEMON);
-    if (r < 0.6) return pick(CHATTER);
+    if (r < 0.55) return pick(CHATTER);
+    // The moon is the calendar's weather: now and then line 3 mentions it.
+    if (r < 0.72 && (root.SMT || require("./screen.js")).moonLines) return "> " + pick((root.SMT || require("./screen.js")).moonLines[m]);
     return pick(AMBIENT);
   }
   // What KURA sees when she turns: only what the 3D view already shows (wall, door, found stairs).
@@ -134,6 +255,8 @@
   // Draw the minimap and the first-person view from where KURA stands and faces.
   function show(st) {
     const d = st.dungeon, room = d.floor.rooms[d.at];
+    st.omenText = omen(clock(st)).text;                 // line 1
+    if (st.tell) { st.extra = st.tell; delete st.tell; } // a heat tell takes line 3 right away
     st.map = FLOOR.minimap(d.floor, { ...d, facing: st.facing });
     const door = dir => dir in room.doors;
     if (st.dead) {
@@ -183,6 +306,14 @@
     if (!newDay || st.dead) return st;
     st.today = { date: t, stepped: false };
     st.unsaved = true;
+    // Overnight every room's heat halves. It never quite resets.
+    let settled = false;
+    if (st.dungeon && st.dungeon.heat) {
+      const at = st.dungeon.at, was = heatTier(st.dungeon.heat[at] || 0);
+      st.dungeon.heat = st.dungeon.heat.map(h => Math.floor((h || 0) / 2));
+      settled = was > 0 && heatTier(st.dungeon.heat[at]) < was;
+    }
+    if (st.dungeon) st.dungeon.linger = [0, 0, 0];
     // A night's rest heals a fifth of everyone's HP (fallen allies too, slowly).
     if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
     const d = st.dungeon;
@@ -193,7 +324,8 @@
       return st;
     }
     st.log = `> Day ${st.day}. KURA wakes on ${st.floor}.`;
-    st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight." : atmosphere(st);
+    st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight."
+      : settled ? "> The room settles." : atmosphere(st);
     return st;
   }
 
@@ -202,16 +334,21 @@
     const silver = st.silver ?? st.macca ?? 0, ichor = st.ichor ?? st.mag ?? 0;
     switch (thing) {
       case "stairs": return "A floor stone shifts. Stairs lead down.";
-      case "lure": return "A hidden alcove, lit from within.";
+      // The ? is a hidden locker. For now it holds a rare item (shops and special rooms come later).
+      // The ? is a hidden locker: usually a RARE, sometimes MYTHIC; under a full moon, half the time a MOON item.
+      case "lure": {
+        const it = moon() === 4 && Math.random() < 0.5 ? pick(MOON_DROPS) : pick(names(Math.random() < 0.7 ? "RARE" : "MYTHIC"));
+        st.items = (st.items || []).concat(it); return `A locker holds ${it}.`;
+      }
       case "silver": { const n = R(20, 150); st.silver = silver + n; return `Coins in the rubble. ${n} SILVER.`; }
-      case "item": { const it = pick(ITEMS); st.items = (st.items || []).concat(it); return `KURA finds ${it}.`; }
+      case "item": { const it = rollItem(); st.items = (st.items || []).concat(it); return `KURA finds ${it}.`; }
       case "demon": {
         // A demon appears and stays until it's fought, talked down, or escaped (see the ENCOUNTER section).
-        const name = pick(DEMONS);
-        const hpmax = 16 + 9 * floorNum(st) + R(0, 8);
+        const name = pickDemon(st);
+        const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * (UNIQUE[name] ? UNIQUE[name].hp : 1));
         st.encounter = { name, hp: hpmax, hpmax, round: 0, angered: false };
-        st.round = [`A ${name} blocks the way.`];
-        return `A ${name} appears!`;
+        st.round = [`${A(name)} blocks the way.`];
+        return `${A(name)} appears!`;
       }
     }
     return "Dust. Nothing more here.";
@@ -240,7 +377,10 @@
   // from an unlucky one. Every search passes a little time, and a demon may wander in;
   // that happens more under a bright moon.
   const FIND = 1 / 5, DEEP_FIND = 1 / 35;
-  const WANDER = [1 / 30, 1 / 20, 1 / 14, 1 / 10, 1 / 6, 1 / 10, 1 / 14, 1 / 20];   // by moon phase, new -> full -> new
+  const MISSES = ["Nothing.", "Nothing yet.", "Only stone.", "Nothing but dust.", "The wall gives nothing away.",
+    "Cold stone, cold hands.", "Mortar, mostly. Some is older.", "Fingers come away gray.", "A crack. It goes nowhere.",
+    "Damp. The smell of old pipes.", "Someone has looked here before.", "A dead cable runs in and stops.",
+    "Faded paint. A number, or a sigil.", "Old tally marks, in groups of five.", "Salt along the base, in a line."];
   const moon = () => (root.SMT || require("./screen.js")).moonIndex(new Date());
   // Each room hides its things behind its walls (never behind a door). The stairs are always behind
   // the wall they will open in; everything else is spread over the other walls, fixed by the floor's seed.
@@ -259,7 +399,7 @@
     }
     // About one room in three hides something deep in one wall: findable, but only 1 in 35 per search,
     // and that wall may look empty for a very long time.
-    if (k % 3 === 0) w.deep = { dir: free[(k >>> 4) % free.length], item: DEEP[(k >>> 8) % DEEP.length], found: false };
+    if (k % 3 === 0) w.deep = { dir: free[(k >>> 4) % free.length], item: names("MYTHIC")[(k >>> 8) % CATALOG.MYTHIC.length], found: false };
     return (d.walls[i] = w);
   }
 
@@ -274,19 +414,27 @@
     if (dir in room.doors) { st.log = "> Only a door here. Nothing to search."; return show(st); }
     if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { st.log = "> The stairs wait. Nothing more here."; return show(st); }
     act(st);
+    // Heat, and what kind of noise KURA is making: the same wall again and again, or just staying.
+    d.streak = d.streak && d.streak.room === d.at && d.streak.dir === dir ? { ...d.streak, count: d.streak.count + 1 } : { room: d.at, dir, count: 1 };
+    d.linger = d.linger || [0, 0, 0]; d.linger[d.at]++;
+    const chance = encounterChance(st);
+    heatUp(st, 1);
+    const fx = omen(clock(st)).fx;
     const where = `KURA searches the ${NAME[dir]} wall.`;
     const say = text => {
       const long = `> Day ${st.day}. ${where} ${text}`;
-      return long.length <= 77 ? long : `> Day ${st.day}. KURA searches ${NAME[dir]}. ${text}`;
+      if (long.length <= 77) return long;
+      const short = `> Day ${st.day}. KURA searches ${NAME[dir]}. ${text}`;
+      return short.length <= 77 ? short : `> Day ${st.day}. ${text.replace(/^KURA finds /, "Found ")}`.slice(0, 77);
     };
-    if (Math.random() < WANDER[moon()]) {
-      st.log = say(reveal(st, "demon").replace(/^A (\w+) appears!/, "A $1 wanders in!"));
+    if (Math.random() < chance) {
+      st.log = say(reveal(st, "demon").replace(" appears!", " wanders in!"));
       drift(st);
       if (st.drop) { st.extra = st.drop; delete st.drop; }
       return show(st);
     }
     const w = walls(d, d.at), pile = w[dir] || [];
-    if (w.taken[dir] < pile.length && Math.random() < FIND) {
+    if (w.taken[dir] < pile.length && Math.random() < FIND * fx.find) {
       const thing = pile[w.taken[dir]++];
       found.push(thing);
       st.log = say(reveal(st, thing));
@@ -296,14 +444,16 @@
       if (st.drop) { st.extra = st.drop; delete st.drop; }
       return show(st);
     }
-    if (w.deep && w.deep.dir === dir && !w.deep.found && Math.random() < DEEP_FIND) {
+    if (w.deep && w.deep.dir === dir && !w.deep.found && Math.random() < DEEP_FIND * fx.find) {
       w.deep.found = true;
       st.items = (st.items || []).concat(w.deep.item);
       st.log = say("Deep in the stone, something gives.");
       st.extra = `> KURA pulls out ${w.deep.item}.`;
       return show(st);
     }
-    st.log = say(pick(["Nothing.", "Only stone.", "Nothing but dust.", "Nothing yet.", "The wall gives nothing away."]));
+    // A near-miss line only when it's true: this wall still hides something.
+    const warm = w.taken[dir] < pile.length && Math.random() < 0.12;
+    st.log = say(warm ? "The wall is warmer than the others." : pick(MISSES));
     drift(st);
     return show(st);
   }
@@ -323,7 +473,8 @@
       if (st.encounter) st.round = [`A wall to the ${NAME[dir]}. No way out there.`];
       return show(st);
     }
-    if (today(st).stepped) {
+    const toStairs = d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at);
+    if (today(st).stepped && !(toStairs && !st.encounter)) {
       st.facing = dir; st.log = "> KURA has already moved today. Rest until tomorrow.";
       if (st.encounter) st.round = ["Today's step is spent. No running now."];
       return show(st);
@@ -337,8 +488,8 @@
       st.facing = dir;
       st.roundOver = false;
       if (Math.random() < 0.5) {
-        lines.push(`KURA runs ${NAME[dir]}. The ${e.name} blocks the door.`);
-        st.log = `> Day ${st.day}. KURA tries to run ${NAME[dir]}. The ${e.name} blocks it.`;
+        lines.push(`KURA runs ${NAME[dir]}. ${THE(e.name)} blocks the door.`);
+        st.log = `> Day ${st.day}. KURA tries to run ${NAME[dir]}. ${THE(e.name)} blocks it.`;
         demonTurn(st, lines);
         st.round = lines;
         if (st.dead) st.roundOver = true;
@@ -346,11 +497,13 @@
       }
       st.encounter = null;
       st.roundOver = true;
-      st.round = [`KURA runs ${NAME[dir]} and leaves the ${e.name} behind.`];
+      st.round = [`KURA runs ${NAME[dir]} and leaves ${the(e.name)} behind.`];
     } else act(st);
-    st.today.stepped = true;
+    const descending = d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at);
+    // Taking the stairs down doesn't use the day's step; walking to another room does.
+    if (!descending) st.today.stepped = true;
     st.facing = dir;
-    if (d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at)) {
+    if (descending) {
       // Bonus days: the next floor belongs to next week, so going down early banks the rest of this one.
       const deadline = sundayOf(clock(st)) + 7;
       arrive(st, floorNum(st) + 1, deadline);
@@ -431,44 +584,7 @@
     return show(st);
   }
 
-  // ITEMS: what each one does when used from the INVOKE screen. Using an item is free (no day spent).
-  const ITEM_INFO = {
-    "a vial of medicine": { text: "Heals everyone by a third.", use: st => heal(st, 1 / 3, false), say: "The party breathes easier." },
-    "a strip of prayer cloth": { text: "Raises fallen allies a little.", use: st => heal(st, 1 / 4, true), say: "Fallen allies stir." },
-    "a stub of black candle": { text: "Burns for a while. Calms the dark.", use: st => { st.extra = "> The candle burns low. The dark draws back."; }, say: "A small light holds." },
-    "a bead of smoky glass": { text: "Something moves inside it." },
-    "a bent silver charm": { text: "Warm to the touch at night." },
-    "a cracked hand mirror": { text: "Shows a room that isn't here." },
-    "a moonstone": { text: "Rare. Fell under a bright moon." },
-    "a shard of pale moonlight": { text: "Rare. Fell under a bright moon." },
-    "a fang still warm": { text: "Rare. Fell under a bright moon." },
-    "a silver-veined horn": { text: "Rare. Fell under a bright moon." },
-    "a sealed reliquary": { text: "Rare. Pulled from deep in a wall." },
-    "a black pearl": { text: "Rare. Pulled from deep in a wall." },
-    "an old COMP chip": { text: "Rare. Pulled from deep in a wall." },
-    "a ring of red gold": { text: "Rare. Pulled from deep in a wall." },
-    "a sword in a rotted sheath": { text: "Rare. Pulled from deep in a wall." },
-    "a rusted iron key": { text: "It opens nothing here." },
-    "a chipped bone die": { text: "Always lands on six." },
-    "a tin of old matches": { text: "Half of them still strike." },
-    "a moth-eaten glove": { text: "Too small for any hand you know." },
-    "a page of a burned book": { text: 'One line survives: "down is not away."' },
-    "a jar of grave salt": { text: "Spirits don't like it." },
-    "a wax seal, unbroken": { text: "Pressed with a sigil you don't know." },
-    "a dead pager": { text: "It buzzes once, every new moon." },
-    "a cracked phone": { text: "The screen shows a map of somewhere else." },
-    "a spent battery": { text: "Still faintly warm." },
-    "a subway token": { text: "For a line that was never built." },
-    "a tangle of fiber cable": { text: "It glows when nobody looks." },
-    "a scratched data disc": { text: "Labelled in a hand you almost know." },
-    "a burned-out circuit board": { text: "Smells of ozone and incense." },
-    "a cassette with no label": { text: "Hiss, then breathing." },
-    "a neon tube fragment": { text: "Flickers pink in the dark." },
-    "an ID card, face scratched": { text: "Clearance level: none." },
-    "a vending machine coin": { text: "The machines down here still take it." },
-    "a VR visor, lens cracked": { text: "Shows the room, but emptier." },
-    "a bag of loose screws": { text: "Rattles like teeth." },
-  };
+  // Using an item from the INVOKE screen is free (no day spent).
   function heal(st, part, revive) {
     st.party = st.party.map(p => (p.hp > 0 || revive) ? { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax * part)) } : p);
   }
@@ -476,9 +592,9 @@
   function inventory(st) {
     const counts = {};
     for (const it of st.items || []) counts[it] = (counts[it] || 0) + 1;
-    return Object.keys(counts).map(name => {
+    return Object.keys(counts).sort((x, y) => TIERS.indexOf(TIER[y]) - TIERS.indexOf(TIER[x])).map(name => {
       const info = ITEM_INFO[name] || { text: "" };
-      return { name, count: counts[name], text: info.text, usable: !!info.use };
+      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON" };
     });
   }
   // Use one of an item. Things that can't be used yet just get looked at.
@@ -506,14 +622,14 @@
     const e = st.encounter, up = st.party.filter(p => p.hp > 0);
     if (!up.length) return;
     const target = Math.random() < 0.4 ? st.party[0].hp > 0 ? st.party[0] : pick(up) : pick(up);
-    const dmg = Math.min(target.hp, Math.max(1, Math.round(R(2, Math.ceil(target.hpmax / 3)) * RAGE[moon()])));
+    const dmg = Math.min(target.hp, Math.max(1, Math.round(R(2, Math.ceil(target.hpmax / 3)) * RAGE[moon()] * (UNIQUE[e.name] ? UNIQUE[e.name].hit : 1))));
     st.party = st.party.map(p => p === target ? { ...p, hp: p.hp - dmg } : p);
-    lines.push(`The ${e.name} strikes ${target.name}. -${dmg} HP` + (target.hp - dmg <= 0 ? ". FALLS" : ""));
+    lines.push(`${THE(e.name)} strikes ${target.name}. -${dmg} HP` + (target.hp - dmg <= 0 ? ". FALLS" : ""));
     if (st.party[0].hp <= 0) {
       st.dead = true;
       st.party = st.party.map(p => ({ ...p, hp: 0 }));
       lines.push("KURA falls. The run is over.");
-      st.log = `> Day ${st.day}. The ${e.name} strikes KURA down.`;
+      st.log = `> Day ${st.day}. ${THE(e.name)} strikes KURA down.`;
       st.encounter = null;
       st.round = lines;
       st.roundOver = true;
@@ -523,14 +639,14 @@
     const e = st.encounter;
     const n = R(5, 30) + 3 * floorNum(st);
     st.ichor = (st.ichor ?? st.mag ?? 0) + n;
-    lines.push(`The ${e.name} falls.  +${n} ICHOR`);
+    lines.push(`${THE(e.name)} falls.  +${n} ICHOR`);
     const dropOdds = [0, 0, 0, 0.1, 0.25, 0.1, 0, 0][moon()];
     if (Math.random() < dropOdds) {
       const it = pick(MOON_DROPS);
       st.items = (st.items || []).concat(it);
       lines.push(`It leaves ${it}.`);
     }
-    st.log = `> Day ${st.day}. The ${e.name} falls. ${n} ICHOR.`;
+    st.log = `> Day ${st.day}. ${THE(e.name)} falls. ${n} ICHOR.`;
     st.encounter = null;
   }
   function round(st, fn, idle) {
@@ -555,7 +671,7 @@
       for (const p of st.party) if (p.hp > 0) total += R(1, 4) + Math.floor((p.lv || 1) / 2);
       e.hp = Math.max(0, e.hp - total);
       lines.push(`The party strikes. -${total}`);
-      st.log = `> Day ${st.day}. KURA's party fights the ${e.name}.`;
+      st.log = `> Day ${st.day}. KURA's party fights ${the(e.name)}.`;
       if (e.hp <= 0) win(st, lines);
     }, "> Nothing here to fight.");
   }
@@ -563,26 +679,26 @@
   function talk(st) {
     return round(st, (st, lines) => {
       const e = st.encounter;
-      st.log = `> Day ${st.day}. KURA speaks to the ${e.name}.`;
-      if (e.angered) { lines.push(`The ${e.name} won't listen anymore.`); return; }
-      const r = Math.random(), ok = LISTEN[moon()];
+      st.log = `> Day ${st.day}. KURA speaks to ${the(e.name)}.`;
+      if (e.angered || (UNIQUE[e.name] && !UNIQUE[e.name].talks)) { lines.push(`${THE(e.name)} won't listen.`); return; }
+      const r = Math.random(), ok = Math.min(0.95, LISTEN[moon()] * omen(clock(st)).fx.talk);
       if (r < ok * 0.6) {
-        lines.push(`The ${e.name} listens, and slips away.`);
+        lines.push(`${THE(e.name)} listens, and slips away.`);
         if (Math.random() < 0.4) { const it = pick(ITEMS); st.items = (st.items || []).concat(it); lines.push(`It leaves ${it} behind.`); }
-        st.log = `> Day ${st.day}. KURA talks the ${e.name} down. It leaves.`;
+        st.log = `> Day ${st.day}. KURA talks ${the(e.name)} down. It leaves.`;
         st.encounter = null;
       } else if (r < ok) {
         const price = 20 + 10 * floorNum(st) + R(0, 20), have = st.silver ?? st.macca ?? 0;
         if (have >= price) {
           st.silver = have - price;
-          lines.push(`The ${e.name} wants ${price} SILVER. KURA pays. It leaves.`);
-          st.log = `> Day ${st.day}. KURA pays the ${e.name} ${price} SILVER. It leaves.`;
+          lines.push(`${THE(e.name)} wants ${price} SILVER. KURA pays. It leaves.`);
+          st.log = `> Day ${st.day}. KURA pays ${the(e.name)} ${price} SILVER. It leaves.`;
           st.encounter = null;
-        } else { lines.push(`The ${e.name} wants ${price} SILVER. KURA has too little.`); e.angered = true; }
-      } else { lines.push(`The ${e.name} laughs at KURA.`); e.angered = Math.random() < 0.5; }
+        } else { lines.push(`${THE(e.name)} wants ${price} SILVER. KURA has too little.`); e.angered = true; }
+      } else { lines.push(`${THE(e.name)} laughs at KURA.`); e.angered = Math.random() < 0.5; }
     }, "> KURA speaks. Only the walls answer.");
   }
-  const api = { next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk };
+  const api = { next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON" };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

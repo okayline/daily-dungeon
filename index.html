@@ -52,7 +52,8 @@
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
   .btn.armed { background: var(--gold); color: var(--bg); }
-  .btn.flee { color: var(--demon); text-shadow: 0 0 8px var(--demon); animation: blink 1.2s steps(1) infinite; }
+  .btn.flee { color: var(--bright); text-shadow: 0 0 8px var(--bright), 0 0 2px var(--bright); animation: blink 1.2s steps(1) infinite; }
+  .runlabel { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .unsaved { color: var(--gold); }
   .frame { position: relative; }
   .logview { position: absolute; inset: 0; background: rgba(7, 9, 10, 0.96); overflow: auto; cursor: pointer;
@@ -62,6 +63,9 @@
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
+  /* Rarity colors, Diablo-style. */
+  .t-COMMON { color: var(--fg); } .t-UNCOMMON { color: #7bd88f; } .t-RARE { color: #6aa9ff; }
+  .t-MYTHIC { color: var(--gold); text-shadow: 0 0 6px var(--gold); } .t-MOON { color: #dfe9ff; text-shadow: 0 0 8px #9fc4ff; }
   .foundbox .demon { color: var(--demon); }
   .facing { color: var(--bright); }
   .saved { color: var(--fg); }
@@ -108,6 +112,11 @@
       }
       if (i === 1) return esc(line).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2');
       if (i === 4) return esc(line).replace("^^^", '<span class="moon">^^^</span>');
+      // During a fight, "RUN?" sits in the rule just above the glowing direction buttons.
+      if (i === lines.length - 3 && save && save.encounter) {
+        const label = " RUN? ", at = 61;
+        return esc(line.slice(0, at)) + `<span class="runlabel">${label}</span>` + esc(line.slice(at + label.length));
+      }
       if (i === lines.length - 2) {
         // Daily actions dim once used (or when there's no door that way).
         const can = save ? RULES.available(save) : {};
@@ -228,8 +237,8 @@
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
-      `${i < 9 ? i + 1 : " "}  ${(it.name + (it.count > 1 ? " x" + it.count : "")).padEnd(30)} ${it.text}`,
-      it.usable ? "btn" : "", i));
+      `${i < 9 ? i + 1 : " "}  ${it.tier.padEnd(9)} ${(it.name + (it.count > 1 ? " x" + it.count : "")).padEnd(36)} ${it.text}`,
+      "t-" + it.tier + (it.usable ? " btn" : ""), i));
     add(" ");
     add("Press a number or click an item to use it. [I] or Esc closes.");
   }
@@ -254,10 +263,9 @@
     const newItems = (save.items || []).slice((before.items || []).length);
     const silver = (save.silver || 0) - (before.silver || 0);
     const lines = [];
-    for (const it of newItems) lines.push(it);
+    for (const it of newItems) lines.push({ text: it, tier: RULES.tierOf(it) });
     if (silver > 0 && /Coins/.test(save.log)) lines.push(silver + " SILVER");
     if (/Stairs lead down/.test(save.log)) lines.push("the stairs down");
-    if (/alcove/.test(save.log)) lines.push("something hidden, lit from within");
     const box = document.getElementById("found");
     const pre = box.querySelector("pre");
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
@@ -265,11 +273,14 @@
     pre.innerHTML = "";
     add("KURA FOUND");
     add(" ");
-    for (const l of lines) add(l, "gold");
+    for (const l of lines) {
+      if (typeof l === "string") add(l, "gold");
+      else { add(l.text, "t-" + l.tier); add(l.tier, "t-" + l.tier); }
+    }
     const notes = newItems.map(n => (RULES.inventory({ items: [n] })[0] || {}).text).filter(Boolean);
     if (notes.length) { add(" "); notes.forEach(n => add(n)); }
     add(" ");
-    add("[ENTER]");
+    add("[ OK ]", "btn");
     box.hidden = false;
     box.dataset.mode = "found";
   }
@@ -298,9 +309,8 @@
       const row = document.createElement("div");
       row.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"));
       pre.appendChild(row);
-      add(" ");
-      add("or run through a door: [N] [S] [E] [W] below (uses today's step)");
-    } else add("[ENTER]");
+
+    } else add("[ OK ]", "btn");
     box.hidden = false;
     box.dataset.mode = e ? "encounter" : "done";
     return true;
