@@ -4,14 +4,15 @@
 
 ![Daily Dungeon screen](screenshot.png)
 
-An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played one step a day on the real calendar. The real moon phase changes how demons behave.
+An 80-column ASCII rougelike dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played one step a day on the real calendar. The real moon phase impacts gameplay in different ways.
 
 ## How it plays
 
-- **One step a day.** `[N] [S] [E] [W]` walk through a door (or down the stairs once found). The step comes back at midnight, Honolulu time.
-- **Search as much as you like.** `SE[A]RCH` digs at the wall KURA faces; each wall hides its own things, and finds are a matter of luck and patience. Every search risks a wandering demon, more often under a bright moon.
+- **One step a day.** `[N] [S] [E] [W]` walk through a door (or down the stairs once found). The step comes back at midnight, your local time.
+- **Search as much as you like.** `SE[A]RCH` digs at the wall KURA faces; each wall hides its own things, and finds are a matter of luck and patience. Every search risks a rare reward or a wandering demon, more often under a bright moon.
 - **Look around for free** with `[<]` and `[>]` under the 3D view.
 - **Each floor is a real week.** Its way down closes at the end of Sunday. Find the stairs early and the next floor gives you bonus days; miss the deadline, or let KURA fall to a demon, and the run is over.
+- **Each run is a real month.** 4 weeks, 4 levels to explore.
 - **Your run lives in your browser** and saves itself after every action. `[L]OG` shows the adventure log, `[B]ACKUP` gives a code to keep or move your run, `[R]ST` starts over.
 
 ## Files
