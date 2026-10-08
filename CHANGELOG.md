@@ -4,6 +4,8 @@ Changes to the game itself, newest first, with the time each went live (Honolulu
 
 ## v0.33 - Oct 7 2026, 16:45 HST
 
+![v0.33](screenshots/v0.33.png)
+
 - **Text lines hold for two turns and two seconds.** Line 3 stays on screen until KURA has taken two more actions and two seconds have passed, so fast clicking can't skip past it. Warnings (a demon, damage, a closing way down, game over) still replace it at once.
 - **One loop counter.** Doing the same thing over and over is now a single count for everything (searching, turning, walking, items, fighting, talking). The old separate streak is gone. Searching a wall still counts at half. The party gets restless as before.
 - **Lingering counts every action in a room**, and the trigger is now 30.
