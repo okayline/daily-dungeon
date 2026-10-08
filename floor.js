@@ -211,27 +211,23 @@
     floor.rooms.forEach((room, i) => {
       if (room && state.visited[i]) seen.push({ i, room, row: 2 + (room.r - here.r) * 2, col: 13 + (room.c - here.c) * 4 });
     });
-    const wall = Array.from({ length: H }, () => Array(W).fill(false));
+    const wall = Array.from({ length: H }, () => Array(W).fill(false)), vert = Array.from({ length: H }, () => Array(W).fill(false));
     const mark = (r, c, v) => { if (r >= 0 && r < H && c >= 0 && c < W) wall[r][c] = v; };
     for (const { row, col } of seen)
-      for (let r = row - 1; r <= row + 1; r++) for (let c = col - 1; c <= col + 3; c++) if (r !== row || c === col - 1 || c === col + 3) mark(r, c, true);
-    // Rooms of one wing read as a single big room: no wall between them, and no door mark.
-    const same = (room, d) => { const o = floor.rooms[room.doors[d]]; return !!o && o.wing === room.wing && state.visited[room.doors[d]]; };
-    const open = (row, col, d, room) => {
-      if (room && same(room, d)) {
-        if (d === "E") for (let r = row - 1; r <= row + 1; r++) mark(r, col + 3, false);
-        if (d === "W") for (let r = row - 1; r <= row + 1; r++) mark(r, col - 1, false);
-        if (d === "S") for (let k = -1; k < 4; k++) mark(row + 1, col + k, false);
-        if (d === "N") for (let k = -1; k < 4; k++) mark(row - 1, col + k, false);
-        return;
+      for (let r = row - 1; r <= row + 1; r++) for (let c = col - 1; c <= col + 3; c++) if (r !== row || c === col - 1 || c === col + 3) {
+        mark(r, c, true);
+        if ((c === col - 1 || c === col + 3) && r >= 0 && r < H && c >= 0 && c < W) vert[r][c] = true;   // a side wall keeps going past the edge of the window
       }
+    // Rooms of one wing read as a single big room: their doors are just gaps in the wall, with no door mark.
+    const same = (room, d) => { const o = floor.rooms[room.doors[d]]; return !!o && o.wing === room.wing && state.visited[room.doors[d]]; };
+    const open = (row, col, d) => {
       if (d === "E") mark(row, col + 3, false); if (d === "W") mark(row, col - 1, false);
       if (d === "S") for (let k = 0; k < 3; k++) mark(row + 1, col + k, false);
       if (d === "N") for (let k = 0; k < 3; k++) mark(row - 1, col + k, false);
     };
-    for (const { room, row, col } of seen) { for (const d of Object.keys(room.doors)) open(row, col, d, room); for (const d of room.falseDoors || []) open(row, col, d); }
+    for (const { room, row, col } of seen) { for (const d of Object.keys(room.doors)) open(row, col, d); for (const d of room.falseDoors || []) open(row, col, d); }
     for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) if (wall[r][c]) {
-      const n = r > 0 && wall[r - 1][c], s = r < H - 1 && wall[r + 1][c], w = c > 0 && wall[r][c - 1], e = c < W - 1 && wall[r][c + 1];
+      const n = r > 0 ? wall[r - 1][c] : vert[r][c], s = r < H - 1 ? wall[r + 1][c] : vert[r][c], w = c > 0 && wall[r][c - 1], e = c < W - 1 && wall[r][c + 1];
       rows[r][c] = (n || s) && (w || e) ? "+" : n || s ? "|" : "-";
     }
     seen.forEach(({ i, room, row, col }) => {
@@ -239,7 +235,7 @@
       const lureHere = i === floor.lure && !found.includes("lure");
       const mark = state.at === i ? "@" : i === floor.start ? "^"
         : found.includes("stairs") ? "v" : lureHere ? "?" : " ";
-      put(row, col, room.hall ? ")" + mark + "(" : "[" + mark + "]");   // a passage is drawn with ) (
+      put(row, col, room.hall ? " " + mark + " " : "[" + mark + "]");   // a passage has no brackets: blank, or just KURA's @ (or a mark)
       // Door marks sit in the opened gaps: = and ‖ for open doors, # for a locked or false one; a sealed one is plain wall.
       const stub = (d, locked) => {
         if (d === "E") put(row, col + 3, locked ? "#" : "=");

@@ -2,6 +2,18 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.45 - Oct 7 2026, 23:09 HST
+
+![v0.45](screenshots/v0.45.png)
+
+The spare cell on screen, a cleaner minimap, and bonus rooms on unlock.
+
+- **Spare cell:** the bottom bar shows `CELL [#]` (ready) or `CELL [ ]` (spent), with `[+]` when a spare is banked.
+- **Minimap:** side walls are no longer clipped at the window edge, doors inside one wing are plain gaps, and a passage cell is blank (just `@`, `^` or `v` when you stand in it).
+- **Bonus room:** the 1 in 10 roll now happens on each unlock, once per floor, and lands on a wing's dead end or passage.
+- **Questions:** `[Y]ES` and `[N]O` no longer glow or change color, line up with the bar, and flash twice.
+- The help page calls it `[P]ASSWORD`.
+
 ## v0.44 - Oct 7 2026, 22:34 HST
 
 ![v0.44](screenshots/v0.44.png)

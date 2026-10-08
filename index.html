@@ -91,11 +91,10 @@
   .mframe { color: var(--trail); }
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
   .caret { display: inline-block; position: relative; left: calc(-1ch / 6); width: calc(1ch / 1.5); font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
-  .btn[data-act=hold], .btn.ask { position: relative; top: 0.02em; }   /* STANDBY (and YES/NO in its place) sit a touch higher in the bar */
-  .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* a nudge when keys are pressed while a question waits */
+  .btn[data-act=hold] { position: relative; top: 0.02em; }   /* STANDBY sits a touch lower to line up with the bar */
+  .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* two flashes when keys are pressed while a question waits */
   /* The build number, small, under the screen's lower right corner. */
   .ver { white-space: pre-line; text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
-  .ask { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .t-ICHOR { color: var(--demon); }
   .foundbox .demon { color: var(--demon); }
@@ -476,7 +475,7 @@
     const two = (a, b, c, d) => "  " + (a + " ").padEnd(16, ".") + " " + String(b).padEnd(10) + " " + (c + " ").padEnd(16, ".") + " " + d;
     const line = "-".repeat(71);
     const text = [
-      "DAILY DUNGEON   {{CODEX}}   {{PASS}}" + ("build " + SMT.VERSION).padStart(71 - 16 - 7 - 9), line,
+      "DAILY DUNGEON   {{CODEX}}   {{PASS}}" + ("build " + SMT.VERSION).padStart(71 - 16 - 7 - 13), line,
       "A dungeon crawler you play one charge a day, on the real calendar.",
       "Each floor is four wings. Three times, two locked doors offer two",
       "rooms: take one and the other seals. Listen at the doors; dead ends",
@@ -508,13 +507,13 @@
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
       "  [C]ODEX ............ every demon and item found, over all runs (press C on the main screen)",
       "  [L]OG .............. the adventure log",
-      "  [P]ASS ............. this run's password: copy it to keep or move the run,",
+      "  [P]ASSWORD ......... this run's password: copy it to keep or move the run,",
       "                       or paste one in to continue that run",
       "  [R]ESET ............ start a new run       [?] this page",
       "",
       "Made by okayline.   [?] or Esc closes",
     ].join("\n");
-    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{PASS}}", '<span class="btn" data-pass>[P]ASS</span>');
+    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{PASS}}", '<span class="btn" data-pass>[P]ASSWORD</span>');
   }
   document.getElementById("about").addEventListener("click", e => {
     showAbout(false);
