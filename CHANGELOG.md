@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.51 - Oct 8 2026, 02:34 HST
+
+![v0.51](screenshots/v0.51.png)
+
+Fights wait for you, and the dead have things to say.
+
+- **Fights:** the text now waits for a click or Enter between lines, with a blinking cursor. The enemy's line comes first.
+- **Last words:** fallen enemies get a parting remark on the end-of-fight screen.
+- **ICHOR:** you now choose who in the party gets it.
+- **CU SITH:** says nothing, as before, and now means it everywhere.
+
 ## v0.50 - Oct 8 2026, 01:31 HST
 
 ![v0.50](screenshots/v0.50.png)

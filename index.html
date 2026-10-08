@@ -91,6 +91,7 @@
   @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
   .mframe { color: var(--trail); }
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
+  .wait { animation: blink 1s steps(1) infinite; }   /* the _ that waits for a click */
   .caret { display: inline-block; position: relative; left: calc(-1ch / 6); width: calc(1ch / 1.5); font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
   .btn[data-act=hold] { position: relative; top: 0.02em; }   /* STANDBY sits a touch lower to line up with the bar */
   .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* two flashes when keys are pressed while a question waits */
@@ -413,7 +414,7 @@
 
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
-  let invList = [], invSel = 0, logGlow = false;
+  let invList = [], invSel = 0, logGlow = false, ichorPick = -1;   // ichorPick: who the picker is on (-1: closed)
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
   function textBox(title, tag, lines, W = 70) {
     const out = ["+" + "-".repeat(W + 2) + "+"];
@@ -454,6 +455,17 @@
     const pre = box.querySelector("pre");
     pre.innerHTML = "";
     const add = (txt, cls, i) => { const d = document.createElement("div"); d.textContent = txt; if (cls) d.className = cls; if (i !== undefined) d.dataset.i = i; pre.appendChild(d); return d; };
+    if (ichorPick >= 0 && save && (save.ichor || 0) > 0) {
+      add("INVOKE".padEnd(35) + "[ESC] back", "");
+      add(" ");
+      add(`GIVE ICHOR TO WHO?`.padEnd(30) + `${save.ichor} in hand`);
+      add(" ");
+      save.party.forEach((p, i) => add(`${i === ichorPick ? ">" : " "} ${p.name.padEnd(10)} ${p.hp > 0 ? `${String(p.hp).padStart(2)}/${p.hpmax}` : "DOWN"}`, "btn", i));
+      add(" ");
+      add("up/down choose   [ENTER] gives   Esc back");
+      return;
+    }
+    if (ichorPick >= 0) ichorPick = -1;
     add("INVOKE".padEnd(35) + "[I] closes", "");
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
@@ -465,7 +477,7 @@
     if (it) {
       add(" ");
       const tag = it.ichor ? `${save.ichor} in hand` : "";
-      const lines = it.ichor ? [it.text, "Enter feeds the wounded. [D]RINK: KURA."]
+      const lines = it.ichor ? [it.text, "Enter: choose who gets it."]
         : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
       textBox(it.name, tag, lines, 41).forEach(l => add(l, ""));
     }
@@ -473,7 +485,6 @@
     // What happened on the last try to use something (cleared when another item is chosen).
     const help = add("[1-9] choose  "), btn = (t, k) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = "btn"; sp.dataset[k] = "1"; return sp; };
     help.append(btn("[ENTER] use", "use"), "  ");
-    if (it && it.ichor) help.append(btn("[D]RINK", "drink"));
   }
   // ABOUT: the build, what the game is, a few numbers from this run and the codex.
   // (The full stats only show at the end of a run.)
@@ -570,7 +581,9 @@
     const it = invList[i];
     if (!it || !save) return;
     const log = save.log;
-    save = it.ichor ? (drink ? RULES.drinkIchor(save) : RULES.feedIchor(save)) : RULES.useItem(save, it.name);
+    if (it.ichor && !drink) { ichorPick = 0; return showInv(true); }
+    save = it.ichor ? RULES.giveIchor(save, Number(drink) || 0) : RULES.useItem(save, it.name);
+    ichorPick = -1;
     logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
     // Something broke: a popup says so (and what was inside, if anything). It waits for its [ OK ], like a find.
@@ -727,8 +740,8 @@
   // (or KURA falls); then [ENTER] closes it.
   const floatBox = box => { pending = null; passAct = null; box.className = "foundbox"; box.removeAttribute("style"); };   // a new box replaces whatever was waiting
   const wrapText = (s, n) => { const out = []; let rest = String(s); while (rest.length > n) { let cut = rest.lastIndexOf(" ", n); if (cut <= 0) cut = n; out.push(rest.slice(0, cut)); rest = rest.slice(cut).trimStart(); } out.push(rest); return out; };
-  let blockedRun = false, replayTimer = null, prevDemonHp = null, prevKuraHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
-  function finishReplay() { if (replayTimer) { clearInterval(replayTimer); replayTimer = null; encounterBox(false); } }
+  let blockedRun = false, replayTimer = null, replayAdvance = null, replayWait = false, prevDemonHp = null, prevKuraHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
+  function finishReplay() { if (replayTimer) { clearInterval(replayTimer); replayTimer = null; replayAdvance = null; replayWait = false; encounterBox(false); } }
 
   // THE ALTAR: the terminal in a Matrix Altar room. Its screen types out its words, a glare shimmers across it,
   // and after an offering it answers with a face. The list is the gift list; the result and the "quiet today"
@@ -811,7 +824,7 @@
     encounterBox(false);
   }
   function encounterBox(animate) {
-    if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
+    if (replayTimer) { clearInterval(replayTimer); replayTimer = null; replayAdvance = null; replayWait = false; }
     const e = save && save.encounter, lines = (save && save.round) || [];
     if (!e && !(save && save.roundOver)) return false;
     const box = document.getElementById("found"), pre = box.querySelector("pre");
@@ -860,6 +873,7 @@
     const barFor = hp => barOf(hp, e.hpmax);
     const kura = save.party && save.party[0] ? save.party[0] : null;
     const round = (e.round || 0) + 1;
+    const partyIdx = lines.findIndex(l => /^The party strikes/.test(l)), hitIdx = lines.findIndex(l => isDemon(l) && / -\d+ HP/.test(l));   // which line lands which blow, so each bar drops when its line shows
 
     // One frame of the box. shown = how many result lines are visible; who = whose > it is (null = KURA, waiting).
     const frame = (shown, who, final) => {
@@ -907,10 +921,13 @@
         pre.appendChild(d);
       };
       // The enemy sits above KURA, under the art, with the round counter at the right end of its row.
-      arrow(who === "demon", `${e.name}   ${barFor(shown >= 1 || final || prevDemonHp === null ? e.hp : prevDemonHp)}`, "demon", `ROUND ${round}`);
-      arrow(who === null, kura ? `${"KURA".padEnd(e.name.length)}   ${barOf(final || prevKuraHp === null ? kura.hp : prevKuraHp, kura.hpmax)}` : "KURA");
+      arrow(who === "demon", `${e.name}   ${barFor(final || prevDemonHp === null || (partyIdx < 0 ? shown >= 1 : shown > partyIdx) ? e.hp : prevDemonHp)}`, "demon", `ROUND ${round}`);
+      arrow(who === null, kura ? `${"KURA".padEnd(e.name.length)}   ${barOf(final || prevKuraHp === null || (hitIdx >= 0 && shown > hitIdx) ? kura.hp : prevKuraHp, kura.hpmax)}` : "KURA");
       add(" ");                                        // a blank line between the names and what happened
-      for (const [w, c] of body) add(w, c);
+      body.forEach(([w, c], bi) => {
+        const d = add(w, c);
+        if (replayWait && !final && bi === body.length - 1) { const s = document.createElement("span"); s.className = "wait"; s.textContent = " _"; d.append(s); }   // waiting for a click
+      });
       const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1;
       for (let i = 0; i < rest; i++) add(" ");
       const row = document.createElement("div"); row.className = "brow";
@@ -928,13 +945,16 @@
     };
 
     if (animate && lines.length > 1 && !e.stage) {     // play the round back: the > moves to whoever acts
-      let n = 0;
-      frame(0, null, false);
-      replayTimer = setInterval(() => {
+      // The round plays one line at a time. After each, a blinking _ waits for a click (or Enter / Space) before the next line rolls in.
+      let n = 1;
+      const show = () => { replayWait = true; frame(n, isDemon(lines[n - 1]) ? "demon" : null, false); replayWait = false; };
+      replayAdvance = () => {
         n++;
-        if (n >= lines.length) { clearInterval(replayTimer); replayTimer = null; frame(lines.length, null, true); return; }
-        frame(n, isDemon(lines[n - 1]) ? "demon" : null, false);
-      }, 450);
+        if (n >= lines.length) { replayTimer = null; replayAdvance = null; frame(lines.length, null, true); return; }
+        show();
+      };
+      replayTimer = -1;                       // a stand-in: "a replay is waiting" (clearInterval on it is harmless)
+      show();
       return true;
     }
     frame(lines.length, null, true);
@@ -1058,7 +1078,7 @@
     if (e.target.closest("[data-codex]")) { codexSel = -1; showCodex(true); }
   });
   document.getElementById("found").addEventListener("click", e => {
-    if (replayTimer) return finishReplay();     // a click skips the round's playback
+    if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
     if (e.target.closest("[data-intro]")) return introOK();
     const mode = document.getElementById("found").dataset.mode;
     if (mode === "intro") return;
@@ -1077,9 +1097,9 @@
   // Clicking an item chooses it; clicking the chosen one again uses it. Clicking elsewhere closes.
   document.getElementById("inv").addEventListener("click", e => {
     if (e.target.closest("[data-use]")) return useInv(invSel);
-    if (e.target.closest("[data-drink]")) return useInv(invSel, true);
     if (e.target.closest("[data-codex]")) { showInv(false); codexSel = -1; return showCodex(true); }
     const line = e.target.closest("[data-i]");
+    if (ichorPick >= 0) { if (!line) { ichorPick = -1; return showInv(true); } const n = Number(line.dataset.i); if (n === ichorPick) return useInv(invSel, n || "0"); ichorPick = n; return showInv(true); }
     if (!line) { showInv(false); if (save && save.encounter) encounterBox(); return; }
     const i = Number(line.dataset.i);
     if (i === invSel) useInv(i); else { invSel = i; showInv(true); }
@@ -1111,6 +1131,7 @@
         if (k) act(k);
         return;
       }
+      if (fbox.dataset.mode === "encounter" && replayAdvance && (key === "enter" || key === " ")) { e.preventDefault(); replayAdvance(); return; }
       if (fbox.dataset.mode === "encounter") {
         const st2 = save.encounter && save.encounter.stage;
         let k;
@@ -1140,11 +1161,19 @@
       return;
     }
     if (!document.getElementById("inv").hidden) {
+      if (ichorPick >= 0) {
+        e.preventDefault();
+        const n = save.party.length;
+        if (key === "escape") ichorPick = -1;
+        else if (key === "arrowdown" || key === "arrowup") ichorPick = (ichorPick + (key === "arrowdown" ? 1 : n - 1)) % n;
+        else if (/^[1-9]$/.test(key) && Number(key) <= n) ichorPick = Number(key) - 1;
+        else if (key === "enter") return useInv(invSel, ichorPick || "0");
+        return showInv(true);
+      }
       if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
       else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; showInv(true); }
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
-      else if (key === "d" && invList[invSel] && invList[invSel].ichor) { e.preventDefault(); useInv(invSel, true); }
       return;
     }
     if (!document.getElementById("log").hidden) {
