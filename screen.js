@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.53";
+  const VERSION = "v0.54";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -219,7 +219,7 @@
     // A status effect shows as a mark after the name: KURA* while she's TRIPPING.
     const mem = p => " " + ljust(short(p.name) + (p.status ? "*" : ""), 9) + ljust(`L${p.lv}`, 3) + " " +
       `${rjust(String(p.hp), 3)}/${rjust(String(p.hpmax), 3)} ${rjust(String(p.mp), 3)}/${rjust(String(p.mpmax), 3)}`;
-    const party = st.party.map(mem); while (party.length < 4) party.push("");
+    const party = st.party.map((p, i) => mem(i === 0 && st.playerName ? { ...p, name: String(st.playerName).toUpperCase() } : p)); while (party.length < 4) party.push("");
     // KURA is drawn on the minimap as an arrow showing the facing direction.
     const arrow = { N: "^", E: ">", S: "v", W: "<" }[st.facing] || "@";
     // The map area is 6 rows. An old 4-row map gets a blank row above and below;
@@ -284,7 +284,7 @@
     const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", cell = `CELL [${(st.today || {}).stepped && !st.freeSteps ? " " : "#"}][${st.spare > 0 ? "+" : " "}]`,   // today's charge, and a stored spare
       daily = cell.padEnd(15) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = boardOn ? " [?] [L]OG [B]OARD [R]ESET " : " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
+    const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");
@@ -303,9 +303,7 @@
     return S.join("\n");
   }
 
-  let boardOn = false;                                  // the leaderboard button shows only once the page has a board to talk to
-  const setBoard = v => { boardOn = !!v; };
-  const api = { setBoard, VERSION, moonNote, renderView, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  const api = { VERSION, moonNote, renderView, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);

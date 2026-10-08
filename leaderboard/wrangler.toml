@@ -8,7 +8,8 @@ database_name = "daily-dungeon-board"
 database_id = "PASTE-THE-ID-FROM-wrangler-d1-create"
 
 [vars]
-# Only this page may post scores (reads are open to anyone). Put the game's real address here, no trailing slash.
+# The pages allowed to post scores (reads are open to anyone). The game's real address, no trailing slash;
+# several are fine, comma-separated. Blank means any page. If posting says "not allowed", the game shows the address it came from.
 ALLOW_ORIGIN = "https://okayline.github.io"
 # Optional: comma-separated words a name may not contain (lowercase).
 BLOCKLIST = ""

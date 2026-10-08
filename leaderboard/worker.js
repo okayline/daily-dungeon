@@ -4,9 +4,9 @@
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
 const MAX = { floor: 20, days: 400 };
-const json = (data, status, origin) => new Response(JSON.stringify(data), { status: status || 200, headers: {
-  "content-type": "application/json", "access-control-allow-origin": origin || "*",
-  "access-control-allow-methods": "GET, POST, DELETE, OPTIONS", "access-control-allow-headers": "content-type, x-admin-key" } });
+const cors = () => ({ "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+  "access-control-allow-headers": "content-type, x-admin-key", "access-control-max-age": "86400" });
+const json = (data, status, origin) => new Response(JSON.stringify(data), { status: status || 200, headers: { "content-type": "application/json", ...cors() } });
 const hash = async s => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].slice(0, 8).map(b => b.toString(16).padStart(2, "0")).join("");
 
 async function rankOf(db, row) {
@@ -17,8 +17,11 @@ async function rankOf(db, row) {
 
 export default {
   async fetch(req, env) {
-    const url = new URL(req.url), allow = env.ALLOW_ORIGIN || "*";
-    if (req.method === "OPTIONS") return json({}, 204, allow);
+    const url = new URL(req.url), allow = "*";
+    // ALLOW_ORIGIN: the pages allowed to post or delete, comma-separated (blank: any page). Everyone may read the board.
+    const pages = String(env.ALLOW_ORIGIN || "").split(",").map(s => s.trim().replace(/\/$/, "")).filter(Boolean);
+    const from = req.headers.get("origin") || "", pageOk = !pages.length || pages.includes(from);
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors() });   // a 204 must have no body, or the browser's preflight fails
 
     if (url.pathname === "/top" && req.method === "GET") {
       const n = Math.max(1, Math.min(50, Number(url.searchParams.get("n")) || 20)), run = url.searchParams.get("run") || "";
@@ -34,6 +37,7 @@ export default {
 
     // Removing an entry takes the admin key (a Worker secret: `npx wrangler secret put ADMIN_KEY`).
     if (url.pathname === "/score" && req.method === "DELETE") {
+      if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
       if (!env.ADMIN_KEY || req.headers.get("x-admin-key") !== env.ADMIN_KEY) return json({ error: "forbidden" }, 403, allow);
       const id = Number(url.searchParams.get("id"));
       if (!Number.isInteger(id)) return json({ error: "invalid" }, 400, allow);
@@ -42,7 +46,7 @@ export default {
     }
 
     if (url.pathname === "/score" && req.method === "POST") {
-      if (env.ALLOW_ORIGIN && req.headers.get("origin") !== env.ALLOW_ORIGIN) return json({ error: "origin" }, 403, allow);
+      if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
       let b; try { b = await req.json(); } catch (e) { return json({ error: "json" }, 400, allow); }
       const name = String(b.name || "").trim().replace(/\s+/g, " "), run = String(b.run || "");
       const floor = Number(b.floor), days = Number(b.days), demons = Number(b.demons), turns = Number(b.turns);

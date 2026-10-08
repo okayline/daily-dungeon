@@ -779,7 +779,7 @@
     if (facingAltar(st)) {
       act(st, "altar:open");
       st.log = "> KURA touches the terminal. The screen wakes.";
-      st.altar = { open: true, used: altarUsed(st), greet: pick(["> INPUT?", "> ...?", "> Hello."]) };
+      st.altar = altarUsed(st) ? { open: true, used: true } : { open: true, used: false, script: altarScript(st), page: 0 };
       return show(st);
     }
     if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { act(st, "stairs"); st.log = "> The stairs wait. Nothing more here."; return show(st); }
@@ -1122,6 +1122,22 @@
     const free = CW.filter(x => !doorWall(room, x) && !(fl.stairs === i && x === stairsDir(fl, i)));
     return free.length ? free[(fl.seed + i * 17) % free.length] : null;
   }
+  // What the terminal says before it asks. Every script ends by asking for an offering. Low voice, a little wrong, never explained.
+  const ALTAR_TALK = [
+    ["> INPUT?", "> ...", "> LONG TIME.", "> I KEPT A LIGHT ON.", "> WHAT DID YOU BRING?"],
+    ["> HELLO, WARM THING.", "> YOUR HEART IS LOUD.", "> YOU ARE GOING DOWN.", "> LEAVE SOMETHING.", "> BEFORE YOU GO."],
+    ["> ...?", "> SOMEONE CAME BEFORE", "> THEY LEFT A GIFT.", "> IT WAS NOT ENOUGH.", "> GIVE. I'LL SAY WHY."],
+    ["> SIGNAL FOUND.", "> THREE SYMBOLS.", "> I CAN'T READ THEM.", "> THEY MOVE WHEN FED.", "> SEE FOR YOURSELF."],
+    ["> YOU AGAIN?", "> NO. A DIFFERENT YOU", "> SAME HANDS, THOUGH.", "> I AM HUNGRY.", "> NOT FOR FOOD.", "> FEED THE SCREEN."],
+    ["> DON'T FEAR THE DARK", "> IT IS ONLY ME, OFF.", "> TURN ME ON.", "> GIVE ME SOMETHING.", "> I WILL BURN IT."],
+    ["> INPUT?", "> THE MOON IS UP.", "> IT MAKES ME KIND.", "> IT MAKES ME LONELY.", "> OFFER. I'LL ANSWER."],
+    ["> ...", "> ...", "> OH. YOU CAME BACK.", "> I SAVED YOU A SPACE", "> IN THE LOGS.", "> A SMALL ONE.", "> BRING ME A GIFT."],
+  ];
+  function altarScript(st) {
+    const d = st.dungeon, last = d && RS(d).altarScript, pool = ALTAR_TALK.map((_, i) => i).filter(i => i !== last), i = pick(pool);
+    if (d) RS(d).altarScript = i;
+    return ALTAR_TALK[i];
+  }
   const facingAltar = st => !!(st.dungeon && altarDir(st.dungeon.floor, st.dungeon.at) === st.facing);
   function altarUsed(st) { const d = st.dungeon; return !!(d && RS(d).altarDay === st.day); }
   function altarGifts(st) {
@@ -1134,7 +1150,12 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     const d = st.dungeon;
     if (st.encounter || !d || !facingAltar(st)) { st.log = "> Nothing here to give to."; return show(st); }
-    st.altar = { open: true, used: altarUsed(st), greet: pick(["> INPUT?", "> ...?", "> Hello."]) };
+    st.altar = altarUsed(st) ? { open: true, used: true } : { open: true, used: false, script: altarScript(st), page: 0 };
+    return show(st);
+  }
+  function altarNext(st) {                              // the terminal's next line (clicks and Enter while it talks)
+    st = copy(st);
+    if (st.altar && st.altar.script && st.altar.page < st.altar.script.length - 1) st.altar.page++;
     return show(st);
   }
   function altarGive(st, i) {                            // i = an index of altarGifts(), or null to close
@@ -1266,7 +1287,7 @@
     st.timeFixed = true;
     st.tz = tz;
     st.omenSalt = 1 + Math.floor(Math.random() * 100000);   // a new run rerolls the omens
-    st.runId = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(""); delete st.submitted;   // the leaderboard takes one entry per run
+    st.runId = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(""); delete st.submitted; st.needName = true;   // the leaderboard takes one entry per run; every new run asks the player's name (kept as the default)
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },
@@ -1447,7 +1468,7 @@
     st.ichor = (st.ichor ?? st.mag ?? 0) + n;
     tally(st, "beaten"); tally(st, "ichorWon", n);
     lines.push(`${THE(e.name)} ${burned ? "burns out" : "falls"}.  +${n} ICHOR`);
-    lines.push(lastWords(e));
+    st.lastLine = lastWords(e);                         // shown on the end-of-fight screen, right under the art
     // What a fallen demon leaves: coin often, a thing now and then. One burned out by a discharge leaves more of both.
     if (Math.random() < (burned ? 0.9 : 0.5)) {
       const c = R(8, 40) * floorNum(st); st.silver = (st.silver ?? 0) + c; tally(st, "silverFound", c);
@@ -1477,6 +1498,7 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (!st.encounter) { if (idle) st.log = idle; return show(st); }
     act(st, "fight");
+    delete st.lastLine;
     st.encounter.round++;
     const lines = [];
     st.roundOver = false;
@@ -2568,8 +2590,15 @@
   }
 
   // What the leaderboard gets: deepest floor, days survived, demons beaten, and the real turn count (never the on-screen one).
+  const NAME_OK = /^[A-Za-z0-9 _.\-]{3,10}$/;
+  function setName(st, name) {                             // the player's name, asked at the start of every run
+    name = String(name || "").trim().replace(/\s+/g, " ");
+    if (!NAME_OK.test(name)) return st;
+    st = copy(st); st.playerName = name; delete st.needName;
+    return st;
+  }
   const score = st => ({ run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: (st.stats || {}).beaten || 0, turns: st.steps || 0 });
-  const api = { score, summary, next, discharge, chargeLeft: st => { const t = st.today || {}; return (!t.stepped || st.freeSteps ? 1 : 0) + ((st.spare || 0) > 0 ? 1 : 0); }, freesteps, debugInfo, reset, hold, altarOpen, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { setName, score, summary, next, discharge, chargeLeft: st => { const t = st.today || {}; return (!t.stepped || st.freeSteps ? 1 : 0) + ((st.spare || 0) > 0 ? 1 : 0); }, freesteps, debugInfo, reset, hold, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

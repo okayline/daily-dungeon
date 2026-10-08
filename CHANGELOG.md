@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.54 - Oct 8 2026, 04:01 HST
+
+![v0.54](screenshots/v0.54.png)
+
+Names, and a terminal with more to say.
+
+- **Name:** each run now begins by asking who you are, and your name heads the party list.
+- **Altar:** the terminal talks before it asks, a line at a time.
+- **Fights:** the cursor keeps blinking until you choose, and a fallen enemy's last words sit right under the art.
+- **Leaderboard:** clearer messages when a score can't be posted, and the end-of-run screen is tidier.
+
 ## v0.53 - Oct 8 2026, 03:30 HST
 
 ![v0.53](screenshots/v0.53.png)

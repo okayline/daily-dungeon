@@ -80,6 +80,7 @@
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
   .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
+  .nameinput.bad { border-color: var(--demon); }
   .passfield { display: block; width: 100%; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; resize: none; margin: 4px 0; }
   /* The fight box sits inside the 3D view (rows 6-20, columns 1-47), like the bag, so the party and map stay in sight. */
   .foundbox.inframe { left: auto; top: auto; transform: none; border: none; outline: 1px solid var(--trail); box-shadow: none;
@@ -207,7 +208,6 @@
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
         .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
-        .replace("[B]OARD", '<span class="btn" data-act="board">[B]OARD</span>')
         .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>');
       return esc(line);
     }).join("\n")
@@ -230,7 +230,7 @@
     return h.text;
   }
   // Put back the fight or altar box that belongs to the run (after a cancelled question, a loaded password...).
-  function restoreBoxes() { if (save) { encounterBox(); altarBox(); } }
+  function restoreBoxes() { if (save) { if (nameBox()) return; encounterBox(); altarBox(); } }
   function draw() {
     if (!save) return;
     try { document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extraToShow())); }
@@ -315,7 +315,6 @@
   // The leaderboard's address (the Cloudflare Worker, see leaderboard/README.md). Empty: every board button stays hidden.
   const LEADERBOARD_URL = "https://daily-dungeon-board.ddddungeon.workers.dev";
   async function start() {
-    SMT.setBoard(!!LEADERBOARD_URL);
     document.getElementById("ver").textContent = SMT.VERSION;
     await syncTime();
     let s = null, raw = null;
@@ -323,13 +322,13 @@
     try { raw = localStorage.getItem(KEY); s = JSON.parse(raw || "null"); } catch (e) { stash("-corrupt"); s = null; }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.dispatchEvent(new Event("resize")));   // popups are placed by measuring the font
     if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 5 && s.party) {
-      try { save = s; tick(); flashStatus(); draw(); encounterBox(); altarBox(); return; }
+      try { save = s; tick(); flashStatus(); draw(); if (!nameBox()) { encounterBox(); altarBox(); } return; }
       catch (err) { console.error(err); stash("-corrupt"); save = null; }
     } else if (s) stash("-old");
     save = RULES.reset({});
     save.history = [];
     remember("");
-    persist(); draw();
+    persist(); draw(); nameBox();
   }
 
   // LOG: the run's adventure log, newest first. Click, L or Escape closes it.
@@ -348,20 +347,60 @@
     else done(false);
   }
   // LEADERBOARD: post this run's score once, and read the top of the board. Ranked by floor, then days; TURNS are shown only.
+  // THE NAME: asked when a run begins (and on an old save that has none). It follows PARTY in the sidebar and goes on the board.
+  const needsName = () => !!(save && !save.dead && (!save.playerName || save.needName));
+  function nameBox() {
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    if (!needsName()) { if (box.dataset.mode === "name") { box.hidden = true; box.dataset.mode = ""; pre.innerHTML = ""; } return false; }
+    box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
+    placeInView(box, 15);
+    box.dataset.mode = "name";
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
+    const PAD = " ".repeat(10);
+    add(PAD + ".-----------------------.", "artframe");
+    add(PAD + "| > WHO ARE YOU?        |", "artframe screen");
+    add(PAD + "|_.--'''-.___.--'''-.___|", "artframe screen");
+    add(PAD + "'-----------------------'", "artframe");
+    add(" "); add(" ");
+    const row = document.createElement("div"), inp = document.createElement("input");
+    inp.className = "nameinput"; inp.id = "playername"; inp.maxLength = 10; inp.spellcheck = false; inp.autocomplete = "off"; inp.value = save.playerName || "";
+    row.append("  NAME  ", inp);
+    pre.appendChild(row);
+    add(" ");
+    add("  3 TO 10 LETTERS, NUMBERS, SPACE _ . -", "dim");
+    add(" ");
+    const go = document.createElement("div"), b = document.createElement("span");
+    b.className = "btn"; b.dataset.namego = "1"; b.textContent = "  [ENTER] BEGIN"; go.appendChild(b); pre.appendChild(go);
+    setTimeout(() => { inp.focus(); inp.select(); }, 50);
+    return true;
+  }
+  function confirmName() {
+    const inp = document.getElementById("playername");
+    if (!inp || !needsName()) return;
+    const next = RULES.setName(save, inp.value);
+    if (next === save) { inp.classList.add("bad"); setTimeout(() => inp.classList.remove("bad"), 400); return; }   // not a good name: nothing happens
+    save = next; persist(); nameBox(); draw();
+    restoreBoxes();
+  }
   async function submitScore() {
-    const inp = document.getElementById("scorename"), msg = document.getElementById("scoremsg");
-    if (!LEADERBOARD_URL || !save || !save.dead || save.submitted || !inp) return;
-    const name = inp.value.trim().replace(/\s+/g, " ");
-    if (!/^[A-Za-z0-9 _.\-]{3,10}$/.test(name)) { msg.textContent = "A NAME TAKES 3 TO 10 LETTERS, NUMBERS, SPACE _ . -"; return; }
+    const msg = document.getElementById("scoremsg"), name = (save && save.playerName) || "";
+    if (!LEADERBOARD_URL || !save || !save.dead || save.submitted || !msg) return;
+    if (!/^[A-Za-z0-9 _.\-]{3,10}$/.test(name)) { msg.textContent = "NO NAME ON THIS RUN."; return; }
     msg.textContent = "SENDING...";
     try {
       const r = await fetch(LEADERBOARD_URL + "/score", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...RULES.score(save), name, version: SMT.VERSION }) });
-      const d = await r.json();
-      if (!r.ok || !d.ok) { msg.textContent = d.error === "slow down" ? "TOO MANY POSTS. TRY LATER." : d.error === "name" ? "THAT NAME IS NOT ALLOWED." : "THE BOARD TURNED IT DOWN."; return; }
+      let d = {}; try { d = await r.json(); } catch (e) {}
+      if (!r.ok || !d.ok) {
+        msg.textContent = d.error === "origin" ? `THE BOARD DOES NOT ALLOW THIS PAGE (${d.seen || location.origin}). ADD IT TO ALLOW_ORIGIN.`
+          : d.error === "slow down" ? "TOO MANY POSTS. TRY LATER." : d.error === "name" ? "THAT NAME IS NOT ALLOWED."
+          : d.error === "invalid" ? "THE BOARD DID NOT LIKE THIS SCORE." : `THE BOARD ANSWERED ${r.status}.`;
+        return;
+      }
       save.submitted = { name, rank: d.rank }; persist();
       toggleLog(true);
-    } catch (e) { msg.textContent = "COULD NOT REACH THE BOARD."; }
+    } catch (e) { msg.textContent = "COULD NOT REACH THE BOARD. IS THE WORKER DEPLOYED WITH THE LATEST CODE?"; }
   }
   // In X mode (the infinite-steps cheat) the board becomes an admin list: up/down pick a row, D deletes it (needs the Worker's ADMIN_KEY).
   let boardData = null, boardSel = 0;
@@ -422,27 +461,28 @@
           .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.") + (save && save.dead ? "\n\n[R]ESET begins a new run." : "");
       const shown = logText.slice(logText.indexOf("\n\n") + 2), hAt = shown.indexOf("ADVENTURE LOG"), hEnd = shown.indexOf("\n\n", hAt);
       pre.textContent = "";
-      pre.append(shown.slice(0, hEnd + 1) + "\n");
-      // Buttons just under the heading, on the right: ways to keep the log (a text file, or the clipboard).
+      // Buttons: ways to keep the log (a text file, or the clipboard) and to close it, on the right.
       const button = (label, key) => { const b = document.createElement("span"); b.className = "btn"; b.dataset[key] = "1"; b.textContent = label; return b; };
       const top = document.createElement("div");
       top.style.textAlign = "right";
       top.append(button("[D]OWNLOAD", "download"), "   ", button("C[O]PY", "copy"), "   ", button("[C]LOSE", "close"));
-      pre.append(top);
       // Once a run is over (and a board is set up) the player can post it under a name, once.
+      const post = [];
       if (LEADERBOARD_URL && save && save.dead) {
         const row = document.createElement("div");
         row.className = "submitrow";
         if (save.submitted) row.append(`POSTED AS ${save.submitted.name}.  RANK ${save.submitted.rank}.  `, button("[B]OARD", "board"));
         else {
-          const inp = document.createElement("input");
-          inp.className = "nameinput"; inp.id = "scorename"; inp.maxLength = 10; inp.spellcheck = false; inp.autocomplete = "off";
-          row.append("POST YOUR SCORE  NAME ", inp, "  ", button("[ENTER] SEND", "submit"), " ", button("[B]OARD", "board"));
+          row.append(`POST YOUR SCORE AS ${String(save.playerName || "?").toUpperCase()}  `, button("[ENTER] SEND", "submit"), " ", button("[B]OARD", "board"));
         }
         const msg = document.createElement("div"); msg.id = "scoremsg"; msg.textContent = " ";
-        pre.append(row, msg);
+        post.push(row, msg);
       }
-      pre.append(shown.slice(hEnd));
+      if (save && save.dead) {        // the end screen: the buttons and the board come first, then the epitaph and totals, then the log
+        pre.append(top, ...post, "\n" + shown.slice(0, hEnd + 1) + "\n", shown.slice(hEnd));
+      } else {                        // a run in progress: the heading, then the buttons under it
+        pre.append(shown.slice(0, hEnd + 1) + "\n", top, shown.slice(hEnd));
+      }
     }
   }
 
@@ -858,6 +898,9 @@
     } else if (A.used) {
       add("  THE TERMINAL IS QUIET."); add("  COME BACK TOMORROW."); add(" ");
       add("  [ OK ]", "btn").dataset.fact = "altar-none";
+    } else if (A.script && A.page < A.script.length - 1) {
+      add(" "); add(" "); add("  ").append(Object.assign(document.createElement("span"), { className: "wait", textContent: "_" }));
+      add(" "); add(" "); add("  click or Enter  (B back)", "dim");
     } else {
       RULES.altarGifts(save).slice(0, 6).forEach((g, i) => {
         const line = document.createElement("div"), o = opt(`  [${i + 1}] ${g.label}`, "altar-" + i);
@@ -868,7 +911,7 @@
       const row = document.createElement("div"); row.append(opt("  [B]ACK", "altar-none")); pre.appendChild(row);
     }
     // the screen: line 1 types, line 2 shimmers (or types the face once there is an answer)
-    const say = A.result ? A.result.say : A.used ? "> ...ZZZ" : (A.greet || "> INPUT?");
+    const say = A.result ? A.result.say : A.used ? "> ...ZZZ" : A.script ? A.script[Math.min(A.page, A.script.length - 1)] : "> INPUT?";
     const face = A.result ? "  " + A.result.face : "";
     const WAVE = ["_", ".", "-", "'"];                   // a sine wave in four heights, drifting across the screen
     let tick = 0;
@@ -880,16 +923,22 @@
       let w = ""; for (let x = 0; x < n; x++) w += WAVE[Math.round((Math.sin((x - tick * speed) * 2 * Math.PI / period) + 1) / 2 * 3)];
       return w;
     };
+    const scroll = !!(A.script && !A.result);          // its own talk scrolls in from the right; the answer types
+    const W = IN - 2, stopAt = Math.min(0, W - say.length);
     const paint = () => {
       const typed1 = Math.min(say.length, Math.floor(tick / 2));
-      const done1 = typed1 >= say.length;
+      const done1 = scroll ? W - tick <= stopAt : typed1 >= say.length;
       const typed2 = A.result ? Math.max(0, Math.min(face.length, Math.floor((tick - say.length * 2 - 8) / 3))) : 0;
       const cursor = Math.floor(tick / 8) % 2 === 0 ? "_" : " ";
       const t1 = " " + say.slice(0, typed1) + (done1 ? "" : "_");
       let t2;
       if (A.result) t2 = (waveOf(IN - 5) + " " + face.trim().slice(0, Math.max(0, typed2 - 2))).padEnd(IN);
       else t2 = waveOf(IN);
-      if (!A.result && done1) s1.textContent = PAD + "|" + (" " + say + cursor).padEnd(IN) + "|";
+      if (scroll) {
+        const pos = Math.max(stopAt, W - tick);
+        const body = pos > 0 ? " ".repeat(pos) + say : say.slice(-pos);
+        s1.textContent = PAD + "|" + (" " + body.slice(0, W) + (done1 ? cursor : "")).padEnd(IN) + "|";
+      } else if (!A.result && done1) s1.textContent = PAD + "|" + (" " + say + cursor).padEnd(IN) + "|";
       else s1.textContent = PAD + "|" + t1.padEnd(IN) + "|";
       s2.textContent = PAD + "|" + t2 + "|";
       tick++;
@@ -926,8 +975,14 @@
     if (!e) {                                          // the fight is over
       pre.innerHTML = ""; doneAt = Date.now();
       const wl = []; for (const l of lines) for (const w of wrapText(l, COLS)) wl.push([w, lineClass(l)]);
-      const dArt = Math.min(5, ROWS - 4 - wl.length - 1);      // title, blank, text, blank, [ OK ]
-      if (dArt >= 3) artSlot(dArt);
+      // The fallen enemy's last words sit on the line right under the art (only when this screen is a win).
+      const won = lines.some(l => /falls\.  \+|burns out\.  \+/.test(l));
+      const last = won && save.lastLine ? wrapText(save.lastLine, COLS) : [];
+      const dArt = Math.min(5, ROWS - 4 - wl.length - 1 - (last.length ? last.length + 1 : 0));      // title, blank, text, blank, [ OK ], and the quote with a blank under it
+      if (dArt >= 3) {
+        for (let i = 0; i < dArt; i++) add(i === 0 ? "." + " ".repeat(COLS - 2) + "." : i === dArt - 1 ? "'" + " ".repeat(COLS - 2) + "'" : " ".repeat(COLS), "artframe");
+        if (last.length) { last.forEach(l => add(l)); add(" "); } else add(" ");
+      } else if (last.length) { last.forEach(l => add(l)); add(" "); }
       add(save.dead ? "DEFEAT" : "THE WAY IS CLEAR", save.dead ? "demon" : "gold");
       add(" ");
       for (const [w, c] of wl) add(w, c);
@@ -1008,7 +1063,7 @@
       add(" ");                                        // a blank line between the names and what happened
       body.forEach(([w, c], bi) => {
         const d = add(w, c);
-        if (replayWait && !final && bi === body.length - 1) { const s = document.createElement("span"); s.className = "wait"; s.textContent = " _"; d.append(s); }   // waiting for a click
+        if ((replayWait || final) && bi === body.length - 1) { const s = document.createElement("span"); s.className = "wait"; s.textContent = " _"; d.append(s); }   // waiting: for a click between lines, and for your choice after the last one
       });
       const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1;
       for (let i = 0; i < rest; i++) add(" ");
@@ -1114,6 +1169,7 @@
       : name.startsWith("offer-") ? RULES.offerGive(save, name === "offer-none" ? null : Number(name.slice(6)))
       : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
       : name === "altar" ? RULES.altarOpen(save)
+      : name === "altar-next" ? RULES.altarNext(save)
       : name.startsWith("altar-") ? RULES.altarGive(save, name === "altar-none" ? null : Number(name.slice(6)))
       : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
@@ -1124,6 +1180,7 @@
     }
     remember(name === "reset" || save.steps !== steps ? "" : log);
     persist(); draw();
+    if (name === "reset" && nameBox()) return;
     // A blocked run says so in a box that waits for [ OK ]; then the fight box plays the demon's reply.
     if (name !== "reset" && save.encounter && save.encounter.ranTried && !ranBefore && !save.dead) {
       blockedRun = true; noticeBox([`${save.encounter.name} blocked your way.`]);
@@ -1165,6 +1222,7 @@
   });
   document.getElementById("board").addEventListener("click", () => { if (!(save && save.freeSteps)) toggleBoard(false); });
   document.getElementById("found").addEventListener("click", e => {
+    if (document.getElementById("found").dataset.mode === "name") { if (e.target.closest("[data-namego]")) confirmName(); return; }
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
     if (e.target.closest("[data-intro]")) return introOK();
     const mode = document.getElementById("found").dataset.mode;
@@ -1178,6 +1236,7 @@
     const b = e.target.closest("[data-fact]");
     if (b) act(b.dataset.fact);
     else if (mode === "found" || mode === "done") { if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
+    else if (mode === "altar" && save.altar && save.altar.script && !save.altar.result && save.altar.page < save.altar.script.length - 1) act("altar-next");   // a click brings the terminal's next line
     else if (mode === "altar" || mode === "encounter") return;                   // their own buttons only
     else closeFound();
   });
@@ -1201,7 +1260,8 @@
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
-    if (e.target && e.target.tagName === "INPUT") { if (key === "enter") { e.preventDefault(); submitScore(); } else if (key === "escape") e.target.blur(); return; }   // typing a name
+    if (e.target && e.target.tagName === "INPUT") { if (key === "enter") { e.preventDefault(); confirmName(); } return; }   // typing the name
+    if (needsName()) { const i = document.getElementById("playername"); if (i) i.focus(); if (key === "enter") confirmName(); return; }   // nothing else works until the run has a name
     const fbox = document.getElementById("found");
     if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (key === "enter") introOK(); return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
@@ -1215,7 +1275,9 @@
       if (fbox.dataset.mode === "altar") {
         const A = save.altar || {};
         let k;
-        if (A.result || A.used) k = { enter: "altar-none", " ": "altar-none", escape: "altar-none", b: "altar-none" }[key];
+        const speaking = !A.result && !A.used && A.script && A.page < A.script.length - 1;
+        if (speaking) k = { enter: "altar-next", " ": "altar-next", escape: "altar-none", b: "altar-none" }[key];
+        else if (A.result || A.used) k = { enter: "altar-none", " ": "altar-none", escape: "altar-none", b: "altar-none" }[key];
         else k = /^[1-6]$/.test(key) ? "altar-" + (Number(key) - 1) : { b: "altar-none", escape: "altar-none" }[key];
         if (k) act(k);
         return;
@@ -1275,6 +1337,7 @@
     }
     if (!document.getElementById("log").hidden) {
       if (key === "l" || key === "c" || key === "escape") { e.preventDefault(); toggleLog(false); }
+      else if (key === "enter") { e.preventDefault(); submitScore(); }
       else if (key === "o") { e.preventDefault(); copyLog(document.querySelector("#log [data-copy]")); }
       else if (key === "d") { e.preventDefault(); downloadLog(); }
       return;
