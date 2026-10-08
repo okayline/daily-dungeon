@@ -14,8 +14,9 @@
 (function (root) {
   const DIRS = { N: [-1, 0], E: [0, 1], S: [1, 0], W: [0, -1] };
   const KINDS = ["den", "bay", "relay", "vault", "forge", "altar"];
+  const BONUS_KIND = "archive";                  // the seventh type: only on bonus weeks, behind the wildcard door
   const OPP = { N: "S", E: "W", S: "N", W: "E" };
-  const OFFERS = 3, DAYS = 7;
+  const DAYS = 7;
 
   // Small seeded random generator, so a floor can be rolled again from its seed.
   function rng(seed) {
@@ -30,12 +31,22 @@
   }
   function shuffleWith(a, rand) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-  function generate(seed = Math.floor(Math.random() * 2 ** 32)) {
+  // The week's deck: the six types dealt twice into pairs (never the same type twice in a pair), one pair for each of
+  // days 1 to (days-1). The last day is a wildcard: one door of a random type (on a bonus week, the seventh type).
+  // opts.days is how many days this floor lasts (up to 7).
+  function generate(seed = Math.floor(Math.random() * 2 ** 32), opts = {}) {
     const rand = rng(seed);
-    const deck = shuffleWith(KINDS.slice(), rand);
-    const floor = { v: 5, seed, rooms: [], start: 0, stairs: -1, lure: -1, kinds: [],
-      offers: [[deck[0], deck[1]], [deck[2], deck[3]], [deck[4], deck[5]]],      // the kinds offered, wing by wing
-      lureStage: rand() < 0.6 ? 1 + Math.floor(rand() * 3) : -1,                // which wing hides the locker (?), if any
+    const days = Math.max(3, Math.min(DAYS, opts.days || DAYS)), pairs = days - 1;
+    let deck;
+    for (let tries = 0; ; tries++) {
+      deck = shuffleWith(KINDS.slice(), rand).concat(shuffleWith(KINDS.slice(), rand));
+      if (tries > 200 || Array.from({ length: 6 }, (_, i) => deck[2 * i] !== deck[2 * i + 1]).every(Boolean)) break;
+    }
+    const offers = Array.from({ length: pairs }, (_, i) => [deck[(2 * i) % 12], deck[(2 * i + 1) % 12]]);
+    offers.push([KINDS[Math.floor(rand() * KINDS.length)]]);       // the wildcard door
+    const floor = { v: 6, seed, days, pairs, rooms: [], start: 0, stairs: -1, lure: -1, kinds: [],
+      offers,                                                                  // the kinds offered, wing by wing
+      lureStage: rand() < 0.6 ? 1 + Math.floor(rand() * pairs) : -1,           // which wing hides the locker (?), if any
       wings: [], exits: {}, count: 0, pos: [], cells: {}, parent: [], depth: [] };
     buildWing(floor, book(floor, -1, 0, 0), null);
     return floor;
@@ -55,7 +66,7 @@
     const stage = floor.wings.length;
     const rand = rng((floor.seed ^ Math.imul(stage + 7, 0x9e3779b1)) >>> 0);
     const R = n => Math.floor(rand() * n);
-    const exitsWanted = stage < OFFERS ? 2 : 0;
+    const exitsWanted = stage < floor.pairs ? 2 : stage === floor.pairs ? 1 : 0;     // the stairs wing has one exit: the wildcard door
     const back = from ? OPP[from.dir] : null;
     const at = (p, d) => ({ r: p.r + DIRS[d][0], c: p.c + DIRS[d][1] });
     const key = p => p.r + "," + p.c;
@@ -115,7 +126,7 @@
     const doors = { K: {}, P: {}, X: {} };
     if (from) doors.K[back] = from.room;
     for (const l of plan.links) { doors[l.a][l.d] = idx[l.b]; doors[l.b][OPP[l.d]] = idx[l.a]; }
-    const offer = shuffleWith(floor.offers[Math.min(stage, OFFERS - 1)].slice(), rand), exitIdx = [];
+    const offer = shuffleWith(floor.offers[Math.min(stage, floor.pairs)].slice(), rand), exitIdx = [];
     plan.exits.forEach((e, i) => {
       const x = book(floor, idx[e.host], e.p.r, e.p.c);
       floor.kinds[x] = offer[i]; floor.exits[x] = { wing: stage, kind: offer[i], from: idx[e.host], dir: e.d };
@@ -124,7 +135,7 @@
     const names = Object.keys(idx);
     // Where the special things go.
     const extra = { K: [], P: [], X: [] };
-    if (stage === OFFERS) {                                  // the last wing: the stairs, in the passage or the dead end
+    if (stage === floor.pairs) {                                  // the last wing: the stairs, in the passage or the dead end
       const home = names.includes("P") && names.includes("X") ? (R(2) ? "P" : "X") : names.includes("X") ? "X" : names.includes("P") ? "P" : "K";
       extra[home].push("stairs"); floor.stairs = idx[home];
     }
@@ -132,6 +143,10 @@
     const clueKind = exitIdx.length ? floor.kinds[exitIdx[R(exitIdx.length)]] : null;
     floor.wings[stage] = { rooms: names.map(n => idx[n]), exits: exitIdx, clueKind };
 
+    // BONUS ROOM: each time a door is unlocked there is a 1 in 10 chance that one of the new wing's open rooms (its dead end,
+    // else its passage) turns out to be THE ARCHIVE. Once per floor. It never swaps a room behind a hinted door, so hints stay true.
+    const bonusN = !floor.bonusRolled && stage > 0 && rand() < 0.10 ? (names.includes("X") ? "X" : names.includes("P") ? "P" : null) : null;
+    if (bonusN) floor.bonusRolled = true;
     for (const n of names) {
       const i = idx[n], rr = rng((floor.seed ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0);
       const RR = m => Math.floor(rr() * m), pickR = a => a[RR(a.length)];
@@ -145,6 +160,7 @@
       const hidden = kind === "bay" ? pile.map(h => h === "demon" ? "item" : h) : pile;
       const room = { r: floor.pos[i].r, c: floor.pos[i].c, doors: doors[n], hidden, wing: stage };
       if (kind) room.kind = kind;
+      if (n === bonusN) room.kind = BONUS_KIND;
       if (n === "P") room.hall = true;                       // a passage
       if (n === "X") room.dead = true;                       // a dead end
       if (plan.falseDoors[n].length) room.falseDoors = plan.falseDoors[n];
@@ -199,12 +215,21 @@
     const mark = (r, c, v) => { if (r >= 0 && r < H && c >= 0 && c < W) wall[r][c] = v; };
     for (const { row, col } of seen)
       for (let r = row - 1; r <= row + 1; r++) for (let c = col - 1; c <= col + 3; c++) if (r !== row || c === col - 1 || c === col + 3) mark(r, c, true);
-    const open = (row, col, d) => {
+    // Rooms of one wing read as a single big room: no wall between them, and no door mark.
+    const same = (room, d) => { const o = floor.rooms[room.doors[d]]; return !!o && o.wing === room.wing && state.visited[room.doors[d]]; };
+    const open = (row, col, d, room) => {
+      if (room && same(room, d)) {
+        if (d === "E") for (let r = row - 1; r <= row + 1; r++) mark(r, col + 3, false);
+        if (d === "W") for (let r = row - 1; r <= row + 1; r++) mark(r, col - 1, false);
+        if (d === "S") for (let k = -1; k < 4; k++) mark(row + 1, col + k, false);
+        if (d === "N") for (let k = -1; k < 4; k++) mark(row - 1, col + k, false);
+        return;
+      }
       if (d === "E") mark(row, col + 3, false); if (d === "W") mark(row, col - 1, false);
       if (d === "S") for (let k = 0; k < 3; k++) mark(row + 1, col + k, false);
       if (d === "N") for (let k = 0; k < 3; k++) mark(row - 1, col + k, false);
     };
-    for (const { room, row, col } of seen) { for (const d of Object.keys(room.doors)) open(row, col, d); for (const d of room.falseDoors || []) open(row, col, d); }
+    for (const { room, row, col } of seen) { for (const d of Object.keys(room.doors)) open(row, col, d, room); for (const d of room.falseDoors || []) open(row, col, d); }
     for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) if (wall[r][c]) {
       const n = r > 0 && wall[r - 1][c], s = r < H - 1 && wall[r + 1][c], w = c > 0 && wall[r][c - 1], e = c < W - 1 && wall[r][c + 1];
       rows[r][c] = (n || s) && (w || e) ? "+" : n || s ? "|" : "-";
@@ -214,7 +239,7 @@
       const lureHere = i === floor.lure && !found.includes("lure");
       const mark = state.at === i ? "@" : i === floor.start ? "^"
         : found.includes("stairs") ? "v" : lureHere ? "?" : " ";
-      put(row, col, mark === " " && room.hall ? "] [" : "[" + mark + "]");   // a passage is drawn open: ] [
+      put(row, col, room.hall ? ")" + mark + "(" : "[" + mark + "]");   // a passage is drawn with ) (
       // Door marks sit in the opened gaps: = and ‖ for open doors, # for a locked or false one; a sealed one is plain wall.
       const stub = (d, locked) => {
         if (d === "E") put(row, col + 3, locked ? "#" : "=");
@@ -224,6 +249,7 @@
       };
       for (const d of Object.keys(room.doors)) {
         const j = room.doors[d], shut = !floor.rooms[j];
+        if (same(room, d)) continue;                              // inside a wing: one big room, no door mark
         stub(d, shut);
         if (shut && floor.sealed && floor.sealed[j]) {            // a sealed door shows x
           if (d === "E") put(row, col + 3, "|"); if (d === "W") put(row, col - 1, "|");
@@ -245,7 +271,7 @@
     return { at: 0, visited: [true], found: [[]], facing: facing || firstDoor };
   }
 
-  const api = { generate, grow, minimap, arrive, rng, kindBehind, isSealed, DAYS, OFFERS };
+  const api = { generate, grow, minimap, arrive, rng, kindBehind, isSealed, DAYS, BONUS_KIND };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.FLOOR = api;
 })(this);

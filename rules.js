@@ -297,6 +297,7 @@
     vault: ["The door is cold, and heavier than it looks.", "A dry, metallic hush behind the wood.", "Something small and hard settles inside."],
     forge: ["The handle is warm, and gritty with ash.", "A smell of solder leaks around the frame.", "Tiny ticks, like metal cooling."],
     altar: ["A faint light shows at the door's edge.", "The crack hums on one note, almost singing.", "Something on the other side is listening."],
+    archive: ["Rows of tiny lights blink behind the door, in no hurry.", "A dry, whirring hush, like drives spinning down.", "The door is cool, and smells of dust and warm plastic."],
   };
   const KIND_CLUE = {
     den: ["> Scratched into the wall: IT'S ALWAYS WARM BACK THERE.", "> A torn tag: LOOSE GEAR, HOT AIR. TAKE WHAT YOU CAN CARRY."],
@@ -305,9 +306,10 @@
     vault: ["> Chalked on the stone: COIN. RACKS OF IT. DON'T LINGER.", "> A tally of numbers, and under it: SILVER, BEHIND THE COLD DOOR."],
     forge: ["> A scorched tag: BENCH AND TOOLS. BRING THE TAINT TO BURN OUT.", "> Scratched deep: IT MENDS THE BAD OUT OF YOU."],
     altar: ["> A scrap of print: IT ASKS. GIVE, AND IT ANSWERS.", "> Written small, over and over: FEED THE SCREEN."],
+    archive: ["> A label, half peeled: EVERYTHING EVER SAVED. TAKE ONE.", "> Stamped on a drive: ONE STILL SPINS."],
   };
   const FALSE_SEARCH = ["Paint. A door painted on bare stone.", "The door is flat. Brush strokes, and nothing under them.", "KURA knocks. Solid wall, dressed up as a door."];
-  const FALSE_GO = ["The door is only paint. The key stays in KURA's pocket.", "KURA pushes. It is a wall with a door painted on it. No key spent.", "A painted door. KURA's key was never needed."];
+  const FALSE_GO = ["The door is only paint. The cell keeps its charge.", "KURA pushes. It is a wall with a door painted on it. No charge spent.", "A painted door. The cell was never needed."];
   const SEALED = ["The door is jammed shut. It won't open now.", "Something settled behind this door. It will not move.", "The frame has seized. This way is closed for good."];
   function atmosphere(st) { return flavor(st); }
 
@@ -324,7 +326,7 @@
   const isSealed = (d, dir) => FLOOR.isSealed(d.floor, d.at, dir);
   const isFalse = (d, dir) => (d.floor.rooms[d.at].falseDoors || []).includes(dir);
   const isLocked = (d, dir) => { const j = d.floor.rooms[d.at].doors[dir]; return j !== undefined && !d.floor.rooms[j] && !isSealed(d, dir); };
-  const looksLocked = (d, dir) => isLocked(d, dir) || isFalse(d, dir);          // what the player sees: a door that asks for the key
+  const looksLocked = (d, dir) => isLocked(d, dir) || isFalse(d, dir);          // what the player sees: a door that asks for a charge
 
   // Ways out of KURA's room: its doors, plus the stairs once they've been found.
   function exits(d) {
@@ -417,7 +419,7 @@
 
   // KURA arrives on a fresh floor. Its way down closes at the end of `deadline` (a Sunday).
   function arrive(st, num, deadline) {
-    const floor = FLOOR.generate();
+    const floor = FLOOR.generate(undefined, { days: Math.min(7, deadline - clock(st) + 1) });
     const a = FLOOR.arrive(floor);
     st.floor = `B${num}F`;
     st.facing = a.facing;
@@ -460,6 +462,10 @@
     if (!newDay || st.dead) return st;
     // A day KURA chose to HOLD (see hold) is STANDBY: a deeper rest tonight.
     const held = !!st.today.held && st.today.date === t - 1 && !!st.dungeon && !st.dead;
+    // A day nobody played leaves the cell charged: one spare is banked (never more than one).
+    const away = t - st.today.date - 1 > 0 && !!st.dungeon;
+    const earned = away && !(st.spare > 0);
+    if (away) st.spare = 1;
     st.today = { date: t, stepped: false };
     st.unsaved = true;
     st.statusIn = 0; st.statusKind = "news";
@@ -477,9 +483,10 @@
     st.party = (st.party || []).map(p => p.patience === undefined ? { ...p, chats: 0 } : { ...p, chats: 0, patience: Math.min(PATIENCE, p.patience + 3) });
     // A night's rest heals a fifth of everyone's HP (fallen allies too, slowly).
     if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
-    if (held) {   // standby: another fifth back, patience restored, the room cools again and the loop clears
-      st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + (p.hp > 0 ? Math.ceil(p.hpmax / 5) : 0)), ...(p.patience === undefined ? {} : { patience: PATIENCE }) }));
-      if (st.dungeon) for (const rs of allRooms(st.dungeon)) rs.heat = Math.floor(rs.heat / 2);
+    if (held) {   // standby is a camp: everyone standing is whole again, patience is full, taint is gone, the room cools right down
+      st.party = st.party.map(p => p.hp > 0 ? { ...p, hp: p.hpmax, mp: p.mpmax ?? p.mp, ...(p.patience === undefined ? {} : { patience: PATIENCE }) } : { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) });
+      st.taint = 0;
+      if (st.dungeon) { for (const rs of allRooms(st.dungeon)) rs.heat = Math.floor(rs.heat / 2); RS(st.dungeon).heat = 0; }
       st.loop = { key: "", n: 0 };
       tally(st, "standby");
     }
@@ -493,7 +500,8 @@
     }
     st.log = `> KURA wakes on ${st.floor}.`;
     st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight."
-      : held ? (st.restedDay = t, pick(STANDBY_LINES)) : settled ? "> The room settles." : atmosphere(st);
+      : earned ? "> The cell kept its charge while KURA was away. A spare is stored."
+      : held ? (st.restedDay = t, `> In the dark, a voice: "${omen(t + 1 + (st.omenSalt || 0)).text.replace(/^> "|"$/g, "")}"`) : settled ? "> The room settles." : atmosphere(st);
     return st;
   }
 
@@ -580,7 +588,7 @@
       `Day ${onFloor} on this floor. ${closes}.`,
       `${name}. ${seen} room${seen === 1 ? "" : "s"} surveyed. Stairs ${stairs ? "confirmed" : "unconfirmed"}.`,
       `Day ${onFloor}. ${party}.`,
-      `${name}. ${party}. Today's key ${(st.today || {}).stepped ? "spent" : "unused"}.`,
+      `${name}. ${party}. Today's charge ${(st.today || {}).stepped ? "spent" : "full"}.${st.spare ? " A spare cell is stored." : ""}`,
       TIME.moonNote(TIME.now()).replace(/\.$/, "") + ".",          // "The moon is day 26, waning crescent."
     ];
     return "> " + (left <= 1 ? news[pick([0, 1])] : pick(news));
@@ -741,7 +749,7 @@
   }
 
   // GO: through the door toward dir (N/E/S/W; default: the way she faces). Doors that are already open are free.
-  // A LOCKED door (its room not built yet) takes the day's one key; with the key spent she can't open another.
+  // A LOCKED door (its room not built yet) takes the day's one charge; with it spent (and no spare cell) she can't open another.
   // A wall stops her with a message and costs nothing.
   function go(st, dir) {
     st = copy(st);
@@ -759,9 +767,11 @@
     }
     const toStairs = !fals && RS(d).found.includes("stairs") && dir === stairsDir(d.floor, d.at);
     const locked = !toStairs && !fals && isLocked(d, dir);
-    if ((locked || fals) && today(st).stepped && !st.freeSteps) {
-      st.facing = dir; st.log = "> The door is locked. Today's key is spent.";
-      if (st.encounter) st.round = ["Today's key is spent. No running through a locked door."];
+    // With today's charge gone, a banked spare cell can open one more door (a painted one never takes it).
+    const spareUse = locked && !!today(st).stepped && !st.freeSteps && (st.spare || 0) > 0;
+    if ((locked || fals) && today(st).stepped && !st.freeSteps && !spareUse) {
+      st.facing = dir; st.log = "> The door won't cycle. The cell is empty until dawn.";
+      if (st.encounter) st.round = ["The cell is empty. No running through a sealed door."];
       return show(st);
     }
     if (!toStairs && !fals && isSealed(d, dir)) {            // settled the other way: it never opens now
@@ -780,7 +790,7 @@
       const e = st.encounter, lines = [];
       if (e.ranTried) { st.facing = dir; st.round = ["KURA already tried to run. There is no running now."]; return show(st); }
       act(st, "run");
-      if (locked) today(st).stepped = true;
+      if (locked) { if (spareUse) st.spare--; else today(st).stepped = true; }
       lean(st, "run", lines);
       st.facing = dir;
       st.roundOver = false;
@@ -799,7 +809,7 @@
       tally(st, "fled");
     } else act(st, "go");
     // Taking the stairs down is free, like any open door; only a locked door uses the key.
-    if (locked) st.today.stepped = true;
+    if (locked) { if (spareUse) st.spare--; else st.today.stepped = true; }
     if (toStairs) tally(st, "floors"); else tally(st, "steps");
     st.facing = dir;
     if (toStairs) {
@@ -813,7 +823,7 @@
     const i = FLOOR.grow(d.floor, d.at, dir);               // builds the room behind a locked door the first time
     const isNew = !RS(d, i).visited;
     d.at = i; RS(d, i).visited = true;
-    st.log = locked ? `> KURA unlocks the ${NAME[dir]} door and steps into a new room.`
+    st.log = locked ? `> The ${NAME[dir]} door cycles open. KURA steps into a new room.`
       : `> KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
     enterKind(st, i, locked || isNew);
     st.extra = atmosphere(st);
@@ -825,7 +835,7 @@
   // The Den, Bay, Forge and Altar keep working: going back does it again at HALF strength, once a day per room.
   // The rest are one-time finds. No kind is better than another: they answer different needs.
   // Placeholders (nothing to act on yet): DEN gear, BAY shield, VAULT keys, FORGE repairs.
-  const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR" };
+  const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR", archive: "THE ARCHIVE" };
   function enterKind(st, i, isNew) {
     const d = st.dungeon, rm = d.floor.rooms[i], k = rm.kind;
     if (!k) return;
@@ -853,6 +863,9 @@
         else st.taint = Math.floor((st.taint || 0) / 2);
         st.tell = "> Something warm hums over KURA. The edges of things sharpen.";
       } else st.tell = "> A bench, cold tools, a smell of solder. Nothing to mend yet.";
+    } else if (k === "archive") {            // the bonus room: one rare thing, still spinning
+      const it = pick(names("RARE"));
+      gain(st, it); st.tell = `> Racks of old drives. One still spins. KURA takes ${it}.`;
     } else if (k === "altar") {              // a terminal in the wall: face it and SEARCH
       st.tell = "> Something in the wall glows, very faintly.";
     }
@@ -941,7 +954,7 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
-    if (today(st).stepped && !st.freeSteps) { st.log = "> Today's key is already spent."; return show(st); }
+    if (today(st).stepped && !st.freeSteps) { st.log = "> The cell is already spent today."; return show(st); }
     act(st, "hold");
     today(st).stepped = true; today(st).held = true;
     tally(st, "holds");
@@ -968,7 +981,7 @@
     const enc = Math.round(encounterChance(st) * 100);
     const stairs = fl.stairs < 0 ? "STAIRS unplaced" : `STAIRS R${fl.stairs + 1}${RS(d, fl.stairs).found.includes("stairs") ? " (found)" : ""}`;
     const exs = w && w.exits.length ? "EXITS " + w.exits.map(j => fl.kinds[j] + (fl.rooms[j] ? "*" : fl.sealed && fl.sealed[j] ? "x" : "")).join("/") + " CLUE " + w.clueKind : null;
-    const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/4`, stairs, exs, `KEY ${(st.today || {}).stepped ? "spent" : "ready"}`,
+    const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/${fl.pairs + 2}`, stairs, exs, `CELL ${(st.today || {}).stepped ? "spent" : "ready"}${st.spare ? " +SPARE" : ""}`,
       `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null];
     const row2 = [`HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`, `LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`,
       `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`];
@@ -1000,7 +1013,7 @@
     const out = d && !st.dead ? exits(d).concat(d.floor.rooms[d.at].falseDoors || []) : [];
     // SEARCH works on the wall KURA faces; a door (or found stairs) can't be searched.
     const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps) };   // a door can be searched too (it just says so)
-    const spent = !!t.stepped && !st.freeSteps;           // a locked door needs the day's key; open doors are always free
+    const spent = !!t.stepped && !st.freeSteps && !(st.spare > 0);           // a locked door needs the day's key; open doors are always free
     res.locked = {}; res.door = {};
     for (const x of CW) {
       const shut = !!d && out.includes(x) && looksLocked(d, x);
@@ -1021,7 +1034,7 @@
     if (st.clockOffset) { delete st.clockOffset; delete st.lastSeen; delete st.rewindNoted; }
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
-      "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText"]) delete st[k];
+      "fidgetLine", "spare", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     st.omenSalt = 1 + Math.floor(Math.random() * 100000);   // a new run rerolls the omens
@@ -1185,12 +1198,22 @@
       st.roundOver = true;
     }
   }
-  function win(st, lines) {
+  function win(st, lines, burned) {
     const e = st.encounter;
     const n = R(5, 30) + 3 * floorNum(st);
     st.ichor = (st.ichor ?? st.mag ?? 0) + n;
     tally(st, "beaten"); tally(st, "ichorWon", n);
-    lines.push(`${THE(e.name)} falls.  +${n} ICHOR`);
+    lines.push(`${THE(e.name)} ${burned ? "burns out" : "falls"}.  +${n} ICHOR`);
+    // What a fallen demon leaves: coin often, a thing now and then. One burned out by a discharge leaves more of both.
+    if (Math.random() < (burned ? 0.9 : 0.5)) {
+      const c = R(8, 40) * floorNum(st); st.silver = (st.silver ?? 0) + c; tally(st, "silverFound", c);
+      lines.push(`It drops ${c} SILVER.`);
+    }
+    if (Math.random() < (burned ? 0.5 : 0.25)) {
+      const it = rollItem(st);
+      lines.push(`It leaves ${it}.`);
+      gain(st, it, lines);
+    }
     const dropOdds = [0, 0, 0, 0.1, 0.25, 0.1, 0, 0][moon()];
     if (Math.random() < dropOdds) {
       const it = pick(MOON_DROPS);
@@ -1242,6 +1265,27 @@
       st.log = `> KURA's party fights ${the(e.name)}.`;
       if (e.hp <= 0) { win(st, lines); lean(st, "kill", lines); } else lean(st, "fight", lines);
     }, "> Nothing here to fight.");
+  }
+  // DISCHARGE: spend the day's charge (or the banked spare) on one blow that ends most fights. It uses the cell that
+  // would have opened a door, so it is never free: the button is dim once both are gone.
+  function discharge(st) {
+    const t = today(st), free = !t.stepped || !!st.freeSteps, spare = (st.spare || 0) > 0;
+    if (st.dead || !st.encounter || (!free && !spare)) {
+      st = copy(st);
+      if (st.encounter && !st.dead) { st.log = "> The cell is empty. Nothing left to discharge."; st.round = ["The cell is empty. Nothing left to discharge."]; }
+      return show(st);
+    }
+    return round(st, (st, lines) => {
+      const e = st.encounter, tt = today(st);
+      if (!tt.stepped || st.freeSteps) { if (!st.freeSteps) tt.stepped = true; } else st.spare--;
+      tally(st, "discharges");
+      e.stage = null;
+      lines.push("The cell discharges. White light fills the room.");
+      const dmg = UNIQUE[e.name] ? Math.ceil(e.hpmax * 0.75) : e.hp;       // a named horror shrugs most of it off
+      e.hp = Math.max(0, e.hp - dmg);
+      st.log = `> KURA discharges the cell at ${the(e.name)}.`;
+      if (e.hp <= 0) { win(st, lines, true); lean(st, "kill", lines); } else { lines.push(`${THE(e.name)} reels. -${dmg}`); lean(st, "fight", lines); }
+    }, "> Nothing here to discharge at.");
   }
   // TALK: the demon may listen and leave (sometimes with a gift), ask a price, or take offense.
   // RECRUITING. KURA is the only human; everyone else in the party is a demon (ELF, PIXIE and CU SITH too).
@@ -2079,7 +2123,7 @@
     ];
   }
 
-  const api = { summary, next, freesteps, debugInfo, reset, hold, altarOpen, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { summary, next, discharge, chargeLeft: st => { const t = st.today || {}; return (!t.stepped || st.freeSteps ? 1 : 0) + ((st.spare || 0) > 0 ? 1 : 0); }, freesteps, debugInfo, reset, hold, altarOpen, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

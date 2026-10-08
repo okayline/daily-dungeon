@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.43";
+  const VERSION = "v0.44";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -28,8 +28,10 @@
           }
         } else {
           const [xa, xb] = side === "L" ? [L_(a), L_(b)] : [R_(b), R_(a)];
-          for (let x = xa; x <= xb; x++) { put(x, b - 1, "_"); put(x, 16 - b, "_"); }
-          for (let y = b; y < 17 - b; y++) put(side === "L" ? xa : xb, y, "|");
+          if (!(end === "door" && !lock)) {                  // (the big arch stands clear of the side openings)
+            for (let x = xa; x <= xb; x++) { put(x, b - 1, "_"); put(x, 16 - b, "_"); }
+            for (let y = b; y < 17 - b; y++) put(side === "L" ? xa : xb, y, "|");
+          }
         }
         const x = side === "L" ? L_(b) : R_(b);
         for (let y = b; y < 17 - b; y++) put(x, y, "|");
@@ -41,12 +43,22 @@
     } else {
       for (let x = l; x <= r; x++) { put(x, t - 1, "_"); put(x, bm, "_"); }
       const cx = Math.floor((l + r) / 2);
-      if (end === "door") {
+      if (end === "door" && !lock) {       // an open door: a big double-line arch, with the room beyond left empty
+        const arch = (x0, y0, w) => {
+          const T = w - 20, b0 = Math.floor((w - T) / 2), top = (x, y, ch) => { if (y >= t && y < bm) put(x, y, ch); };
+          for (let i = 0; i < T; i++) top(x0 + b0 + i, y0, "_");
+          for (const [col, r] of [[7, 1], [4, 2]]) {
+            [..."__/"].forEach((ch, k) => top(x0 + col + k, y0 + r, ch));
+            [..."\\__"].forEach((ch, k) => top(x0 + w - col - 3 + k, y0 + r, ch));
+          }
+          for (let r = 3; r < 10; r++) { top(x0 + 3, y0 + r, "|"); top(x0 + w - 4, y0 + r, "|"); }
+        };
+        arch(cx - 16, t, 33); arch(cx - 13, t + 1, 27);
+      } else if (end === "door") {
         const dl = cx - 4, dr = cx + 4, dt = depth === 2 ? t + 1 : t + 2;
         for (let x = dl; x <= dr; x++) { put(x, dt - 1, "_"); put(x, bm, "_"); }
         for (let y = dt; y <= bm; y++) { put(dl, y, "|"); put(dr, y, "|"); }
-        if (lock) put(cx + 2, Math.floor((dt + bm) / 2), lock);   // a locked (or false) door shows a + knob; a sealed one an x
-        else for (let x = dl + 1; x < dr; x++) for (let y = dt; y < bm; y++) if ((x + y) % 3 === 0) put(x, y, ".");   // an open door: the dark beyond
+        put(cx + 2, Math.floor((dt + bm) / 2), lock);   // a locked (or false) door shows a + knob; a sealed one an x
       }
       if (end === "terminal") {            // a small screen set into the wall
         const T = [".---------.", "| > _     |", "|  :: ::  |", "'---------'", "   [===]"], y0 = Math.max(t + 1, bm - 8);
@@ -163,7 +175,7 @@
     now = now || SMT_now(); extra = extra || "";
     const idx = moonIndex(now), when = hst(now, st.tz);
     const v = st.view;
-    const view = renderView(v.left, v.right, v.end, (v.end === "dark" || v.end === "door") ? 2 : 1, v.lock);
+    const view = renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
     // Look controls at the foot of the 3D view: [<] and [>] turn KURA to look around (never move her),
     // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
@@ -232,7 +244,7 @@
     const align = `ALIGN ${pull < 0 ? "<" : "["}${String(st.align).slice(0, 3).toUpperCase()}${pull > 0 ? ">" : "]"}`;
     // TURN counts every action KURA has taken (stepping, searching, turning); facing shows in the turn controls.
     // While KURA is tripping, the TURN counter shows what she thinks it is (st.turnShown).
-    const face = `TURN ${String(Math.max(0, st.turnShown ?? st.steps ?? 0)).padStart(3, "0")}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
+    const face = `TURN ${String(Math.max(0, st.turnShown ?? st.steps ?? 0)).padStart(4, "0")}`, dayStr = `DAY ${String(st.day).padStart(2, "0")}`;
     const gap = PW - 1 - align.length - face.length - dayStr.length;
     const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
     // The moon strip: the eight phases as 3-column blocks (lit on the right while waxing), a . above today's.
@@ -262,7 +274,7 @@
     // (nothing else can be done until it's answered anyway), so the log lines above keep their full width.
     const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = st.question ? " ".repeat(18) + "[Y]ES   [N]O " : " ".repeat(21) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " [?] [P]ASS [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
+    const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");

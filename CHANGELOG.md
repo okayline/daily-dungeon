@@ -2,6 +2,21 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.44 - Oct 7 2026, 22:34 HST
+
+![v0.44](screenshots/v0.44.png)
+
+A longer week, charge instead of keys, camp, discharge, drops, and the open-door arch.
+
+- **The week:** the six room types are dealt twice into pairs, one pair offered each day. The last day is a wildcard door of a random type. The floor's length follows the days left (3 to 7), and the stairs sit in the wing opened on the second-to-last day.
+- **Bonus room:** each time a door is unlocked there is a 1 in 10 chance that one of the new wing's open rooms is THE ARCHIVE (one rare item). Once per floor.
+- **Charge:** the day's key is now a charge in a cell. A day nobody played banks one spare cell (one at most), which can open one more door.
+- **Camp:** STANDBY restores everyone standing, clears taint, refills patience and cools the room; the next morning's dream line hints at tomorrow's omen.
+- **Discharge:** `[D]ISCHARGE` in a fight spends the day's charge (or the spare) on one blow that ends most fights, after a confirm popup.
+- **Demons drop things:** silver about half the time and an item about a quarter; a discharge kill drops more.
+- **Open doors are a big double-line arch** with the room left empty. A passage is `) (` on the minimap (`)@(` when you stand in it), and the grid outline is dimmer.
+- `[P]ASS` moved to the help page, next to `[C]ODEX`. The log page has a gap under its heading. TURN has four digits and DAY two.
+
 ## v0.43 - Oct 7 2026, 21:45 HST
 
 ![v0.43](screenshots/v0.43.png)

@@ -52,7 +52,8 @@
   .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
   .door { color: var(--trail); }
-  .wall { color: var(--dim); opacity: 0.6; }
+  .door .g { position: relative; left: -0.1em; }   /* the fallback font draws || a touch right of its cell */
+  .wall { color: var(--dim); opacity: 0.4; }
   .btn { cursor: pointer; color: var(--bright); }
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
@@ -124,14 +125,14 @@
       if (i >= 15 && i <= 19) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
         // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
-        const map = right.replace(/\[[\^v]\]|[@^v<>&$?□=‖#+\-|]/g, (m, at) => {
+        const map = right.replace(/[\[)][\^v][\](]|[@^v<>&$?□=‖#+\-|]/g, (m, at) => {
           // The outline walls (+ - |) are dim; a # is a locked door and stays bright. The panel's own edges are left alone.
           if (/[+\-|]/.test(m)) {
             if (at === 0 || at === right.length - 1) return m;
             const l = right[at - 1], r = right[at + 1], gap = c => c === " " || c === "[" || c === "]";
             return `<span class="wall">${m}</span>`;
           }
-          if (m.length === 3) return "[" + `<span class="cell stairs">${m[1]}</span>` + "]";
+          if (m.length === 3) return m[0] + `<span class="cell stairs">${m[1]}</span>` + m[2];
           const ch = m;
           const cls = { "@": "you", "^": "you", "v": "you", "<": "you", ">": "you",
             "&": "demon", "$": "gold", "?": "goal", "□": "room", "=": "door", "‖": "door", "#": "door" }[ch];
@@ -190,7 +191,6 @@
         // SAVED / NOT SAVED shows for a few seconds after each action, then fades back into the border.
         .replace(/ (NOT SAVED|SAVED \d{4}-\d\d-\d\d) /, (m, t) => Date.now() < statusUntil
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
-        .replace("[P]ASS", '<span class="btn" data-act="backup">[P]ASS</span>')
         .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
         .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>');
@@ -347,7 +347,7 @@
           .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.");
       const shown = logText.slice(logText.indexOf("\n\n") + 2), hAt = shown.indexOf("ADVENTURE LOG"), hEnd = shown.indexOf("\n\n", hAt);
       pre.textContent = "";
-      pre.append(shown.slice(0, hEnd + 1));
+      pre.append(shown.slice(0, hEnd + 1) + "\n");
       // Buttons just under the heading, on the right: ways to keep the log (a text file, or the clipboard).
       const button = (label, key) => { const b = document.createElement("span"); b.className = "btn"; b.dataset[key] = "1"; b.textContent = label; return b; };
       const top = document.createElement("div");
@@ -476,8 +476,8 @@
     const two = (a, b, c, d) => "  " + (a + " ").padEnd(16, ".") + " " + String(b).padEnd(10) + " " + (c + " ").padEnd(16, ".") + " " + d;
     const line = "-".repeat(71);
     const text = [
-      "DAILY DUNGEON   {{CODEX}}" + ("build " + SMT.VERSION).padStart(71 - 16 - 7), line,
-      "A dungeon crawler you play one key a day, on the real calendar.",
+      "DAILY DUNGEON   {{CODEX}}   {{PASS}}" + ("build " + SMT.VERSION).padStart(71 - 16 - 7 - 9), line,
+      "A dungeon crawler you play one charge a day, on the real calendar.",
       "Each floor is four wings. Three times, two locked doors offer two",
       "rooms: take one and the other seals. Listen at the doors; dead ends",
       "hold the big clues. The way down closes at the end of Sunday.",
@@ -493,14 +493,16 @@
       "KEYS",
       "  [^] / up arrow ..... go through the door KURA faces",
       "  [<] [>] / arrows ... turn (free)",
-      "  + .................. a door that wants the key (or is only paint)",
+      "  + .................. a door that wants a charge (or is only paint)",
       "  x .................. a door sealed for good (its pair was opened)",
       "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
       "  [G]IVE ............. facing a terminal in the wall: make an offering (SEARCH it works too)",
-      "  STA[N]DBY .......... stay put today (uses the day's key; tonight's rest runs deeper)",
+      "  STA[N]DBY .......... make camp (uses the day's charge; restores the party; tonight's rest runs deeper)",
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
       "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
-      "  [R]UN in a fight ... run through any open door (a locked one uses the key; it may block you)",
+      "  [R]UN in a fight ... run through any open door (a locked one uses the charge; it may block you)",
+      "  [D]ISCHARGE ........ in a fight: spend the day's charge on one blow that ends most fights",
+      "                       (a spare cell is stored for each day nobody played, one at most)",
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "  1-8 ................ pick a gift when a demon asks for one",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
@@ -512,11 +514,12 @@
       "",
       "Made by okayline.   [?] or Esc closes",
     ].join("\n");
-    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>');
+    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{PASS}}", '<span class="btn" data-pass>[P]ASS</span>');
   }
   document.getElementById("about").addEventListener("click", e => {
     showAbout(false);
     if (e.target.closest("[data-codex]")) { codexSel = -1; showCodex(true); }   // the link in the help page
+    if (e.target.closest("[data-pass]")) backup();                              // PASS lives here now
   });
 
   // CODEX: every demon met and item found, over all runs. Unknown ones show as ???.
@@ -579,9 +582,10 @@
     floatBox(box);
     pre.innerHTML = "";
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
-    add(again ? "ARE YOU REALLY SURE?" : `UNLOCK THE ${NAMES[dir]} DOOR?`, "gold");
+    const spare = !!(save && save.today && save.today.stepped && save.spare > 0);
+    add(again ? "ARE YOU REALLY SURE?" : spare ? `USE THE SPARE CELL ON THE ${NAMES[dir]} DOOR?` : `POWER THE ${NAMES[dir]} DOOR?`, "gold");
     add(" ");
-    add(again ? "Only one new door a day. Today's key is gone once it turns." : "This uses today's key. A door already open is free.");
+    add(again ? "Only one new door a day. Today's charge is gone once it cycles." : spare ? "Today's charge is spent. This uses the spare. A door already open is free." : "This uses today's charge. A door already open is free.");
     add(" ");
     const row = document.createElement("div"), opt = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.cact = a; return e; };
     row.append(opt("[ YES ]", "yes"), "    ", opt("[ NO ]", "no"));
@@ -590,7 +594,7 @@
     box.hidden = false;
   }
   // STANDBY, a new run and loading a password all ask in the game too (no browser dialogs).
-  let pending = null, holdOK = false, resetOK = false, loadCode = null;
+  let pending = null, holdOK = false, resetOK = false, dischargeOK = false, loadCode = null;
   function askBox(kind, title, lines) {
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     floatBox(box);
@@ -607,7 +611,8 @@
     box.dataset.mode = "confirm";
     box.hidden = false;
   }
-  const holdBox = () => askBox("hold", "GO ON STANDBY?", ["KURA stays put and opens no new door today.", "This uses today's key. Tonight's rest runs deeper."]);
+  const holdBox = () => askBox("hold", "GO ON STANDBY?", ["KURA stays put and opens no new door today.", "This uses today's charge. The party camps, and tonight runs deeper."]);
+  const dischargeBox = () => askBox("discharge", "DISCHARGE THE CELL?", ["One blow that ends most fights.", RULES.chargeLeft(save) === 2 ? "This uses the day's charge, or the spare cell if it's spent." : "This uses the cell that would have opened a door."]);
   const resetBox = () => askBox("reset", "BEGIN A NEW RUN?", ["This run will be lost."]);
   function answerConfirm(yes) {
     if (pending) {
@@ -622,7 +627,7 @@
         } else { loadCode = null; draw(); restoreBoxes(); }
         return;
       }
-      if (yes) { if (kind === "hold") holdOK = true; else resetOK = true; act(kind); } else { draw(); restoreBoxes(); }
+      if (yes) { if (kind === "hold") holdOK = true; else if (kind === "discharge") dischargeOK = true; else resetOK = true; act(kind); } else { draw(); restoreBoxes(); }
       return;
     }
     const dir = armed;
@@ -883,7 +888,7 @@
       arrow(who === null, "KURA");
       add(" ");                                        // a blank line between the names and what happened
       for (const [w, c] of body) add(w, c);
-      const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1;
+      const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1 - (final && !e.stage ? 1 : 0);
       for (let i = 0; i < rest; i++) add(" ");
       const row = document.createElement("div"); row.className = "brow";
       const left = document.createElement("span");
@@ -896,6 +901,11 @@
       }
       row.append(left);
       pre.appendChild(row);
+      if (final && !e.stage) {                         // the day's charge as a weapon, on its own line
+        const r2 = document.createElement("div"), d = opt("[D]ISCHARGE", "discharge");
+        if (!RULES.chargeLeft(save)) d.className += " off";
+        r2.append(d); pre.appendChild(r2);
+      }
     };
 
     if (animate && lines.length > 1 && !e.stage) {     // play the round back: the > moves to whoever acts
@@ -913,7 +923,7 @@
   }
 
   function act(name) {
-    const okHold = holdOK, okReset = resetOK; holdOK = resetOK = false;      // a confirmation is good for this one call only
+    const okHold = holdOK, okReset = resetOK, okDis = dischargeOK; holdOK = resetOK = dischargeOK = false;      // a confirmation is good for this one call only
     if (replayTimer) finishReplay();
     prevDemonHp = save && save.encounter ? save.encounter.hp : null;
     // [^] toward a bare wall is just a search of that wall; toward a door it takes the step.
@@ -967,6 +977,11 @@
     if (!save) return;
     if (name === "reset") { if (!okReset) { resetBox(); return; } }
     if (name === "hold") { if (!okHold) { holdBox(); return; } }
+    if (name === "discharge") {
+      if (!save.encounter) return;
+      if (!RULES.chargeLeft(save)) { save.log = "> The cell is empty. Nothing left to discharge."; persist(); draw(); encounterBox(); return; }
+      if (!okDis) { dischargeBox(); return; }
+    }
     const log = save.log, steps = save.steps, exBefore = save.extra, ranBefore = !!(save.encounter && save.encounter.ranTried), partyBefore = (save.party || []).map(p => p.name);
     const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
@@ -1078,7 +1093,7 @@
         else if (st2 === "offer") k = /^[1-8]$/.test(key) ? "offer-" + (Number(key) - 1) : { b: "offer-none", n: "offer-none", escape: "offer-none" }[key];
         else if (st2 === "ask" || st2 === "join" || st2 === "chat") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", g: "offer", i: "invoke", r: "run" }[key];
+        else k = { f: "fight", t: "talk", g: "offer", i: "invoke", r: "run", d: "discharge" }[key];
         if (k) act(k);
       } else if (fbox.dataset.mode === "found") { if (key === "enter") closeFound(); }   // a find only closes on its [ OK ] (Enter or a click), never by a stray key
       else if (key === "enter" || key === " " || key === "escape") closeFound();
