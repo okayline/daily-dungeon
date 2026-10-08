@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.43 - Oct 7 2026, 21:45 HST
+
+![v0.43](screenshots/v0.43.png)
+
+Minimap and door tiles, plus a few fixes.
+
+- **Minimap:** the grid outline is dimmer. Locked doors are `#`, a sealed door is plain wall, a passage is `] [`, and the `[:]` mark is gone. The facing arrow stays.
+- **Open doors in the 3D view** show the empty frame with the dark beyond, instead of a knob.
+- **A blocked run opens a popup** ("PING blocked your way.") that waits for `[ OK ]`.
+- **A new run rerolls the omens.** The invoke result line is plain white, not gold, and STA[N]DBY sits a touch lower.
+
 ## v0.42 - Oct 7 2026, 21:23 HST
 
 ![v0.42](screenshots/v0.42.png)

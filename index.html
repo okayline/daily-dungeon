@@ -52,7 +52,7 @@
   .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
   .door { color: var(--trail); }
-  .wall { color: var(--dim); }
+  .wall { color: var(--dim); opacity: 0.6; }
   .btn { cursor: pointer; color: var(--bright); }
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
@@ -90,7 +90,7 @@
   .mframe { color: var(--trail); }
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
   .caret { display: inline-block; position: relative; left: calc(-1ch / 6); width: calc(1ch / 1.5); font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
-  .btn[data-act=hold], .btn.ask { position: relative; top: -0.1em; }   /* STANDBY (and YES/NO in its place) sit a touch higher in the bar */
+  .btn[data-act=hold], .btn.ask { position: relative; top: 0.02em; }   /* STANDBY (and YES/NO in its place) sit a touch higher in the bar */
   .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* a nudge when keys are pressed while a question waits */
   /* The build number, small, under the screen's lower right corner. */
   .ver { white-space: pre-line; text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
@@ -124,17 +124,17 @@
       if (i >= 15 && i <= 19) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
         // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
-        const map = right.replace(/\[[\^v]\]|[@^v<>&$?□=‖+\-|]/g, (m, at) => {
-          // The outline walls (+ - |) are dim; a + with no wall beside it is a locked door and stays bright. The panel's own edges are left alone.
+        const map = right.replace(/\[[\^v]\]|[@^v<>&$?□=‖#+\-|]/g, (m, at) => {
+          // The outline walls (+ - |) are dim; a # is a locked door and stays bright. The panel's own edges are left alone.
           if (/[+\-|]/.test(m)) {
             if (at === 0 || at === right.length - 1) return m;
             const l = right[at - 1], r = right[at + 1], gap = c => c === " " || c === "[" || c === "]";
-            return m === "+" && gap(l) && gap(r) ? `<span class="door">+</span>` : `<span class="wall">${m}</span>`;
+            return `<span class="wall">${m}</span>`;
           }
           if (m.length === 3) return "[" + `<span class="cell stairs">${m[1]}</span>` + "]";
           const ch = m;
           const cls = { "@": "you", "^": "you", "v": "you", "<": "you", ">": "you",
-            "&": "demon", "$": "gold", "?": "goal", "□": "room", "=": "door", "‖": "door" }[ch];
+            "&": "demon", "$": "gold", "?": "goal", "□": "room", "=": "door", "‖": "door", "#": "door" }[ch];
           // Plain keyboard characters (? > < ^ v $ &) stay in the screen font;
           // only real Unicode symbols switch to the fallback symbol font.
           const inner = ch.charCodeAt(0) < 128 ? esc(ch) : `<span class="g">${esc(ch)}</span>`;
@@ -167,7 +167,7 @@
       // straight even if a glyph in the font (an apostrophe, say) isn't exactly one cell wide.
       // Line 2 glows gold right after using an item.
       if (i >= lines.length - 6 && i <= lines.length - 4) {
-        const inner = esc(line.slice(1, -1)), gold = i === lines.length - 5 && logGlow;
+        const inner = esc(line.slice(1, -1)), gold = false;
         return `|<span class="logline${gold ? " gold" : ""}">${inner}</span>|`;
       }
       if (i === lines.length - 2) {
@@ -698,6 +698,7 @@
   }
   function closeFound() {
     document.getElementById("found").hidden = true;
+    if (blockedRun) { blockedRun = false; encounterBox(true); return; }
     if (afterBreak) { afterBreak = false; if (save && save.encounter) { encounterBox(); return; } showInv(true); return; }
     if (save && save.roundOver) { delete save.round; delete save.roundOver; persist(); draw(); }
     endLog();
@@ -708,7 +709,7 @@
   // (or KURA falls); then [ENTER] closes it.
   const floatBox = box => { pending = null; passAct = null; box.className = "foundbox"; box.removeAttribute("style"); };   // a new box replaces whatever was waiting
   const wrapText = (s, n) => { const out = []; let rest = String(s); while (rest.length > n) { let cut = rest.lastIndexOf(" ", n); if (cut <= 0) cut = n; out.push(rest.slice(0, cut)); rest = rest.slice(cut).trimStart(); } out.push(rest); return out; };
-  let replayTimer = null, prevDemonHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
+  let blockedRun = false, replayTimer = null, prevDemonHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
   function finishReplay() { if (replayTimer) { clearInterval(replayTimer); replayTimer = null; encounterBox(false); } }
 
   // THE ALTAR: the terminal in a Matrix Altar room. Its screen types out its words, a glare shimmers across it,
@@ -966,7 +967,7 @@
     if (!save) return;
     if (name === "reset") { if (!okReset) { resetBox(); return; } }
     if (name === "hold") { if (!okHold) { holdBox(); return; } }
-    const log = save.log, steps = save.steps, exBefore = save.extra, partyBefore = (save.party || []).map(p => p.name);
+    const log = save.log, steps = save.steps, exBefore = save.extra, ranBefore = !!(save.encounter && save.encounter.ranTried), partyBefore = (save.party || []).map(p => p.name);
     const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
       : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
@@ -983,6 +984,11 @@
     }
     remember(name === "reset" || save.steps !== steps ? "" : log);
     persist(); draw();
+    // A blocked run says so in a box that waits for [ OK ]; then the fight box plays the demon's reply.
+    if (name !== "reset" && save.encounter && save.encounter.ranTried && !ranBefore && !save.dead) {
+      blockedRun = true; noticeBox([`${save.encounter.name} blocked your way.`]);
+      return;
+    }
     if (name !== "reset" && !encounterBox(true) && !altarBox()) {
       foundBox(before);
       // Nothing else opened: if this action brought something significant, say so in a box.

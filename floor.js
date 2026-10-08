@@ -177,7 +177,7 @@
   };
 
   // Minimap: only rooms KURA has been in are drawn, with door stubs leading out of them.
-  // A visited room still holding the locker shows ?; a passage shows :; a locked (or false) door shows +.
+  // A visited room still holding the locker shows ?; a passage shows :; a locked (or false) door shows #.
   // state: { at: room index, visited: [bool,bool,bool], found: [names found per room], facing }
   // The map is centered on KURA: her room is always in the middle and the floor moves around her.
   // Rooms two steps away up or down fall outside the 5 rows and stay off the map.
@@ -213,21 +213,21 @@
       const found = state.found[i] || [];
       const lureHere = i === floor.lure && !found.includes("lure");
       const mark = state.at === i ? "@" : i === floor.start ? "^"
-        : found.includes("stairs") ? "v" : lureHere ? "?" : room.hall ? ":" : " ";   // : is a passage
-      put(row, col, "[" + mark + "]");
-      // Door marks sit in the opened gaps: = and ‖ for open doors, + for a locked or false one, x for a sealed one.
+        : found.includes("stairs") ? "v" : lureHere ? "?" : " ";
+      put(row, col, mark === " " && room.hall ? "] [" : "[" + mark + "]");   // a passage is drawn open: ] [
+      // Door marks sit in the opened gaps: = and ‖ for open doors, # for a locked or false one; a sealed one is plain wall.
       const stub = (d, locked) => {
-        if (d === "E") put(row, col + 3, locked ? "+" : "=");
-        if (d === "W") put(row, col - 1, locked ? "+" : "=");
-        if (d === "S") put(row + 1, col + 1, locked ? "+" : "‖");
-        if (d === "N") put(row - 1, col + 1, locked ? "+" : "‖");
+        if (d === "E") put(row, col + 3, locked ? "#" : "=");
+        if (d === "W") put(row, col - 1, locked ? "#" : "=");
+        if (d === "S") put(row + 1, col + 1, locked ? "#" : "‖");
+        if (d === "N") put(row - 1, col + 1, locked ? "#" : "‖");
       };
       for (const d of Object.keys(room.doors)) {
         const j = room.doors[d], shut = !floor.rooms[j];
         stub(d, shut);
         if (shut && floor.sealed && floor.sealed[j]) {            // a sealed door shows x
-          if (d === "E") put(row, col + 3, "x"); if (d === "W") put(row, col - 1, "x");
-          if (d === "S") put(row + 1, col + 1, "x"); if (d === "N") put(row - 1, col + 1, "x");
+          if (d === "E") put(row, col + 3, "|"); if (d === "W") put(row, col - 1, "|");
+          if (d === "S") put(row + 1, col + 1, "-"); if (d === "N") put(row - 1, col + 1, "-");
         }
       }
       for (const d of room.falseDoors || []) stub(d, true);

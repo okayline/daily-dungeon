@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.42";
+  const VERSION = "v0.43";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -45,7 +45,8 @@
         const dl = cx - 4, dr = cx + 4, dt = depth === 2 ? t + 1 : t + 2;
         for (let x = dl; x <= dr; x++) { put(x, dt - 1, "_"); put(x, bm, "_"); }
         for (let y = dt; y <= bm; y++) { put(dl, y, "|"); put(dr, y, "|"); }
-        put(cx + 2, Math.floor((dt + bm) / 2), lock || "o");   // a locked (or false) door shows the same + as on the map; a sealed one an x
+        if (lock) put(cx + 2, Math.floor((dt + bm) / 2), lock);   // a locked (or false) door shows a + knob; a sealed one an x
+        else for (let x = dl + 1; x < dr; x++) for (let y = dt; y < bm; y++) if ((x + y) % 3 === 0) put(x, y, ".");   // an open door: the dark beyond
       }
       if (end === "terminal") {            // a small screen set into the wall
         const T = [".---------.", "| > _     |", "|  :: ::  |", "'---------'", "   [===]"], y0 = Math.max(t + 1, bm - 8);
@@ -280,7 +281,7 @@
     return S.join("\n");
   }
 
-  const api = { VERSION, moonNote, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  const api = { VERSION, moonNote, renderView, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);

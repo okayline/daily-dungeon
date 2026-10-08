@@ -103,7 +103,7 @@
   const MOON_DROPS = names("MOON");
   // A found item's rarity: mostly common, sometimes uncommon, rarely rare.
   function rollItem(st) {
-    const loot = st ? omen(clock(st)).fx.loot : 1, r = Math.random();
+    const loot = st ? omen(clock(st) + (st.omenSalt || 0)).fx.loot : 1, r = Math.random();
     const rare = 0.08 * loot;                            // a generous day makes rares three times as likely
     return pick(names(r < rare ? "RARE" : r < rare + 0.32 ? "UNCOMMON" : "COMMON"));
   }
@@ -144,7 +144,7 @@
   }
   function pickDemon1(st) {
     if (Math.random() < 0.03) return "ATOM SLASHER";
-    const d = st.dungeon, w = { ...LADDER[Math.min(floorNum(st), 4) - 1] }, om = omen(clock(st)).fx;
+    const d = st.dungeon, w = { ...LADDER[Math.min(floorNum(st), 4) - 1] }, om = omen(clock(st) + (st.omenSalt || 0)).fx;
     const wall = wallLoop(st), linger = d ? RS(d).linger : 0;
     if (wall >= 4) { w.data += 3; w.hardware += 2; }
     if (linger >= LINGER_AT) { w.folklore += 3; w.hybrid += 2; }
@@ -201,7 +201,7 @@
   function heatUp(st, amount) {
     const d = st.dungeon;
     const rs = RS(d), before = heatTier(rs.heat);
-    rs.heat = Math.min(HEAT_MAX + 4, rs.heat + amount * omen(clock(st)).fx.heat);
+    rs.heat = Math.min(HEAT_MAX + 4, rs.heat + amount * omen(clock(st) + (st.omenSalt || 0)).fx.heat);
     const after = heatTier(rs.heat);
     st.stats = st.stats || {}; st.stats.maxHeat = Math.max(st.stats.maxHeat || 0, rs.heat);
     if (after > before) {
@@ -377,7 +377,7 @@
     const d = st.dungeon, room = d.floor.rooms[d.at];
     if (st.round) st.round = st.round.map(l => translate(st, l));
     if (st.extra) st.extra = translate(st, st.extra);
-    st.omenText = omen(clock(st)).text;                 // the omen, framed under the 3D view
+    st.omenText = omen(clock(st) + (st.omenSalt || 0)).text;                 // the omen, framed under the 3D view
     status(st);                                         // line 1
     st.extraUrgent = false;                             // the page holds line 3 for a moment, unless this is a warning
     if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; st.extraUrgent = true; } // a heat tell takes line 3 right away (not over a question)
@@ -684,7 +684,7 @@
     const tier = heatTier(RS(d).heat);                  // the room's noise as KURA starts this search
     lean(st, tier >= 2 ? "hot" : "search");
     heatUp(st, 1);
-    const fx = omen(clock(st)).fx;
+    const fx = omen(clock(st) + (st.omenSalt || 0)).fx;
     // How much a search is worth. The day's omen sets the luck of the day (hard 0.5, easy 1.6). A calm room means
     // steady hands (x1.25) and a hot one hurried ones (x0.75). After a STANDBY day KURA is rested (x1.25).
     // The moon's fullness helps too: up to x1.35 at the full moon, nothing at the new moon. Capped under 2 points, so a
@@ -1024,6 +1024,7 @@
       "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
+    st.omenSalt = 1 + Math.floor(Math.random() * 100000);   // a new run rerolls the omens
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },
@@ -1367,7 +1368,7 @@
     if (e.angered || (UNIQUE[e.name] && !UNIQUE[e.name].talks)) {
       lines.push(`${THE(e.name)} won't listen.`);
       demonTurn(st, lines);
-    } else if (Math.random() < Math.min(0.95, LISTEN[moon()] * omen(clock(st)).fx.talk * STANCE_TALK[stance(st, e)])) {
+    } else if (Math.random() < Math.min(0.95, LISTEN[moon()] * omen(clock(st) + (st.omenSalt || 0)).fx.talk * STANCE_TALK[stance(st, e)])) {
       lines.push(`${e.name}: "${say2(e, "open")}"`);
       // First it sizes KURA up: one or two questions, answered YES or NO (see DEMON TALK below).
       // Then it asks for a gift: anything. What it gets decides how it reacts (see GIFTS below).
