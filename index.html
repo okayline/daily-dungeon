@@ -40,7 +40,7 @@
   /* Like .cell: the box keeps the screen font so 2ch is two grid cells; only the glyph switches font. */
   .kanji { display: inline-block; width: 2ch; text-align: center; overflow: visible; white-space: nowrap; }
   .kanji .g { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "MS Gothic", sans-serif; line-height: 0; }
-  @keyframes blink { 50% { visibility: hidden; } }
+  @keyframes blink { 50% { opacity: 0; } }   /* opacity (not visibility) so a blinking button still takes clicks while it is dark */
   .stairs { color: var(--moon); }
   .goal { color: var(--gold); text-shadow: 0 0 6px var(--gold); }
   /* Map symbols like □ ⋰ ⋱ ↑ ↓ can be wider or narrower than letters in some fonts.
@@ -58,8 +58,6 @@
   .btn.off { color: var(--dim); }
   .btn.armed { background: var(--gold); color: var(--bg); }
   .btn.flee { color: var(--bright); animation: blink 1.2s steps(1) infinite; }
-  .runlabel.flash { animation: blink 1.2s steps(1) infinite; }
-  .runlabel { color: var(--bright); text-shadow: 0 0 1px var(--bright); }
   .unsaved { color: var(--gold); }
   .frame { position: relative; }
   .logview { position: absolute; inset: 0; background: rgba(7, 9, 10, 0.96); overflow: auto; cursor: pointer;
@@ -77,6 +75,7 @@
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
+  .passfield { display: block; width: 100%; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; resize: none; margin: 4px 0; }
   /* The fight box sits inside the 3D view (rows 6-20, columns 1-47), like the bag, so the party and map stay in sight. */
   .foundbox.inframe { left: auto; top: auto; transform: none; border: none; outline: 1px solid var(--trail); box-shadow: none;
     box-sizing: border-box; overflow: hidden; cursor: default; }
@@ -118,9 +117,6 @@
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   let save = null;
 
-  // In a fight with KURA facing a wall: the turn buttons flash, to find a way out (if there is one today).
-  const fleeTurn = () => { if (!save || !save.encounter) return false; const can = RULES.available(save);
-    return !can[save.facing] && ["N", "E", "S", "W"].some(d => can[d]); };
   // Color only the minimap rows (right panel) and the moon marker.
   function colorize(text) {
     const lines = text.split("\n");
@@ -143,13 +139,11 @@
       // Turn controls under the 3D view (only the left 48 columns, so the map is never touched).
       if (i === 21 || i === 22) {
         const left = esc(line.slice(0, 48))
-          .replace("[&lt;]", `<span class="btn${fleeTurn() ? " flee" : ""}" data-act="left">[&lt;]</span>`)
-          .replace("[&gt;]", `<span class="btn${fleeTurn() ? " flee" : ""}" data-act="right">[&gt;]</span>`)
-          // [^] takes the day's step forward; dim when that way is a wall or the step is spent.
-          // In a fight, the ways out flash: [^] with RUN beside it if KURA faces an open way, otherwise the
-          // turn buttons, to find one.
-          .replace("[  ^  ]", `<span class="btn${save && RULES.available(save)[save.facing] ? (save.encounter ? " flee" : "") : " off"}" data-act="forward">[  ^  ]</span>`)
-          .replace(/ RUN/, m => save && save.encounter ? ` <span class="runlabel${RULES.available(save)[save.facing] ? " flash" : ""}">RUN</span>` : m)
+          .replace("[&lt;]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="left">[&lt;]</span>`)
+          .replace("[&gt;]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="right">[&gt;]</span>`)
+          // [^] takes the day's step forward; dim when that way is a wall or the step is spent, and in a fight
+          // (running is a button in the fight box).
+          .replace("[    ^    ]", `<span class="btn${save && !save.encounter && RULES.available(save)[save.facing] ? "" : " off"}" data-act="forward">[    ^    ]</span>`)
           .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
         const tail = esc(line.slice(48)).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
@@ -347,16 +341,38 @@
     if (!save) return;
     // The code carries the run and the last 300 log entries, so it stays short enough to copy.
     const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) }))));
-    const got = prompt("Your password. Copy it to keep this run or move it to another device.\n" +
-      "To continue a run, paste its password here and press OK.", code);
-    if (!got || got.trim() === code) return;
-    try {
-      const s = JSON.parse(decodeURIComponent(escape(atob(got.trim()))));
-      if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 5) throw new Error("not a run");
-      if (!confirm("Replace this run with the one from the password?")) return;
-      save = s; tick(); persist(); draw();
-    } catch (e) { alert("That password didn't work. Nothing was changed."); }
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    floatBox(box);
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
+    const field = (v, ro) => { const t = document.createElement("textarea"); t.rows = 3; t.value = v; t.readOnly = !!ro; t.spellcheck = false; t.className = "passfield"; pre.appendChild(t); return t; };
+    const btn = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.pact = a; return e; };
+    add("PASSWORD", "gold"); add(" ");
+    add("Copy it to keep this run or move it to another device.");
+    const mine = field(code, true);
+    add(" ");
+    add("To continue a run, paste its password here.");
+    const theirs = field("", false);
+    const msg = add(" ");
+    const row = document.createElement("div");
+    row.append(btn("[ COPY ]", "copy"), "   ", btn("[ LOAD ]", "load"), "   ", btn("[ CLOSE ]", "close"));
+    pre.appendChild(row);
+    box.dataset.mode = "pass";
+    box.hidden = false;
+    passAct = a => {
+      if (a === "close") { box.hidden = true; draw(); return; }
+      if (a === "copy") { mine.select(); try { navigator.clipboard.writeText(code); } catch (e) { document.execCommand("copy"); } msg.textContent = "Copied."; return; }
+      const got = theirs.value.trim();
+      if (!got || got === code) { msg.textContent = got ? "That is this run already." : "Paste a password first."; return; }
+      try {
+        const s = JSON.parse(decodeURIComponent(escape(atob(got))));
+        if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 5) throw new Error("not a run");
+        loadCode = s;
+        askBox("load", "REPLACE THIS RUN?", ["The run in the password takes this one's place."]);
+      } catch (e) { msg.textContent = "That password didn't work. Nothing was changed."; }
+    };
   }
+  let passAct = null;
 
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
@@ -457,7 +473,7 @@
       "  STA[N]DBY .......... stay put today (uses the day's key; tonight's rest runs deeper)",
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
       "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
-      "  [^] in a fight ..... run through a door (a locked one uses the key; it may block you)",
+      "  [R]UN in a fight ... run through any open door (a locked one uses the key; it may block you)",
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "  1-8 ................ pick a gift when a demon asks for one",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
@@ -546,7 +562,34 @@
     box.dataset.mode = "confirm";
     box.hidden = false;
   }
+  // STANDBY, a new run and loading a password all ask in the game too (no browser dialogs).
+  let pending = null, holdOK = false, resetOK = false, loadCode = null;
+  function askBox(kind, title, lines) {
+    pending = kind;
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    floatBox(box);
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
+    add(title, "gold");
+    add(" ");
+    lines.forEach(l => add(l));
+    add(" ");
+    const row = document.createElement("div"), opt = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.cact = a; return e; };
+    row.append(opt("[ YES ]", "yes"), "    ", opt("[ NO ]", "no"));
+    pre.appendChild(row);
+    box.dataset.mode = "confirm";
+    box.hidden = false;
+  }
+  const holdBox = () => askBox("hold", "GO ON STANDBY?", ["KURA stays put and opens no new door today.", "This uses today's key. Tonight's rest runs deeper."]);
+  const resetBox = () => askBox("reset", "BEGIN A NEW RUN?", ["This run will be lost."]);
   function answerConfirm(yes) {
+    if (pending) {
+      const kind = pending; pending = null;
+      document.getElementById("found").hidden = true;
+      if (kind === "load") { if (yes && loadCode) { save = loadCode; loadCode = null; tick(); persist(); draw(); } else { loadCode = null; draw(); } return; }
+      if (yes) { if (kind === "hold") holdOK = true; else resetOK = true; act(kind); } else draw();
+      return;
+    }
     const dir = armed;
     document.getElementById("found").hidden = true;
     if (yes && dir && save && save.day === 1 && !reallySure && !save.encounter) return confirmBox(dir, true);
@@ -604,6 +647,20 @@
     box.hidden = false;
     box.dataset.mode = "found";
     afterBreak = true;
+  }
+  // Anything significant (a hit, a warning, a party change, a new floor, the week ending) gets its own box that waits
+  // for [ OK ], so spamming buttons can't click straight through it.
+  const SIGNIFICANT = /closes tonight|GAME OVER|TRIPPING|comes down|-\d+ HP|blocks the way|KURA falls|calendar|joins the party|leaves the party|has had enough|strikes KURA down|week ended|descends|wakes on|enters /i;
+  function noticeBox(lines) {
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    floatBox(box);
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
+    lines.forEach((l, i) => { if (i) add(" "); wrapText(l, 44).forEach(w => add(w, i ? "" : "gold")); });
+    add(" ");
+    add("[ OK ]", "btn");
+    box.hidden = false;
+    box.dataset.mode = "found";
   }
   function closeFound() {
     document.getElementById("found").hidden = true;
@@ -781,7 +838,7 @@
         else if (e.stage === "swap") {
           save.party.forEach((p, i) => { if (i > 0) left.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
           left.append(opt("[N]O", "swap-none"));
-        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[G]IVE", "offer"));
+        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[G]IVE", "offer"), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
       }
       row.append(left);
       pre.appendChild(row);
@@ -804,10 +861,16 @@
   function act(name) {
     if (replayTimer) finishReplay();
     prevDemonHp = save && save.encounter ? save.encounter.hp : null;
-    if (name === "forward" && save) name = "go-" + save.facing;
+    // [^] toward a bare wall is just a search of that wall; toward a door it takes the step.
+    if (name === "forward" && save) {
+      if (save.encounter) return;                  // in a fight, running is the [R]UN button in the fight box
+      name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
+    }
+    if (save && save.encounter && (name === "left" || name === "right")) return;      // no turning around mid-fight
     if ((name === "qyes" || name === "qno") && save) {
       const log = save.log;
       save = RULES.reply(save, name === "qyes");
+      heldExtra = null;                    // the answer's line goes up at once, not behind the old question
       remember(log); persist(); draw();
       return;
     }
@@ -818,8 +881,11 @@
       return;
     }
     if (name === "run" && save && save.encounter) {
-      const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]);
-      name = "go-" + (out.includes(save.facing) ? save.facing : out[0] || save.facing);
+      // Running takes any way out, whichever way KURA faces: an open door first, a locked one (it takes the key) if that's all there is.
+      const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]), free = out.filter(d => !can.locked[d]);
+      const pool = free.length ? free : out;
+      if (!pool.length) { save.log = "> There is no way out today. FIGHT, TALK, or GIVE."; persist(); draw(); encounterBox(); return; }
+      name = "go-" + pool[Math.floor(Math.random() * pool.length)];
     }
     if (name !== "invoke" && name !== "codex") logGlow = false;
     if (name.startsWith("go-") && save) {
@@ -843,9 +909,9 @@
     if (name === "codex") { codexSel = -1; return showCodex(document.getElementById("codex").hidden); }
     if (name === "backup") return backup();
     if (!save) return;
-    if (name === "reset" && !confirm("Begin a new run? This run will be lost.")) return;
-    if (name === "hold" && !confirm("Go on standby for the day? KURA won't open a new door today, and tonight's rest runs deeper.")) return;
-    const log = save.log, steps = save.steps;
+    if (name === "reset") { if (!resetOK) { resetBox(); return; } resetOK = false; }
+    if (name === "hold") { if (!holdOK) { holdBox(); return; } holdOK = false; }
+    const log = save.log, steps = save.steps, exBefore = save.extra;
     const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
       : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
@@ -858,7 +924,16 @@
     if (name === "reset") save.history = [];
     remember(name === "reset" || save.steps !== steps ? "" : log);
     persist(); draw();
-    if (name !== "reset" && !encounterBox(true) && !altarBox()) foundBox(before);
+    if (name !== "reset" && !encounterBox(true) && !altarBox()) {
+      foundBox(before);
+      // Nothing else opened: if this action brought something significant, say so in a box.
+      if (document.getElementById("found").hidden && !save.encounter) {
+        const lines = [];
+        if (save.log !== log && SIGNIFICANT.test(save.log)) lines.push(save.log.replace(/^> /, ""));
+        if (save.extra && save.extra !== exBefore && SIGNIFICANT.test(save.extra)) lines.push(save.extra.replace(/^> /, ""));
+        if (lines.length) noticeBox(lines);
+      }
+    }
   }
 
   document.getElementById("screen").addEventListener("click", e => {
@@ -874,6 +949,8 @@
   });
   document.getElementById("found").addEventListener("click", e => {
     if (replayTimer) return finishReplay();     // a click skips the round's playback
+    const pa = e.target.closest("[data-pact]");
+    if (pa && passAct) return passAct(pa.dataset.pact);
     const c = e.target.closest("[data-cact]");
     if (c) return answerConfirm(c.dataset.cact === "yes");
     if (document.getElementById("found").dataset.mode === "confirm") return answerConfirm(false);
@@ -902,6 +979,7 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
     const fbox = document.getElementById("found");
+    if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
     if (!fbox.hidden) {
       e.preventDefault();
       if (fbox.dataset.mode === "confirm") {
@@ -924,7 +1002,7 @@
         else if (st2 === "offer") k = /^[1-8]$/.test(key) ? "offer-" + (Number(key) - 1) : { b: "offer-none", n: "offer-none", escape: "offer-none" }[key];
         else if (st2 === "ask" || st2 === "join" || st2 === "chat") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", g: "offer", i: "invoke", arrowup: "run" }[key];
+        else k = { f: "fight", t: "talk", g: "offer", i: "invoke", r: "run" }[key];
         if (k) act(k);
       } else if (fbox.dataset.mode === "found") { if (key === "enter") closeFound(); }   // a find only closes on its [ OK ] (Enter or a click), never by a stray key
       else if (key === "enter" || key === " " || key === "escape") closeFound();

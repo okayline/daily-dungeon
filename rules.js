@@ -905,7 +905,7 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
-    if (today(st).stepped) { st.log = "> Today's key is already spent."; return show(st); }
+    if (today(st).stepped && !st.freeSteps) { st.log = "> Today's key is already spent."; return show(st); }
     act(st, "hold");
     today(st).stepped = true; today(st).held = true;
     tally(st, "holds");
@@ -963,12 +963,12 @@
     const d = st.dungeon, t = st.today || {};
     const out = d && !st.dead ? exits(d).concat(d.floor.rooms[d.at].falseDoors || []) : [];
     // SEARCH works on the wall KURA faces; a door (or found stairs) can't be searched.
-    const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && !t.stepped };   // a door can be searched too (it just says so)
+    const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps) };   // a door can be searched too (it just says so)
     const spent = !!t.stepped && !st.freeSteps;           // a locked door needs the day's key; open doors are always free
-    res.locked = {};
+    res.locked = {}; res.door = {};
     for (const x of CW) {
       const shut = !!d && out.includes(x) && looksLocked(d, x);
-      res.locked[x] = shut;
+      res.locked[x] = shut; res.door[x] = out.includes(x);
       res[x] = !st.dead && out.includes(x) && !(shut && spent) && !(d && isSealed(d, x));   // a sealed door is dim for good
     }
     return res;
