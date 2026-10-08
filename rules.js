@@ -722,10 +722,10 @@
       if (thing === "stairs") w[sd].push(thing);
       else if (free.length) w[free[next() % free.length]].push(thing);
     }
-    // Nothing turns up on a first look. Each thing needs 2 to 5 points of searching (rolled now, hidden from the
+    // Nothing turns up on a first look. Each thing needs 5 to 10 points (half again more for each find already made on that wall) of searching (rolled now, hidden from the
     // player); every search of its wall adds a point or so (see SEARCH). prog is what each wall has had so far.
     w.need = {}; w.prog = {};
-    for (const x of free) { w.need[x] = w[x].map(() => 2 + next() % 4); w.prog[x] = 0; }
+    for (const x of free) { w.need[x] = w[x].map(() => 5 + next() % 6); w.prog[x] = 0; }
     // About one room in three hides something deep in one wall: findable, but only 1 in 35 per search,
     // and that wall may look empty for a very long time.
     if (free.length && next() % 3 === 0) w.deep = { dir: free[next() % free.length], item: names("MYTHIC")[next() % CATALOG.MYTHIC.length], found: false, need: 20 + next() % 31, prog: 0 };
@@ -778,8 +778,8 @@
     const fx = omen(clock(st) + (st.omenSalt || 0)).fx;
     // How much a search is worth. The day's omen sets the luck of the day (hard 0.5, easy 1.6). A calm room means
     // steady hands (x1.25) and a hot one hurried ones (x0.75). After a STANDBY day KURA is rested (x1.25).
-    // The moon's fullness helps too: up to x1.35 at the full moon, nothing at the new moon. Capped under 2 points, so a
-    // thing that needs 2 can never turn up on a first look.
+    // The moon's fullness helps too: up to x1.35 at the full moon, nothing at the new moon. Capped under 2 points, so nothing
+    // can ever turn up on a first look (the cheapest thing needs 5).
     const fullness = (1 - Math.cos(moon() / 8 * 2 * Math.PI)) / 2;
     const worth = Math.min(1.9, fx.find * (tier === 0 ? 1.25 : tier >= 2 ? 0.75 : 1) * (st.restedDay === clock(st) ? 1.25 : 1) * (1 + 0.35 * fullness));
     const where = `KURA searches the ${NAME[dir]} wall.`;
@@ -799,7 +799,8 @@
       // Searching wears the wall down: points add up until this thing's number is reached (it never shows on a first look).
       w.prog = w.prog || {}; w.need = w.need || {};
       w.prog[dir] = (w.prog[dir] || 0) + worth;
-      const need = (w.need[dir] && w.need[dir][w.taken[dir]]) || 3;
+      // A wall tires: each find on it makes the next one cost half again as much.
+      const need = ((w.need[dir] && w.need[dir][w.taken[dir]]) || 7) * Math.pow(1.5, w.taken[dir]);
       if (w.prog[dir] >= need) {
         w.prog[dir] = 0;
         const thing = pile[w.taken[dir]++];
@@ -829,7 +830,7 @@
     }
     // A near-miss line only when it's true: this wall still hides something.
     // (it starts after a couple of searches: a hint to keep going; it never says where the sound comes from)
-    const noise = w.taken[dir] < pile.length && (w.prog[dir] || 0) >= 2 && Math.random() < 0.25;
+    const noise = w.taken[dir] < pile.length && (w.prog[dir] || 0) >= 3 && Math.random() < 0.25;
     st.log = say(noise ? pick(NOISES) : pick(MISSES));
     if (!nag(st)) drift(st);
     return show(st);
@@ -894,9 +895,19 @@
       st.roundOver = true;
       st.round = [`KURA runs ${NAME[dir]} and leaves ${the(e.name)} behind.`, ...lines];
       tally(st, "fled");
+    } else if (locked) {
+      // Unlocking only opens the door: the room behind it is built, the other offer seals, and KURA stays where she is.
+      // Walking through an open door is free, so she goes in when the player chooses.
+      act(st, "unlock");
+      if (spareUse) st.spare--; else st.today.stepped = true;
+      FLOOR.grow(d.floor, d.at, dir);
+      st.facing = dir;
+      st.log = `> The ${NAME[dir]} door cycles open. The way is clear.`;
+      st.extra = atmosphere(st);
+      tally(st, "unlocks");
+      return show(st);
     } else act(st, "go");
-    // Taking the stairs down is free, like any open door; only a locked door uses the key.
-    if (locked) { if (spareUse) st.spare--; else st.today.stepped = true; }
+    // Taking the stairs down is free, like any open door.
     if (toStairs) tally(st, "floors"); else tally(st, "steps");
     st.facing = dir;
     if (toStairs) {
@@ -1065,7 +1076,7 @@
     return show(st);
   }
 
-  // CHEAT INFO (shown under the screen while infinite steps is on): what the room is and what the counters say.
+  // CHEAT INFO (three lines, left-justified under the screen while infinite steps is on): what the room is and what the counters say.
   function debugInfo(st) {
     const d = st.dungeon;
     if (!d) return "";
@@ -1076,11 +1087,11 @@
     const enc = Math.round(encounterChance(st) * 100);
     const stairs = fl.stairs < 0 ? "STAIRS unplaced" : `STAIRS R${fl.stairs + 1}${RS(d, fl.stairs).found.includes("stairs") ? " (found)" : ""}`;
     const exs = w && w.exits.length ? "EXITS " + w.exits.map(j => fl.kinds[j] + (fl.rooms[j] ? "*" : fl.sealed && fl.sealed[j] ? "x" : "")).join("/") + " CLUE " + w.clueKind : null;
-    const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/${fl.pairs + 2}`, stairs, exs, `CELL ${(st.today || {}).stepped ? "spent" : "ready"}${st.spare ? " +SPARE" : ""}`,
-      `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null];
-    const row2 = [`HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`, `LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`,
-      `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`];
-    return [row1, row2].map(r => r.filter(Boolean).join("  ")).join("\n");   // two lines under the screen
+    const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/${fl.pairs + 2}`, stairs, exs];
+    const row2 = [`CELL ${(st.today || {}).stepped ? "spent" : "ready"}${st.spare ? " +SPARE" : ""}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
+      `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`];
+    const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`];
+    return [row1, row2, row3].map(r => r.filter(Boolean).join("  ")).join("\n");   // three lines under the screen
   }
 
   // NEXT (hidden, Shift+X): a testing cheat that jumps this game one day ahead of the real date.

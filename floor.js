@@ -204,7 +204,7 @@
   // Rooms two steps away up or down fall outside the 5 rows and stay off the map.
   function minimap(floor, state) {
     // One symbol per room: [@] KURA, [^] the way up, [v] stairs down once found, [?] the lure,
-    // [ ] a visited room. Doors: = between rooms side by side, ‖ between stacked rooms.
+    // [ ] a visited room. Open doors are blank gaps.
     const W = 29, H = 5, rows = Array.from({ length: H }, () => Array(W).fill(" "));
     const put = (r, c, s) => [...s].forEach((ch, k) => {
       if (r >= 0 && r < H && c + k >= 0 && c + k < W) rows[r][c + k] = ch;
@@ -241,12 +241,12 @@
       const mark = state.at === i ? "@" : i === floor.start ? "^"
         : found.includes("stairs") ? "v" : lureHere ? "?" : " ";
       put(row, col, room.hall ? " " + mark + " " : "[" + mark + "]");   // a passage has no brackets: blank, or just KURA's @ (or a mark)
-      // Door marks sit in the opened gaps: = and ‖ for open doors, # for a locked or false one; a sealed one is plain wall.
+      // Door marks sit in the opened gaps: an open door is just blank, # for a locked or false one; a sealed one is plain wall.
       const stub = (d, locked) => {
-        if (d === "E") put(row, col + 3, locked ? "#" : "=");
-        if (d === "W") put(row, col - 1, locked ? "#" : "=");
-        if (d === "S") put(row + 1, col + 1, locked ? "#" : "‖");
-        if (d === "N") put(row - 1, col + 1, locked ? "#" : "‖");
+        if (d === "E") put(row, col + 3, locked ? "#" : " ");
+        if (d === "W") put(row, col - 1, locked ? "#" : " ");
+        if (d === "S") put(row + 1, col + 1, locked ? "#" : " ");
+        if (d === "N") put(row - 1, col + 1, locked ? "#" : " ");
       };
       for (const d of Object.keys(room.doors)) {
         const j = room.doors[d], shut = !floor.rooms[j];
@@ -259,10 +259,10 @@
       }
       for (const d of room.falseDoors || []) stub(d, true);
     });
-    // KURA's facing: an arrow in the gap on that side of her room (it covers the door mark there).
-    const f = state.facing;
-    if (f === "E") put(2, 16, ">"); else if (f === "W") put(2, 12, "<");
-    else if (f === "N") put(1, 14, "^"); else if (f === "S") put(3, 14, "v");
+    // KURA's facing: an arrow in the gap on that side of her room. A locked door's # always stays on top of it.
+    const f = state.facing, arrow = (r, c, ch) => { if (rows[r][c] !== "#") put(r, c, ch); };
+    if (f === "E") arrow(2, 16, ">"); else if (f === "W") arrow(2, 12, "<");
+    else if (f === "N") arrow(1, 14, "^"); else if (f === "S") arrow(3, 14, "v");
     return rows.map(r => r.join("").replace(/\s+$/, ""));
   }
 

@@ -94,7 +94,9 @@
   .btn[data-act=hold] { position: relative; top: 0.02em; }   /* STANDBY sits a touch lower to line up with the bar */
   .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* two flashes when keys are pressed while a question waits */
   /* The build number, small, under the screen's lower right corner. */
-  .ver { white-space: pre-line; text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
+  .ver { white-space: pre-line; text-align: right; font-size: 12px; line-height: 14px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
+  .cheat { text-align: left; padding: 2px 0 0 1ch; margin-top: -16px; }   /* the X cheat menu: three lines, left-justified; the build number stays at the right */
+  .cheat:empty { display: none; }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .t-ICHOR { color: var(--demon); }
   .foundbox .demon { color: var(--demon); }
@@ -109,6 +111,7 @@
     <div id="codex" class="logview" role="dialog" aria-modal="true" aria-label="Codex" hidden><pre></pre></div>
     <div id="about" class="logview" role="dialog" aria-modal="true" aria-label="About" hidden><pre></pre></div>
     <div id="ver" class="ver"></div>
+    <div id="cheat" class="ver cheat"></div>
     <div id="found" class="foundbox" role="dialog" aria-modal="true" aria-live="polite" hidden><pre></pre></div></div>
 <script src="screen.js"></script>
 <script src="floor.js"></script>
@@ -225,7 +228,8 @@
       document.getElementById("screen").textContent = "The screen could not be drawn. [R] begins a new run, [P] restores a password.";
     }
     // While the infinite-steps cheat is on, the line under the screen shows the room and the counters.
-    document.getElementById("ver").textContent = (save.freeSteps ? RULES.debugInfo(save) + "   " : "") + SMT.VERSION;
+    document.getElementById("cheat").textContent = save.freeSteps ? RULES.debugInfo(save) : "";
+    document.getElementById("ver").textContent = SMT.VERSION;
   }
 
   // Every player's run lives in their own browser and saves itself after every action.
@@ -718,7 +722,7 @@
   // (or KURA falls); then [ENTER] closes it.
   const floatBox = box => { pending = null; passAct = null; box.className = "foundbox"; box.removeAttribute("style"); };   // a new box replaces whatever was waiting
   const wrapText = (s, n) => { const out = []; let rest = String(s); while (rest.length > n) { let cut = rest.lastIndexOf(" ", n); if (cut <= 0) cut = n; out.push(rest.slice(0, cut)); rest = rest.slice(cut).trimStart(); } out.push(rest); return out; };
-  let blockedRun = false, replayTimer = null, prevDemonHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
+  let blockedRun = false, replayTimer = null, prevDemonHp = null, prevKuraHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
   function finishReplay() { if (replayTimer) { clearInterval(replayTimer); replayTimer = null; encounterBox(false); } }
 
   // THE ALTAR: the terminal in a Matrix Altar room. Its screen types out its words, a glare shimmers across it,
@@ -847,7 +851,9 @@
       ok.textContent = "[ OK ]"; ok.className = "btn"; ok.dataset.intro = "1"; row.append(ok); pre.appendChild(row);
       return true;
     }
-    const barFor = hp => { const f = Math.round(10 * hp / e.hpmax); return `[${"#".repeat(f)}${"-".repeat(10 - f)}]`; };
+    const barOf = (hp, max) => { const f = Math.max(0, Math.min(10, Math.round(10 * hp / max))); return `[${"#".repeat(f)}${"-".repeat(10 - f)}]`; };
+    const barFor = hp => barOf(hp, e.hpmax);
+    const kura = save.party && save.party[0] ? save.party[0] : null;
     const round = (e.round || 0) + 1;
 
     // One frame of the box. shown = how many result lines are visible; who = whose > it is (null = KURA, waiting).
@@ -877,7 +883,7 @@
       }
       const wrapped = [];
       for (const l of gl) for (const w of wrapText(l, COLS)) wrapped.push([w, lineClass(l)]);
-      const maxLines = ROWS - 5;                       // blank + 2 name rows + blank + button row
+      const maxLines = 2;                              // two lines of text; new ones roll the old up (the log keeps them all)
       const body = tail(wrapped, maxLines);
       let art = Math.min(5, ROWS - 5 - body.length - 1);
       if (art < 3) art = 0;
@@ -897,10 +903,10 @@
       };
       // The enemy sits above KURA, under the art, with the round counter at the right end of its row.
       arrow(who === "demon", `${e.name}   ${barFor(shown >= 1 || final || prevDemonHp === null ? e.hp : prevDemonHp)}`, "demon", `ROUND ${round}`);
-      arrow(who === null, "KURA");
+      arrow(who === null, kura ? `${"KURA".padEnd(e.name.length)}   ${barOf(final || prevKuraHp === null ? kura.hp : prevKuraHp, kura.hpmax)}` : "KURA");
       add(" ");                                        // a blank line between the names and what happened
       for (const [w, c] of body) add(w, c);
-      const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1 - (final && !e.stage ? 1 : 0);
+      const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1;
       for (let i = 0; i < rest; i++) add(" ");
       const row = document.createElement("div"); row.className = "brow";
       const left = document.createElement("span");
@@ -914,11 +920,6 @@
       }
       row.append(left);
       pre.appendChild(row);
-      if (final && !e.stage) {                         // the day's charge as a weapon, on its own line
-        const r2 = document.createElement("div"), d = opt("[D]ISCHARGE", "discharge");
-        if (!RULES.chargeLeft(save)) d.className += " off";
-        r2.append(d); pre.appendChild(r2);
-      }
     };
 
     if (animate && lines.length > 1 && !e.stage) {     // play the round back: the > moves to whoever acts
@@ -939,6 +940,7 @@
     const okHold = holdOK, okReset = resetOK, okDis = dischargeOK; holdOK = resetOK = dischargeOK = false;      // a confirmation is good for this one call only
     if (replayTimer) finishReplay();
     prevDemonHp = save && save.encounter ? save.encounter.hp : null;
+    prevKuraHp = save && save.encounter && save.party && save.party[0] ? save.party[0].hp : null;
     // [^] toward a bare wall is just a search of that wall; toward a door it takes the step.
     if (name === "forward" && save) {
       if (save.encounter) return;                  // in a fight, running is the [R]UN button in the fight box
@@ -1112,7 +1114,7 @@
         else if (st2 === "chat") k = { y: "yes", enter: "yes", n: "no", s: "silent", escape: "no" }[key];
         else if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", g: "offer", i: "invoke", r: "run", d: "discharge" }[key];
+        else k = { f: "fight", t: "talk", g: "offer", i: "invoke", r: "run" }[key];
         if (k) act(k);
       } else if (fbox.dataset.mode === "found") { if (key === "enter") closeFound(); }   // a find only closes on its [ OK ] (Enter or a click), never by a stray key
       else if (key === "enter" || key === " " || key === "escape") closeFound();

@@ -2,6 +2,20 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.49 - Oct 8 2026, 01:10 HST
+
+![v0.49](screenshots/v0.49.png)
+
+Doors that wait for you, slower searching, and a health bar for KURA.
+
+- **Doors:** unlocking a door only opens it. KURA stays where she is and walks in when you choose.
+- **Searching:** finds take more work, and a wall gets stingier after it gives something up.
+- **Minimap:** open doorways are plain gaps, and a locked door's `#` is never covered by the facing arrow.
+- **Fight popup:** KURA has a health bar like the enemy's. The text keeps to two lines and rolls up. `[D]ISCHARGE` is gone from fights for now.
+- **Demons:** a little more patient with silence.
+- **Cheat menu:** `X` shows three left-aligned lines, and the build number sits right under the screen.
+- **Changelog:** older entries are vaguer.
+
 ## v0.48.1 - Oct 8 2026, 00:24 HST
 
 ![v0.48.1](screenshots/v0.48.1.png)
@@ -20,7 +34,6 @@ Room names, and some tidying.
 - **Room names:** the bottom row of the side panel now shows the name of the room you are in, before TURN and DAY. The first room is STAIRS UP; names are flavor only.
 - **Cell:** the cell indicator is two slots, `CELL [#][ ]`, so an empty cell is visible.
 - **Party talk:** a party member's reply on log line 3 clears when you take your next action.
-- **Changelog:** the public changelog is vaguer on purpose.
 
 ## v0.47 - Oct 7 2026, 23:51 HST
 
@@ -72,9 +85,9 @@ A longer week, charge instead of keys, camp, discharge, drops, and the open-door
 
 - **The week:** a floor now lasts the days left in the week.
 - **Charge:** the day's key is now a charge in a cell. A day nobody played banks one spare cell (one at most), which can open one more door.
-- **Camp:** STANDBY restores everyone standing, clears taint, refills patience and cools the room.
-- **Discharge:** `[D]ISCHARGE` in a fight spends the day's charge (or the spare) on one blow that ends most fights, after a confirm popup.
-- **Demons drop things:** a fallen demon may leave silver or an item; a discharge kill leaves more.
+- **Camp:** STANDBY lets the party rest.
+- **Discharge:** `[D]ISCHARGE` in a fight spends the day's charge on one powerful blow, after a confirm popup.
+- **Demons drop things:** a fallen demon may leave something behind.
 - **Open doors are a big double-line arch** with the room left empty. A passage is `) (` on the minimap (`)@(` when you stand in it), and the grid outline is dimmer.
 - `[P]ASS` moved to the help page, next to `[C]ODEX`. The log page has a gap under its heading. TURN has four digits and DAY two.
 
@@ -110,7 +123,7 @@ A pass over the code, fixing what a review found, plus a few small changes.
 - **A party member leaving opens a popup** (`[ OK ]`), wherever it happens. `[  ^  ]` is two spaces each side with a bigger `^`, and the lines no longer shift on that row.
 
 - **Safer boxes and keys.** In the unlock box only Enter or Y says yes (a compass letter, or a held key, no longer confirms and spends the key); everything else is no. A new box replaces any stale one (so a cancelled standby can't run when you confirm a door). Clicking a field in the password box no longer closes it, buttons behind an open box do nothing, dim buttons do nothing (the step button still searches a wall), and cancelling a question brings back the fight or altar box.
-- **New runs start clean.** Reset clears the last run's taint, item wear, pending question and counters. A run that dies at the deadline no longer keeps a live demon or question.
+- **New runs start clean.** Reset clears the last run's leftovers. A run that dies at the deadline no longer keeps a live demon or question.
 - **Search fixes.** Items are spread over a room's walls properly (the wall picker was stuck on one wall).
 - **Saves.** A corrupt or older save is kept aside instead of overwritten; a password must actually run before it can replace your run; a bad frame no longer freezes the screen.
 - **Smaller fixes.** A waiting party question survives a reload; YES/NO in the swap stage keeps the text; a question lapses when a demon steps in; demons you already have don't turn up as strangers; wing building finds a layout sooner; the cached `Date` header is corrected for age.
@@ -170,7 +183,7 @@ A pass over the code, fixing what a review found, plus a few small changes.
 
 ![v0.35](screenshots/v0.35.png)
 
-- **Under the hood: each room keeps its own record.** Everything the game remembers about a room (visited, what's been found, heat, linger, its wall contents) now lives in one place per room, instead of five lists that all assumed three rooms. Nothing about how the game plays changes. It's the groundwork for a bigger, branching map. Runs saved the old way convert themselves the first time they load, with every value kept.
+- **Under the hood:** each room keeps its own record. Nothing about how the game plays changes; it is groundwork for a bigger, branching map. Runs saved the old way convert themselves the first time they load.
 
 ## v0.34 - Oct 7 2026, 17:53 HST
 
@@ -178,9 +191,9 @@ A pass over the code, fixing what a review found, plus a few small changes.
 
 - **Rooms have their own character.** Names never show; each does its one thing when you walk in, with its own line.
 - **A terminal in the wall.** Face it and `[S]EARCH` or `[G]IVE` to wake it. It types a greeting over a drifting sine wave.
-- **`STA[N]DBY`, a third choice for the day** beside going forward and back. It spends the day's step, and the next morning's rest is deeper: another fifth of HP, party patience restored, the room cooled again, the loop cleared. A day you just don't step gets nothing extra.
+- **`STA[N]DBY`, a third choice for the day** beside going forward and back. It spends the day's step, and the next morning's rest is deeper. A day you just don't step gets nothing extra.
 - **The moon strip**: the eight phases as blocks (lit on the right while waxing) on the line above `ALIGN`, with a `.` over today's.
-- **`[S]EARCH` works on a door** (and the stairs): it still finds nothing, but it counts as an action, so line 1 changes, line 3 holds, and spamming it feeds the loop.
+- **`[S]EARCH` works on a door** (and the stairs): it still finds nothing, but it counts as an action, so line 1 changes and line 3 holds.
 - `[^]` has no glow. `[P]ASS` moved off the bottom border (the `P` key and the `[?]` help still have it).
 
 ## v0.33 - Oct 7 2026, 16:45 HST
@@ -188,9 +201,8 @@ A pass over the code, fixing what a review found, plus a few small changes.
 ![v0.33](screenshots/v0.33.png)
 
 - **Text lines hold for two turns and two seconds.** Line 3 stays on screen until KURA has taken two more actions and two seconds have passed, so fast clicking can't skip past it. Warnings (a demon, damage, a closing way down, game over) still replace it at once.
-- **One loop counter.** Doing the same thing over and over is now a single count for everything (searching, turning, walking, items, fighting, talking). The old separate streak is gone. The party gets restless as before.
-- **Lingering counts every action in a room.**
-- **Dread, when KURA is alone.** Doing the same thing over and over, alone, has a way of being noticed. Company keeps the dark away.
+- **Repeating yourself is tracked in one place now,** for everything you can do. The party gets restless as before.
+- **Being alone** in the dark has its own effects. Company keeps it away.
 
 ## v0.32 - Oct 7 2026, 16:19 HST
 
@@ -218,10 +230,10 @@ A pass over the code, fixing what a review found, plus a few small changes.
 
 - The `[^]` step button is drawn bigger and glows, since it's the one move of the day.
 - The omen on the ceiling has carets pointing in: `> "The stone dreams of the sea." <`.
-- Talking to the party is much easier on them: plain chatter takes much longer to wear their patience down. Questions, fiddling with junk and repeating yourself still wear on them as before.
+- Talking to the party is much easier on them.
 - **ICHOR is the party's medicine.** It sits at the top of INVOKE: Enter feeds the wounded demons. It doesn't work on KURA, who is human.
 - **KURA can drink it anyway** (`[D]RINK` in INVOKE). It has consequences.
-- **TRIP, the first status effect.** Too much taint and KURA starts to trip. The world turns strange, and coming down hurts.
+- **TRIP, the first status effect.** KURA can start to trip. The world turns strange, and coming down hurts.
 - The CODEX button moved from INVOKE to the top of the LOG page (C still opens it anywhere).
 - The stray `|` to the right of `[S]EARCH` on the menu bar is gone.
 
@@ -231,12 +243,11 @@ A pass over the code, fixing what a review found, plus a few small changes.
 
 - **The omen moved to the top of the 3D view**, centered across the ceiling. A long omen wraps onto a second row, so the walls always show. The moon panel's bottom row is back to just the `^^^` marker, and the frame under the 3D view is gone, so the screen is back to its old height.
 - "The moon is day 26, waning crescent." is now one of the status reports on log line 1.
-- **Things are much harder to break by hand.** The party's patience goes as it gets close instead: reactions are rare at first and come more and more often the longer KURA keeps at it, and the break itself costs everyone a point of patience.
+- **Things are much harder to break by hand.** The party cares what you do to them.
 - Searching while facing a door has a few different replies now ("KURA checks the hinges. Old, but only hinges."), never the same twice in a row.
-- **Doing the same thing over and over gets noticed.** Searching the same wall again and again, turning round and round, or searching a door: after a few repeats the party starts to say something, more often the longer it goes on, and each remark costs that member a point of patience. "PIXIE: "Are you CRAZY? What are you DOING??"", "ELF: "You have searched that wall a hundred times."", "CU SITH lies down. It knows this will take a while.", "LOOP DETECTED."
-- **The party asks questions.** Talking to a member in a calm room, they sometimes ask KURA something instead, and big `[Y]ES | [N]O` buttons appear on the right side of the log box (or press Y / N). "PIXIE: "Can I have the next shiny thing?"", "ELF: "Do you trust me?"", "CU SITH drops a bone at KURA's feet. Throw it?", "QUERY: IS THIS A TEST? Y / N". Answers change their patience (a kind answer can win some back), some lean KURA's alignment, and each gets a reply. Doing anything else lets the question lapse.
-- Party remarks about doing the same thing over and over now take longer to start.
-- **Demons talk before they bargain.** A demon that listens now sizes KURA up with a question or two first, each family its own way ("QUERY: ARE YOU HUMAN? Y / N", "do you have a charger? anything?", "Do you hear the wires sing too?", "Do you fear me?"), answered `[Y]ES` / `[N]O` in the fight box. Answers it likes put it in a better mood; ones it dislikes sour it. Then it asks for a gift as before.
+- **Doing the same thing over and over gets noticed.** The party starts to say something.
+- **The party asks questions.** Talking to a member sometimes gets a question back, with big `[Y]ES | [N]O` buttons on the right side of the log box (or press Y / N). Answers matter.
+- **Demons talk before they bargain.** A demon that listens now sizes KURA up with a question or two first, each family its own way, answered `[Y]ES` / `[N]O` in the fight box. Then it asks for a gift as before.
 - Data demons sometimes slip into binary (real ASCII, if you decode it): `01001000 01001001`, and one even asks a question in it.
 - Fixed the right border of a log line sitting one cell short in the page font (an apostrophe, as in "Today's", wasn't exactly one cell wide). Each log line's text now sits in a box exactly 78 cells wide.
 
@@ -248,12 +259,12 @@ A pass over the code, fixing what a review found, plus a few small changes.
 - **SEARCH is `[S]` now** (it was A). With the NSEW buttons gone, the compass keys are retired too: the day's step is `[^]` or the up arrow, and in a fight the up arrow or R runs.
 - About has a guide to every key.
 - **The omen has its own frame** under the 3D view: centered, with arrows on the edges that grow inward when the omen is short (`||>  "Count the doors."  <||`). It no longer sits on log line 1.
-- **Log line 1 is a status report** that changes every 5-10 actions. Mostly news ("First floor. 5 days until the way down closes.", "Day 6 on this floor. The way down closes tomorrow.", "First floor. 2 of 3 rooms surveyed. Stairs unconfirmed.", "Day 3. Party wounded."), mixed with a detached conditions readout: the air (the room's heat, as temperature), a smell, a sound or the light ("Conditions: humid. Odor of mold. Dripping, distant."). It updates right away when the heat changes, on a new day or floor, and on the last day. A fight leaves copper in the air; a break, smoke.
+- **Log line 1 is a status report** that changes every 5-10 actions. Mostly news ("First floor. 5 days until the way down closes.", "Day 6 on this floor. The way down closes tomorrow.", "First floor. 2 of 3 rooms surveyed. Stairs unconfirmed.", "Day 3. Party wounded."), mixed with a detached conditions readout: the air, a smell, a sound or the light ("Conditions: humid. Odor of mold. Dripping, distant."). It updates right away on a new day or floor, and on the last day. A fight leaves copper in the air; a break, smoke.
 - One omen reworded: "The deep remembers a name. Yours...soon."
 - The build number shows small under the screen's lower right corner.
 - The bottom border reads `[?] [L]OG [P]ASS [R]ESET`. BACKUP is now `[P]ASS`, the run's password like old console games (copy it to keep or move the run; paste one in to continue it), and RST is spelled out as `[R]ESET`.
 - **The adventure log keeps everything you read:** each day's omen, every action, everything said and done in a fight or a talk, and line 3 whenever it changes (party replies, finds, warnings). Follow-up lines sit indented under the action they belong to. Hidden numbers stay out.
-- **Items can break.** Trying to use something that does nothing can break it ("comes apart in KURA's hands"). Breaking things has consequences, and the party cares what you break. The party notices fiddling too, and it wears on their patience.
+- **Items can break.** Trying to use something that does nothing can break it. The party cares what you break.
 - Each changelog entry now comes with a screenshot of that build.
 - The README is up to date with how the game plays now.
 
@@ -283,10 +294,9 @@ A pass over the code, fixing what a review found, plus a few small changes.
 
 ## v0.24 - Oct 6 2026, 15:42 HST
 
-- **Talking reads the room.** When KURA talks to the party, the answer follows the room's heat: easy chatter when it's calm, then uneasy ("Lower your voice. The room is waking."), nervous ("Something keeps breathing. It isn't us."), and finally just wrong ("PIXIE tries to answer. Her voice won't come.") as it heats up. Each member answers in their own way; recruited demons in their family's voice ("MULTIPLE SIGNALS. ORIGIN: EVERYWHERE.").
+- **Talking reads the room.** When KURA talks to the party, the answer follows the mood of the place.
 
-- **Patience.** Party members get tired of being talked to. Each talk wears down the one who answers: after a few they get short ("ELF: "Must you?"", "RATE LIMIT EXCEEDED."), then irritated ("PIXIE sticks out her tongue."), then they ignore KURA ("CU SITH pretends to be asleep."). A night's rest gives some patience back. A dangerous room still outranks being annoyed. Keep pushing someone with no patience left and they may snap.
-- Nervous replies are less explicit too ("MULTIPLE SIGNALS. ORIGIN: EVERYWHERE.", "WARNING: TRACE DETECTED.").
+- **Patience.** Party members get tired of being talked to. A night's rest gives some back.
 
 ## v0.23 - Oct 6 2026, 15:31 HST
 
@@ -304,10 +314,10 @@ A pass over the code, fixing what a review found, plus a few small changes.
 
 ## v0.21 - Oct 6 2026, 15:00 HST
 
-- **Recruiting.** KURA is the only human; ELF, PIXIE and CU SITH are demons too, and any demon can join. TALK goes in steps: the demon decides whether to listen (moon, omen and alignment), names its price, KURA answers `[Y]ES` or `[N]O`, and once paid it may offer to join. With a full party (KURA plus 3), you choose who to send away, or keep everyone.
+- **Recruiting.** KURA is the only human; ELF, PIXIE and CU SITH are demons too, and any demon can join. TALK goes in steps: the demon decides whether to listen, names its price, KURA answers `[Y]ES` or `[N]O`, and once paid it may offer to join. With a full party (KURA plus 3), you choose who to send away, or keep everyone.
 - **Each family speaks and bargains its own way.** Data demons talk in system messages, haunted hardware in corrupted memory, hybrids mix the two, and folklore speaks in old words.
 - **Alignments.** Every demon is LAW, NEUTRAL or CHAOS. The encounter box shows how it sees KURA: "KURA is recognized.", "Undecided." or "bares its teeth."
-- **KURA's alignment moves with her choices.** Nearly every choice nudges it, and recruits pull hardest. The ALIGN tag only flips at a threshold ("The system takes notice. [LAW]" / "The old things take notice. [CHA]") and returns to [NEU] near the middle ("KURA finds her balance.").
+- **KURA's alignment moves with her choices.** Nearly every choice nudges it. The ALIGN tag only flips at a threshold ("The system takes notice. [LAW]" / "The old things take notice. [CHA]") and returns to [NEU] near the middle ("KURA finds her balance.").
 - **The ALIGN tag shows each action's pull.** A bracket turns into a glowing arrow for the action that just happened: `<NEU]` pulled toward LAW, `[NEU>` toward CHAOS.
 - A new run now resets KURA's alignment fully.
 - PIXIE, ELF and CU SITH can now also turn up as wild demons.
@@ -329,14 +339,14 @@ A pass over the code, fixing what a review found, plus a few small changes.
 ## v0.18 - Oct 6 2026, 14:13 HST
 
 - **Daily omens** on line 1: one per real day, seeded from the date, always true.
-- **Heat:** every search warms the room. Line 3 tells you when it rises ("Your footsteps sound louder than before." / "Something in the walls goes quiet." / "The room is listening."), and "The room settles." when it cools.
+- **Rooms stir:** searching makes noise, and line 3 hints when the room has noticed.
 - **Taking the stairs down is free:** it no longer uses the day's step.
 - More search misses ("Old tally marks, in groups of five.").
-- The moon shows up on line 3 now and then. The black candle now cools the room it's lit in.
+- The moon shows up on line 3 now and then.
 
 - During a fight, the directions you can run through glow white, with a `RUN?` label above them; the long explanation in the fight box is gone.
 - Popup boxes close with `[ OK ]` (click it, or press Enter, Space or Esc).
-- The `?` is now a hidden locker holding something rare ("A locker holds a black pearl.").
+- The `?` is now a hidden locker.
 - New demons: half old folklore (GHOUL, ONI, KAPPA, LAMIA…), half born in the city's wires (GLITCH, STATIC, CHROMEDOG, WIREWRAITH, NEON ONI, DATAGHOUL, RUST KAPPA, BLACK ICE).
 
 ## v0.17 - Oct 6 2026, 11:06 HST
@@ -391,7 +401,7 @@ A pass over the code, fixing what a review found, plus a few small changes.
 ## v0.11 - Oct 6 2026, 09:48 HST
 
 - One step per day. `[N] [S] [E] [W]` take the day's step through the door on that side (or down the stairs once found), and dim once used. Turning and the free actions are unlimited.
-- Searching works like NetHack: unlimited, but a search only sometimes turns up the room's next hidden thing, and an empty room never answers. The log counts the tries ("KURA searches (12). Nothing."). Each search also risks a wandering demon.
+- Searching is unlimited, but a search only sometimes turns up something, and an empty room never answers. The log counts the tries ("KURA searches (12). Nothing.").
 - New bottom menu: free actions on the left (`[F]IGHT [T]ALK [I]NVOKE`, not built yet; INVOKE replaces SUMMON), daily actions on the right after a divider. ITEM, MAGIC, COMP, EQUIP and GO are gone; `[^]` under the 3D view still steps forward.
 - The map header shows the floor's weekday, MON to SUN (`MAP  B3F  WED`). SUN is the last day to find the stairs. For now it follows the floor's day count; later a floor will start on a real Monday.
 - STEP on the bottom line is renamed TURN, to match DAY. It still counts every action: steps, searches and turning.
@@ -432,7 +442,7 @@ A pass over the code, fixing what a review found, plus a few small changes.
 
 - The game now plays on real floors. The minimap, the room view and the second log line all follow KURA.
 - `[G]O` (or the up arrow) walks through the door KURA faces, or down the stairs once they're found. Facing a wall, GO turns to the next way out instead. The left and right arrows turn KURA. Turning is free.
-- `SE[A]RCH` (or A) turns up the next hidden thing in the room: demons (damage and ICHOR), items, SILVER, the `?` or the stairs. A room with nothing left can't be searched.
+- `SE[A]RCH` (or A) turns up what the room hides. A room with nothing left can't be searched.
 - GO and SEARCH each use up a day. NEXT picks a day's action by itself, as a testing shortcut.
 - If the week runs out without finding the stairs, the floor gives way and KURA falls to the next floor (a placeholder rule).
 - RST starts a new run on a fresh B1F.
