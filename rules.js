@@ -186,6 +186,7 @@
   const MOON_PULL = [0.8, 0.9, 1, 1.1, 1.25, 1.1, 1, 0.9];       // the moon still stirs things a little
   function encounterChance(st) {
     const d = st.dungeon, h = (d.heat || [])[d.at] || 0;
+    if (d.floor.rooms[d.at].kind === "bay") return 0;      // a Recharge Bay is safe
     return (1 / 24 + (1 / 4 - 1 / 24) * Math.min(1, h / HEAT_MAX)) * MOON_PULL[moon()];
   }
   const HEAT_TELL = {
@@ -273,6 +274,8 @@
       "Old mortar, older stains.", "The wall stares back.", "Scratch marks, long dried."],
     door: ["A door, shut tight.", "A heavy door, iron-banded.", "A door, swollen with damp.",
       "A warped door in its frame.", "A door, its handle worn smooth."],
+    terminal: ["A terminal, set into the wall. Its screen waits.", "A dead screen in the stone. Something behind it is awake.",
+      "A terminal in the wall. The cursor blinks."],
     stairs: ["The stairs drop into the dark.", "Steps lead down. They do not end.",
       "The stairs wait."],
   };
@@ -362,7 +365,7 @@
     const stairsAhead = d.found[d.at].includes("stairs") && st.facing === stairsDir(d.floor, d.at);
     st.view = {
       left: [!door(LEFT[st.facing]), true], right: [!door(RIGHT[st.facing]), true],
-      end: stairsAhead ? "stairs" : door(st.facing) ? "door" : "wall",
+      end: stairsAhead ? "stairs" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : "wall",
     };
     return st;
   }
@@ -411,6 +414,8 @@
     if (st.dungeon && st.dungeon.deadline > sundayOf(real) + 7) st.dungeon.deadline = sundayOf(real) + 7;
     st.extra = "> The calendar shudders and settles on today.";
   }
+  const STANDBY_LINES = ["> KURA kept still all day. The party sleeps deeper tonight.", "> A quiet day. Everyone wakes lighter.",
+    "> Nothing moved, and nothing was lost. The room feels kinder.", "> The long stillness did its work."];
   function sync(st) {
     snapBack(st);
     const t = clock(st);
@@ -423,6 +428,8 @@
     const newDay = st.today.date !== t;
     st.day = t - st.startDay + 1;
     if (!newDay || st.dead) return st;
+    // A day KURA chose to HOLD (see hold) is STANDBY: a deeper rest tonight.
+    const held = !!st.today.held && st.today.date === t - 1 && !!st.dungeon && !st.dead;
     st.today = { date: t, stepped: false };
     st.unsaved = true;
     st.statusIn = 0; st.statusKind = "news";
@@ -441,6 +448,12 @@
     st.party = (st.party || []).map(p => p.patience === undefined ? { ...p, chats: 0 } : { ...p, chats: 0, patience: Math.min(PATIENCE, p.patience + 3) });
     // A night's rest heals a fifth of everyone's HP (fallen allies too, slowly).
     if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
+    if (held) {   // standby: another fifth back, patience restored, the room cools again and the loop clears
+      st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + (p.hp > 0 ? Math.ceil(p.hpmax / 5) : 0)), ...(p.patience === undefined ? {} : { patience: PATIENCE }) }));
+      if (st.dungeon && st.dungeon.heat) st.dungeon.heat = st.dungeon.heat.map(h => Math.floor((h || 0) / 2));
+      st.loop = { key: "", n: 0 };
+      tally(st, "standby");
+    }
     const d = st.dungeon;
     if (d && t > d.deadline) {
       st.dead = true;
@@ -450,7 +463,7 @@
     }
     st.log = `> Day ${st.day}. KURA wakes on ${st.floor}.`;
     st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight."
-      : settled ? "> The room settles." : atmosphere(st);
+      : held ? pick(STANDBY_LINES) : settled ? "> The room settles." : atmosphere(st);
     return st;
   }
 
@@ -488,6 +501,7 @@
   function act(st, key) {                  // every action counts a STEP and marks the game unsaved
     st.steps = (st.steps || 0) + 1;
     st.unsaved = true;
+    if (st.altar) st.altar = null;           // walking off closes the terminal
     bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
     if (st.dungeon) { const d = st.dungeon; d.linger = d.linger || [0, 0, 0]; d.linger[d.at] = (d.linger[d.at] || 0) + 1; }
     st.dreadCheck = true;                  // show() looks at the loop once the action has finished
@@ -602,10 +616,22 @@
         "A door. Whatever's hidden, it isn't here.", "The door gives nothing away. It only opens.",
         "KURA checks the hinges. Old, but only hinges.", "Nothing behind the door but the way on."];
       st.log = "> " + pick(DOOR.filter(l => "> " + l !== st.log));
-      bump(st, "door"); nag(st);
+      act(st, "door"); nag(st);
       return show(st);
     }
-    if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { st.log = "> The stairs wait. Nothing more here."; return show(st); }
+    if (facingAltar(st)) {
+      act(st, "altar:open");
+      st.log = "> KURA touches the terminal. The screen wakes.";
+      st.altar = { open: true, used: altarUsed(st), greet: pick(["> INPUT?", "> ...?", "> Hello."]) };
+      return show(st);
+    }
+    if (facingAltar(st)) {                       // the terminal in the wall: SEARCH wakes it
+      act(st, "altar:open");
+      st.log = "> KURA touches the terminal. The screen wakes.";
+      st.altar = { open: true, used: altarUsed(st), greet: pick(["> INPUT?", "> ...?", "> Hello."]) };
+      return show(st);
+    }
+    if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { act(st, "stairs"); st.log = "> The stairs wait. Nothing more here."; return show(st); }
     act(st, `search:${d.at}:${dir}`);
     // Heat: the loop and linger counts (see act) decide what kind of noise KURA is making.
     const chance = encounterChance(st);
@@ -667,7 +693,7 @@
       return show(st);
     }
     const toStairs = d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at);
-    if (today(st).stepped && !(toStairs && !st.encounter)) {
+    if (today(st).stepped && !st.freeSteps && !(toStairs && !st.encounter)) {
       st.facing = dir; st.log = "> KURA has already moved today. Rest until tomorrow.";
       if (st.encounter) st.round = ["Today's step is spent. No running now."];
       return show(st);
@@ -711,8 +737,110 @@
       const isNew = !d.visited[i];
       d.at = i; d.visited[i] = true;
       st.log = `> Day ${st.day}. KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
+      enterKind(st, i, isNew);
     }
     st.extra = atmosphere(st);
+    return show(st);
+  }
+
+
+  // ROOM KINDS. Rooms 1 and 2 of a floor each have one (see floor.js). The first time KURA enters, the room
+  // does its one thing (line 3). No kind is better than another: they answer different needs.
+  // Placeholders (nothing to act on yet): DEN gear, BAY shield, VAULT keys, FORGE repairs.
+  const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR" };
+  // The Den, Bay and Forge keep working: going back to one does its thing again (once a day). The rest are one-time finds.
+  function enterKind(st, i, isNew) {
+    const d = st.dungeon, rm = d.floor.rooms[i], k = rm.kind;
+    if (!k) return;
+    if (!isNew && !["den", "bay", "forge", "altar"].includes(k)) return;
+    d.kindDay = d.kindDay || [];
+    if (d.kindDay[i] === st.day) return;
+    d.kindDay[i] = st.day;
+    if (k === "den") {                       // hot from the start: demons come easily, and so does the rest
+      d.heat = d.heat || [0, 0, 0]; d.heat[i] = Math.max(d.heat[i] || 0, Math.round(HEAT_MAX * 0.6));
+      st.tell = "> Warm air. Loose parts and old gear lie in the dark.";
+    } else if (k === "bay") {                // safe (no demons hide here): the party mends a little
+      const hurt = st.party.some(p => p.hp < p.hpmax);
+      if (hurt) heal(st, 1 / 3, false);
+      st.tell = hurt ? "> A soft hum. The party's wounds close a little." : "> A soft hum. The air feels kind.";
+    } else if (k === "relay") {              // points at the way down
+      const fl = d.floor, me = fl.rooms[i], to = fl.rooms[fl.stairs];
+      const dr = to.r - me.r, dc = to.c - me.c;
+      if (!dr && !dc) st.tell = "> A dish turns on its own, then holds still. The signal is strongest right here.";
+      else { const dir = Math.abs(dr) >= Math.abs(dc) ? (dr < 0 ? "N" : "S") : (dc < 0 ? "W" : "E");
+        st.tell = `> A dish turns on its own and points ${NAME[dir]}. A way down lies that way.`; }
+    } else if (k === "vault") {              // coin (no keys or checks yet)
+      const n = R(40, 110) * floorNum(st);
+      st.silver = (st.silver ?? 0) + n; tally(st, "silverFound", n);
+      st.tell = `> A rack of old coin. KURA takes ${n} SILVER.`;
+    } else if (k === "forge") {              // purify: clears the ichor taint (no repairs yet)
+      if ((st.taint || 0) > 0 || tripping(st)) {
+        st.taint = 0; const kura = st.party[0]; delete kura.status; st.tripLeft = 0; delete st.turnShown;
+        st.tell = "> Something warm hums over KURA. The edges of things sharpen.";
+      } else st.tell = "> A bench, cold tools, a smell of solder. Nothing to mend yet.";
+    } else if (k === "altar") {              // placeholder: a terminal that doesn't answer yet
+      st.tell = "> Something in the wall glows, very faintly.";
+    }
+  }
+
+  // THE ALTAR (the Matrix Altar room): a terminal that takes one offering a day and shifts KURA's lean.
+  // The offering's own alignment sets the way (LAW item toward LAW, CHAOS item toward CHAOS, a neutral one
+  // or SILVER back toward the middle) and its tier the size. The terminal is a data thing, so it likes
+  // tech and dislikes spirit things; its mood (:) :| :() only changes how much the shift takes. The
+  // offering is always lost. Nothing on screen says which way it went.
+  const TERMINAL = { family: "data", align: "NEUTRAL", want: 3 };
+  const ALTAR_SIZE = { COMMON: 0.5, UNCOMMON: 0.8, RARE: 1.2, MYTHIC: 2, MOON: 2 };
+  const ALTAR_SAYS = {
+    good: ["> THANK YOU.", "> ACCEPTED.", "> YES. MORE LIGHT.", "> THIS ONE IS WARM."],
+    ok: ["> NOTED.", "> LOGGED.", "> ACCEPTABLE.", "> I WILL KEEP IT."],
+    bad: ["> UNSUITABLE.", "> I DON'T WANT THIS.", "> ...WHY?", "> NOT FOOD."],
+  };
+  const ALTAR_FACE = { good: ":)", ok: ":|", bad: ":(" };
+  const ALTAR_FLAVOR = { good: ["The terminal drinks it.", "The three symbols shift."], ok: ["The terminal takes it.", "The three symbols stir."],
+    bad: ["The terminal swallows it and doesn't like it.", "The three symbols barely move."] };
+  // The terminal is set into one of the room's walls (never a door wall, and not the stairs wall).
+  // Face it and SEARCH (or [G]IVE) to wake it.
+  function altarDir(fl, i) {
+    const room = fl.rooms[i];
+    if (room.kind !== "altar") return null;
+    const free = CW.filter(x => !(x in room.doors) && !(fl.stairs === i && x === stairsDir(fl, i)));
+    return free.length ? free[(fl.seed + i * 17) % free.length] : null;
+  }
+  const facingAltar = st => !!(st.dungeon && altarDir(st.dungeon.floor, st.dungeon.at) === st.facing);
+  function altarUsed(st) { const d = st.dungeon; return !!(d && d.altarDay && d.altarDay[d.at] === st.day); }
+  function altarGifts(st) {
+    const n = 20 * floorNum(st), out = [{ silver: n, ok: (st.silver ?? 0) >= n, label: `${n} SILVER` }];
+    for (const it of inventory(st).slice(0, 5)) out.push({ item: it.name, ok: true, label: it.name });
+    return out;
+  }
+  function altarOpen(st) {                               // [G]IVE in an Altar room
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    const d = st.dungeon;
+    if (st.encounter || !d || !facingAltar(st)) { st.log = "> Nothing here to give to."; return show(st); }
+    st.altar = { open: true, used: altarUsed(st), greet: pick(["> INPUT?", "> ...?", "> Hello."]) };
+    return show(st);
+  }
+  function altarGive(st, i) {                            // i = an index of altarGifts(), or null to close
+    st = copy(st);
+    if (!st.altar) return show(st);
+    if (i === null || st.altar.used || st.altar.result) { st.altar = null; return show(st); }
+    const g = altarGifts(st)[i];
+    if (!g) return show(st);
+    if (!g.ok) return show(st);
+    act(st, "altar");
+    const d = st.dungeon, v = worth(TERMINAL, g), mood = v < 0 ? "bad" : v < 2.5 ? "ok" : "good";
+    let amt;
+    if (g.silver) { st.silver -= g.silver; amt = 0; } else { st.items.splice(st.items.indexOf(g.item), 1); amt = 0; }
+    const a = (g.item && itemAlign(g.item)) || "NEUTRAL";
+    const size = g.item ? ALTAR_SIZE[TIER[g.item] || "COMMON"] : 0.5;
+    amt = a === "LAW" ? -size : a === "CHAOS" ? size : -Math.sign(st.alignScore || 0) * 0.5;
+    amt *= { bad: 0.5, ok: 1, good: 1.25 }[mood];
+    LEAN.altarTmp = amt; lean(st, "altarTmp");
+    d.altarDay = d.altarDay || []; d.altarDay[d.at] = st.day;
+    tally(st, "offerings");
+    st.log = `> Day ${st.day}. KURA makes an offering.`;
+    st.altar = { open: true, used: true, result: { mood, face: ALTAR_FACE[mood], say: pick(ALTAR_SAYS[mood]), lines: ALTAR_FLAVOR[mood] } };
     return show(st);
   }
 
@@ -728,7 +856,45 @@
     return show(st);
   }
 
-  // NEXT (hidden, key X): a testing cheat that jumps this game one day ahead of the real date.
+
+  // HOLD: the third choice of the day, beside going forward and going back. KURA stays where she is. It spends
+  // the day's step (like walking through a door), and tonight's rest is deeper (STANDBY, see sync).
+  function hold(st) {
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
+    if (!ensureFloor(st)) return show(st);
+    if (today(st).stepped) { st.log = "> KURA has already settled for today."; return show(st); }
+    act(st, "hold");
+    today(st).stepped = true; today(st).held = true;
+    tally(st, "holds");
+    st.log = `> Day ${st.day}. ` + pick(["KURA settles in for the day.", "KURA stays where she is. The room goes quiet.", "KURA holds here. Let the dark pass over."]);
+    return show(st);
+  }
+
+  // FREESTEPS (hidden, key X): a testing cheat. Toggles infinite steps: the day's step is never spent.
+  function freesteps(st) {
+    st = copy(st);
+    st.freeSteps = !st.freeSteps;
+    st.log = st.freeSteps ? "> (cheat) Infinite steps ON. The day's step is never spent." : "> (cheat) Infinite steps OFF.";
+    return show(st);
+  }
+
+  // CHEAT INFO (shown under the screen while infinite steps is on): what the room is and what the counters say.
+  function debugInfo(st) {
+    const d = st.dungeon;
+    if (!d) return "";
+    const rm = d.floor.rooms[d.at], kind = rm.kind ? ROOM[rm.kind] : d.at === 0 ? "START" : "PLAIN";
+    const left = Math.max(0, rm.hidden.length - (d.found[d.at] || []).length);
+    const wall = altarDir(d.floor, d.at);
+    const enc = Math.round(encounterChance(st) * 100);
+    return [`ROOM ${d.at + 1}/3 ${kind}`, `STAIRS R${d.floor.stairs + 1}${d.found[d.floor.stairs].includes("stairs") ? " (found)" : ""}`,
+      `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null, `HEAT ${(d.heat || [])[d.at] || 0}/${HEAT_MAX}`, `ENC ${enc}%`,
+      `LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${(d.linger || [])[d.at] || 0}/${LINGER_AT}`,
+      `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`].filter(Boolean).join("  ");
+  }
+
+  // NEXT (hidden, Shift+X): a testing cheat that jumps this game one day ahead of the real date.
   function next(st) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
@@ -752,10 +918,8 @@
     const d = st.dungeon, t = st.today || {};
     const out = d && !st.dead ? exits(d) : [];
     // SEARCH works on the wall KURA faces; a door (or found stairs) can't be searched.
-    const facingWall = !!d && !(st.facing in d.floor.rooms[d.at].doors) &&
-      !(d.found[d.at].includes("stairs") && st.facing === stairsDir(d.floor, d.at));
-    const res = { search: !!d && !st.dead && facingWall };
-    for (const x of CW) res[x] = !st.dead && !t.stepped && out.includes(x);
+    const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && !t.stepped };   // a door can be searched too (it just says so)
+    for (const x of CW) res[x] = !st.dead && (!t.stepped || !!st.freeSteps) && out.includes(x);
     return res;
   }
 
@@ -1823,7 +1987,7 @@
     ];
   }
 
-  const api = { summary, next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { summary, next, freesteps, debugInfo, reset, hold, altarOpen, altarGive, altarGifts, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

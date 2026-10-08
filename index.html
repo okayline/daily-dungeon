@@ -48,6 +48,8 @@
   /* .cell keeps the screen's own font so 1ch equals exactly one character of the grid;
      only the glyph inside it switches to a font that has the symbol. */
   .cell { display: inline-block; width: 1ch; text-align: center; overflow: visible; white-space: nowrap; }
+  /* The moon strip: shorter blocks, so the row is not taller than its neighbours. */
+  .ph .g { display: inline-block; transform: scale(1.3, 0.62); }
   .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
   .door { color: var(--trail); }
@@ -55,7 +57,7 @@
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
   .btn.armed { background: var(--gold); color: var(--bg); }
-  .btn.flee { color: var(--bright); text-shadow: 0 0 1.5px var(--bright); animation: blink 1.2s steps(1) infinite; }
+  .btn.flee { color: var(--bright); animation: blink 1.2s steps(1) infinite; }
   .runlabel.flash { animation: blink 1.2s steps(1) infinite; }
   .runlabel { color: var(--bright); text-shadow: 0 0 1px var(--bright); }
   .unsaved { color: var(--gold); }
@@ -91,7 +93,7 @@
   .ver { text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
   /* The day's one step: drawn bigger than the other buttons (scaled in place, so the grid doesn't move). */
   .step { color: var(--bright); display: inline-block; transform: scale(1.6); transform-origin: center 60%;
-    text-shadow: 0 0 2px var(--bright); font-weight: bold; }
+    font-weight: bold; }
   /* Spent (or a wall ahead): a dark blue, no glow. */
   .btn.step.off { color: #111829; text-shadow: none; }   /* the dark blue, 60% toward black */
   .ask { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
@@ -152,8 +154,12 @@
           .replace("[^]", `<span class="btn step${save && RULES.available(save)[save.facing] ? (save.encounter ? " flee" : "") : " off"}" data-act="forward">[^]</span>`)
           .replace(/ RUN/, m => save && save.encounter ? ` <span class="runlabel${RULES.available(save)[save.facing] ? " flash" : ""}">RUN</span>` : m)
           .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
-        return left + esc(line.slice(48));
+        // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
+        const tail = esc(line.slice(48)).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
+        return left + tail;
       }
+      // The v over today's phase (row 20, right panel).
+      if (i === 20) return esc(line.slice(0, 48)) + esc(line.slice(48)).replace(/\./, `<span class="cell" style="position:relative;left:${[2, 6].includes(SMT.moonIndex(SMT.now())) ? ".65ch" : ".15ch"}">.</span>`);
       // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
       const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);
       if (i === 1) return moonBox(esc(line)).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
@@ -183,6 +189,7 @@
           .replace("[T]ALK", '<span class="btn" data-act="talk">[T]ALK</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace("[S]EARCH", b("[S]EARCH", "search", can.search))
+          .replace("STA[N]DBY", b("STA[N]DBY", "hold", can.hold))
 
           .replace(/\[([NSEW])\](ORTH|OUTH|AST|EST)/g, (m, x) =>
             b(m, "go-" + x, can[x]).replace('class="btn', 'class="btn' + (armed === x ? " armed" : save && save.encounter && can[x] ? " flee" : "")));
@@ -194,7 +201,6 @@
         .replace("[C]ODEX", '<span class="btn" data-act="codex">[C]ODEX</span>')
         .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
-        .replace("[P]ASS", '<span class="btn" data-act="backup">[P]ASS</span>')
         .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>');
       return esc(line);
     }).join("\n")
@@ -219,6 +225,8 @@
   function draw() {
     if (!save) return;
     document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extraToShow()));
+    // While the infinite-steps cheat is on, the line under the screen shows the room and the counters.
+    document.getElementById("ver").textContent = (save.freeSteps ? RULES.debugInfo(save) + "   " : "") + SMT.VERSION;
   }
 
   // Every player's run lives in their own browser and saves itself after every action.
@@ -294,7 +302,7 @@
     await syncTime();
     let s = null;
     try { s = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
-    if (s && s.dungeon && s.party) { save = s; tick(); flashStatus(); draw(); encounterBox(); return; }
+    if (s && s.dungeon && s.party) { save = s; tick(); flashStatus(); draw(); encounterBox(); altarBox(); return; }
     save = RULES.reset({});
     save.history = [];
     remember("");
@@ -358,7 +366,7 @@
     } catch (e) { alert("That password didn't work. Nothing was changed."); }
   }
 
-  // N/S/E/W take the day's step, SEARCH is unlimited, turning is free. NEXT (X) is a hidden testing cheat.
+  // N/S/E/W take the day's step, SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
   let invList = [], invSel = 0, invMsg = "", logGlow = false;
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
@@ -449,6 +457,8 @@
       "  [^] / up arrow ..... take the day's one step, the way KURA faces",
       "  [<] [>] / arrows ... turn (free)",
       "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
+      "  [G]IVE ............. facing a terminal in the wall: make an offering (SEARCH it works too)",
+      "  STA[N]DBY .......... stay put today (uses the day's step; tonight's rest runs deeper)",
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
       "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
       "  [^] in a fight ..... run through a door (uses the day's step; it may block you)",
@@ -584,6 +594,81 @@
   const wrapText = (s, n) => { const out = []; let rest = String(s); while (rest.length > n) { let cut = rest.lastIndexOf(" ", n); if (cut <= 0) cut = n; out.push(rest.slice(0, cut)); rest = rest.slice(cut).trimStart(); } out.push(rest); return out; };
   let replayTimer = null, prevDemonHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
   function finishReplay() { if (replayTimer) { clearInterval(replayTimer); replayTimer = null; encounterBox(false); } }
+
+  // THE ALTAR: the terminal in a Matrix Altar room. Its screen types out its words, a glare shimmers across it,
+  // and after an offering it answers with a face. The list is the gift list; the result and the "quiet today"
+  // screen end with [ OK ]. Nothing here says which way the offering pulled KURA.
+  let altarTimer = null;
+  function altarBox() {
+    if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    const A = save && save.altar;
+    if (!A || !A.open || save.encounter) {
+      if (box.dataset.mode === "altar") { box.hidden = true; box.dataset.mode = ""; pre.innerHTML = ""; }
+      return false;
+    }
+    box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
+    placeInView(box, 15);
+    box.dataset.mode = "altar";
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
+    const opt = (label, act) => { const d = document.createElement("span"); d.textContent = label; d.className = "btn"; d.dataset.fact = act; return d; };
+    const PAD = " ".repeat(10), IN = 23;
+    add(PAD + ".-----------------------.", "artframe");
+    const s1 = document.createElement("div"), s2 = document.createElement("div");
+    s1.className = s2.className = "artframe screen";
+    pre.append(s1, s2);
+    add(PAD + "'-----------------------'", "artframe");
+    add(" ".repeat(16) + "[=======]", "artframe");
+    add(" ");
+    // below the terminal
+    if (A.result) {
+      for (const l of A.result.lines) add("  " + l);
+      add(" "); add("  [ OK ]", "btn").dataset.fact = "altar-none";
+    } else if (A.used) {
+      add("  THE TERMINAL IS QUIET."); add("  COME BACK TOMORROW."); add(" ");
+      add("  [ OK ]", "btn").dataset.fact = "altar-none";
+    } else {
+      RULES.altarGifts(save).slice(0, 6).forEach((g, i) => {
+        const line = document.createElement("div"), o = opt(`  [${i + 1}] ${g.label}`, "altar-" + i);
+        if (!g.ok) o.classList.add("off");
+        line.append(o); pre.appendChild(line);
+      });
+      add(" ");
+      const row = document.createElement("div"); row.append(opt("  [B]ACK", "altar-none")); pre.appendChild(row);
+    }
+    // the screen: line 1 types, line 2 shimmers (or types the face once there is an answer)
+    const say = A.result ? A.result.say : A.used ? "> ...ZZZ" : (A.greet || "> INPUT?");
+    const face = A.result ? "  " + A.result.face : "";
+    const WAVE = ["_", ".", "-", "'"];                   // a sine wave in four heights, drifting across the screen
+    let tick = 0;
+    // The wave follows its mood: flat when it dislikes the offering, easy when it's neutral, quick and tight when it loves it.
+    const mood = A.result ? A.result.mood : "ok";
+    const waveOf = n => {
+      if (mood === "bad") return "-".repeat(n);
+      const [period, speed] = mood === "good" ? [6, 0.9] : [11, 0.35];
+      let w = ""; for (let x = 0; x < n; x++) w += WAVE[Math.round((Math.sin((x - tick * speed) * 2 * Math.PI / period) + 1) / 2 * 3)];
+      return w;
+    };
+    const paint = () => {
+      const typed1 = Math.min(say.length, Math.floor(tick / 2));
+      const done1 = typed1 >= say.length;
+      const typed2 = A.result ? Math.max(0, Math.min(face.length, Math.floor((tick - say.length * 2 - 8) / 3))) : 0;
+      const cursor = Math.floor(tick / 8) % 2 === 0 ? "_" : " ";
+      const t1 = " " + say.slice(0, typed1) + (done1 ? "" : "_");
+      let t2;
+      if (A.result) t2 = (waveOf(IN - 5) + " " + face.trim().slice(0, Math.max(0, typed2 - 2))).padEnd(IN);
+      else t2 = waveOf(IN);
+      if (!A.result && done1) s1.textContent = PAD + "|" + (" " + say + cursor).padEnd(IN) + "|";
+      else s1.textContent = PAD + "|" + t1.padEnd(IN) + "|";
+      s2.textContent = PAD + "|" + t2 + "|";
+      tick++;
+    };
+    paint();
+    altarTimer = setInterval(paint, 55);
+    return true;
+  }
+
   function encounterBox(animate) {
     if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
     const e = save && save.encounter, lines = (save && save.round) || [];
@@ -720,18 +805,21 @@
     if (name === "backup") return backup();
     if (!save) return;
     if (name === "reset" && !confirm("Begin a new run? This run will be lost.")) return;
+    if (name === "hold" && !confirm("Go on standby for the day? KURA won't step today, and tonight's rest runs deeper.")) return;
     const log = save.log, steps = save.steps;
     const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
       : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
       : name.startsWith("offer-") ? RULES.offerGive(save, name === "offer-none" ? null : Number(name.slice(6)))
       : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
+      : name === "altar" ? RULES.altarOpen(save)
+      : name.startsWith("altar-") ? RULES.altarGive(save, name === "altar-none" ? null : Number(name.slice(6)))
       : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
     if (name === "reset") save.history = [];
     remember(name === "reset" || save.steps !== steps ? "" : log);
     persist(); draw();
-    if (name !== "reset" && !encounterBox(true)) foundBox(before);
+    if (name !== "reset" && !encounterBox(true) && !altarBox()) foundBox(before);
   }
 
   document.getElementById("screen").addEventListener("click", e => {
@@ -779,6 +867,14 @@
         answerConfirm(key === "enter" || key === "y" || same);
         return;
       }
+      if (fbox.dataset.mode === "altar") {
+        const A = save.altar || {};
+        let k;
+        if (A.result || A.used) k = { enter: "altar-none", " ": "altar-none", escape: "altar-none", b: "altar-none" }[key];
+        else k = /^[1-6]$/.test(key) ? "altar-" + (Number(key) - 1) : { b: "altar-none", escape: "altar-none" }[key];
+        if (k) act(k);
+        return;
+      }
       if (fbox.dataset.mode === "encounter") {
         const st2 = save.encounter && save.encounter.stage;
         let k;
@@ -820,8 +916,9 @@
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n")) { e.preventDefault(); return act(key === "y" ? "qyes" : "qno"); }
-    const k = { "?": "about", c: "codex", x: "next", f: "fight", t: "talk", i: "invoke", l: "log", p: "backup", r: "reset",
-      s: "search", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
+    const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", p: "backup", r: "reset",
+      s: "search", n: "hold", g: "altar", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
+    if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
     if (k) { e.preventDefault(); act(k); }
   });
 

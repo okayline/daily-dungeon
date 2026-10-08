@@ -2,6 +2,25 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.34 - Oct 7 2026, 17:53 HST
+
+![v0.34](screenshots/v0.34.png)
+
+- **Six kinds of rooms.** Rooms 1 and 2 of each new floor get a different one of six kinds (older floors are unchanged). Names never show; each does its one thing when you walk in, with its own line:
+  - Den: starts hot, so demons come easily.
+  - Bay: safe (no demons) and heals the party by a third.
+  - Relay: points toward the stairs.
+  - Vault: coin.
+  - Forge: clears ICHOR taint and ends a TRIP.
+  - Altar: see below.
+  The Den, Bay, Forge and Altar work again when you come back, once a day. The rest are one-time finds. Gear, shield, key and repair parts are still placeholders.
+- **The Altar is a terminal in the wall.** Face it (it draws in the 3D view) and `[S]EARCH` or `[G]IVE` to wake it. Its screen types a greeting (`> INPUT?`, `> ...?`, `> Hello.`) over a drifting sine wave. Offer an item or SILVER (once a day, always lost) and it answers with a face (`:)` `:|` `:(`) and the wave goes excited, easy or flat. The offering quietly shifts KURA's lean (an aligned item pulls toward its own alignment, a rarer one harder; SILVER or a plain item pulls back toward the middle). Nothing says which way.
+- **`STA[N]DBY`, a third choice for the day** beside going forward and back. It spends the day's step, and the next morning's rest is deeper: another fifth of HP, party patience restored, the room cooled again, the loop cleared. A day you just don't step gets nothing extra.
+- **The moon strip**: the eight phases as blocks (lit on the right while waxing) on the line above `ALIGN`, with a `.` over today's.
+- **`[S]EARCH` works on a door** (and the stairs): it still finds nothing, but it counts as an action, so line 1 changes, line 3 holds, and spamming it feeds the loop.
+- `[^]` has no glow. `[P]ASS` moved off the bottom border (the `P` key and the `[?]` help still have it).
+- **Cheats:** `X` toggles infinite steps (and shows the room and counters under the screen), `Shift+X` jumps a day.
+
 ## v0.33 - Oct 7 2026, 16:45 HST
 
 ![v0.33](screenshots/v0.33.png)

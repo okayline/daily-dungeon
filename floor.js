@@ -5,6 +5,7 @@
 // Shared by the web page and node, like screen.js.
 (function (root) {
   const DIRS = { N: [-1, 0], E: [0, 1], S: [1, 0], W: [0, -1] };
+  const KINDS = ["den", "bay", "relay", "vault", "forge", "altar"];
   const OPP = { N: "S", E: "W", S: "N", W: "E" };
   const DAYS = 7;
 
@@ -58,6 +59,13 @@
     // (moves to get there + every search in that room + 1 to descend)
     const worst = stairs + rooms[stairs].hidden.length + 1;
     if (worst > DAYS) throw new Error(`floor ${seed} can't be finished in ${DAYS} days`);
+
+    // Room kinds: rooms 1 and 2 each get a different one of six (drawn last, so the layout and
+    // contents of older seeds stay as they were). The start room is plain. A Recharge Bay is safe:
+    // its demons turn into items.
+    const kinds = shuffle(KINDS.slice());
+    rooms[1].kind = kinds[0]; rooms[2].kind = kinds[1];
+    for (const rm of rooms) if (rm.kind === "bay") rm.hidden = rm.hidden.map(h => h === "demon" ? "item" : h);
 
     return { seed, rooms, start: 0, stairs, lure };
   }

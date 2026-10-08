@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.33";
+  const VERSION = "v0.34";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const pad = (s, n) => (s + " ".repeat(n)).slice(0, Math.max(n, s.length));
@@ -47,6 +47,10 @@
         for (let x = dl; x <= dr; x++) { put(x, dt - 1, "_"); put(x, bm, "_"); }
         for (let y = dt; y <= bm; y++) { put(dl, y, "|"); put(dr, y, "|"); }
         put(cx + 2, Math.floor((dt + bm) / 2), "o");
+      }
+      if (end === "terminal") {            // a small screen set into the wall
+        const T = [".---------.", "| > _     |", "|  :: ::  |", "'---------'", "   [===]"], y0 = Math.max(t + 1, bm - 8);
+        T.forEach((ln, j) => [...ln].forEach((ch, k) => { if (ch !== " ") put(cx - 5 + k, y0 + j, ch); }));
       }
       if (end === "stairs") {
         for (let j = 0; j < 4; j++) {
@@ -240,8 +244,14 @@
     const face = `TURN ${String(Math.max(0, st.turnShown ?? st.steps ?? 0)).padStart(3, "0")}`, dayStr = `DAY ${String(st.day).padStart(3, "0")}`;
     const gap = PW - 1 - align.length - face.length - dayStr.length;
     const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
+    // The moon strip: the eight phases as 3-column blocks (lit on the right while waxing), a . above today's.
+    const PHASE = ["   ", "  ▓", " ▓█", "▓██", "███", "██▓", "█▓ ", "▓  "];
+    // The dot sits over the middle of the lit part of today's cell (a half column right of the printed spot for the two quarters, which the page shifts).
+    const DOT = [1, 2, 1, 1, 1, 1, 0, 0][idx];
+    const phaseV = " ".repeat(3 + 3 * idx + DOT) + ".", phaseRow = "   " + PHASE.join("");
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
       rule, money, mapHead, ...mp.map(m => " ".repeat(mapPad) + m), "", ...(mapRows === 4 ? [""] : []), rule, bottom];
+    stat.splice(stat.length - 3, 3, phaseV, phaseRow, bottom);
     for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");
     // The moon line: a mysterious word on the moon, the demons, or both. No numbers; the moon bar
@@ -262,9 +272,9 @@
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step on the right.
     // The day's step is the [^] button in the 3D view now; the right side waits for answers ([Y]ES [N]O, later).
-    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = " ".repeat(31);
+    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = " ".repeat(21) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " [?] [L]OG [P]ASS [R]ESET ";                 // system buttons tucked into the bottom border
+    const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");
