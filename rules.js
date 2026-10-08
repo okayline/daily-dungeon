@@ -1027,19 +1027,35 @@
       meh: "INSUFFICIENT. MORE.", hate: "INCOMPATIBLE FORMAT.",
       join: ["TASK RECEIVED. LINKED TO USER.", "01001100 01001001 01001110 01001011"],
       no: ["CONNECTION LOST", "01001110 01001111"], scorn: ["INPUT REJECTED", "0000000000000000"],
-      leave: ["PROCESS ENDED", "01000010 01011001 01000101"] },
+      leave: ["PROCESS ENDED", "01000010 01011001 01000101"],
+      hold: ["PROCESSING...", "UNEXPECTED INPUT. PAUSING.", "01001000 01001111 01001100 01000100"],
+      accept: ["INPUT VALID. HOSTILITIES SUSPENDED.", "ACCEPTED. STANDING DOWN.", "01000001 01000011 01001011"],
+      ignore: ["INPUT LOGGED. THREAT UNCHANGED.", "NOTED. NO CHANGE.", "THANK YOU. CONTINUING."],
+      insult: ["INVALID INPUT.", "01000010 01000001 01000100", "REJECTED."] },
     hardware: { open: ["ERROR 404: owner not found", "still here. still running", "are you my replacement?"],
       ask: "got anything? anything at all?",
       love: "oh. oh! it's perfect", like: "ok. that's ok", meh: "...is there more?", hate: "what is this. take it back", join: "NEW OWNER ACCEPTED. ok. I'll wait with you.",
-      no: "...ok. I'll wait here then.", scorn: "ACCESS DENIED. go away", leave: "SHUTTING DOWN. bye" },
+      no: "...ok. I'll wait here then.", scorn: "ACCESS DENIED. go away", leave: "SHUTTING DOWN. bye",
+      hold: ["...wait. what is that?", "oh. hold on. hold on.", "it's been so long since anyone gave me anything"],
+      accept: ["ok. ok. I'm done fighting.", "you can stay. for a bit.", "thank you. I'll sit down now."],
+      ignore: ["thanks. still gonna hit you.", "cute. one more round.", "it's not about that. sorry."],
+      insult: ["no. no no no.", "don't give me THAT.", "why would you."] },
     hybrid: { open: ["ACCESS GRANTED, traveler.", "You smell of salt and static.", "What brings flesh this far down?"],
       ask: "A toll, traveler. Coin, or something with a pulse in it.",
       love: "Now THAT has a pulse.", like: "It'll do.", meh: "Thin. Give me more.", hate: "Dead thing. Useless.", join: "LINK ESTABLISHED. I walk with you now.",
-      no: "Then we are strangers still.", scorn: "Your words are noise.", leave: "It folds back into the wires." },
+      no: "Then we are strangers still.", scorn: "Your words are noise.", leave: "It folds back into the wires.",
+      hold: ["Hm. A gift, mid-blow. Curious.", "Hold, traveler. Let me see it.", "You offer? Now? ...Wait."],
+      accept: ["Enough. The toll is paid.", "A fair trade. We are done here.", "You may pass, flesh."],
+      ignore: ["The toll was for later. Now, blood.", "Kind. Not enough.", "Nice try, traveler."],
+      insult: ["Insolent.", "You think I am for sale?", "Is that all?"] },
     folklore: { open: ["Who comes into my hall?", "A living thing. How rare.", "You have the look of a beggar."],
       ask: "What will you give me, mortal?",
       love: "Ohh. Old, and lovely.", like: "Hm. Acceptable.", meh: "A crumb. Where's the rest?", hate: "Wires and plastic? You insult me.", join: "Then I am yours, little lantern.",
-      no: "Keep it, then. And keep away.", scorn: "Hah. Go back up, child.", leave: "It is gone like smoke." },
+      no: "Keep it, then. And keep away.", scorn: "Hah. Go back up, child.", leave: "It is gone like smoke.",
+      hold: ["...Hm. What have you brought?", "The old ones always did love a gift.", "Wait. Let me look at it."],
+      accept: ["It is enough. Go in peace, child.", "A fair offering. The fight is ended.", "Old manners, still alive. Good."],
+      ignore: ["Come closer, child.", "Pretty. I am still hungry.", "A bribe? Cute. Again."],
+      insult: ["You dare?", "Rubbish. Take it back.", "Is that the best you have?"] },
   };
   const say2 = (e, k) => { const v = VOICE[e.family || "folklore"][k]; return Array.isArray(v) ? pick(v) : v; };
 
@@ -1594,6 +1610,83 @@
   }
   function giveTo(st, i) { return give(copy(st), i); }
 
+  // GIVE in a fight: open the gift list right away (a free action; it costs nothing until KURA picks a gift).
+  // A demon that is already fighting mostly doesn't care (more than half the time it still attacks):
+  //   it stands down  (rare, a little better the more it likes the gift; never 9% or more): it leaves, or sometimes offers to join;
+  //   it hesitates    (a quarter of the time): it takes the gift and holds its blow this round;
+  //   it ignores it   (the rest): it breaks the gift or throws it away, and strikes anyway;
+  //   it is insulted  (a gift it hates, always): the same, and the fight turns ugly (it stops listening).
+  // A gift that doesn't land is lost either way.
+  // Either way KURA's own round is spent, so the party doesn't strike.
+  function offer(st) {
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    const e = st.encounter;
+    if (!e) { st.log = "> Nothing here to give to."; return show(st); }
+    if (e.stage) return show(st);                        // already waiting on an answer
+    if (e.want === undefined) {                          // a demon that was never talked to has no price yet
+      e.want = 2 + floorNum(st);
+      e.silver = Math.round((20 + 10 * floorNum(st) + R(0, 20)) * { same: 0.7, neutral: 1, opposite: 1.5 }[stance(st, e)]);
+      e.got = 0; e.asks = 1; e.mood = e.mood || 0;
+    }
+    e.stage = "offer";
+    st.round = ["KURA reaches into the bag."];
+    st.roundOver = false;
+    return show(st);
+  }
+  // What a demon does with a gift it doesn't want: breaks it or throws it away. The gift is gone either way.
+  function ruinLine(e, g) {
+    if (g.silver) return `${THE(e.name)} scatters the coins into the dark.`;
+    return pick([`${THE(e.name)} snaps it in two.`, `${THE(e.name)} crushes it underfoot.`, `${THE(e.name)} flings it into the dark.`, `${THE(e.name)} tosses it away.`]);
+  }
+  function ruin(st, e, g, lines) {
+    if (g.silver) st.silver -= g.silver; else st.items.splice(st.items.indexOf(g.item), 1);
+    lines.push(ruinLine(e, g));
+  }
+  // KURA picks gift i from gifts(), or backs out (i = null: nothing is spent).
+  function offerGive(st, i) {
+    st = copy(st);
+    const e = st.encounter;
+    if (!e || e.stage !== "offer") return show(st);
+    if (i === null) { e.stage = null; st.round = ["KURA lowers her hand."]; st.roundOver = false; return show(st); }
+    const g = gifts(st)[i];
+    if (!g) return show(st);
+    if (!g.ok) { st.round = [`KURA has only ${st.silver ?? 0} SILVER.`]; return show(st); }
+    act(st);
+    e.round++; e.stage = null;
+    const lines = [], who = `${e.name}: `, v = worth(e, g);
+    st.roundOver = false;
+    st.log = `> Day ${st.day}. KURA offers ${the(e.name)} a gift.`;
+    if (v < 0) {
+      // Hated: it breaks it or throws it away, and the fight gets uglier.
+      lines.push(`KURA offers ${g.label}.`, who + `"${say2(e, "insult")}"`);
+      ruin(st, e, g, lines);
+      e.angered = true; demonTurn(st, lines);
+    } else {
+      tally(st, "gifts");
+      if (g.silver) { st.silver -= g.silver; lines.push(`KURA gives ${g.label}.`); lean(st, "pay", lines); }
+      else {
+        st.items.splice(st.items.indexOf(g.item), 1); lines.push(`KURA gives ${g.item}.`);
+        const ga = itemAlign(g.item); lean(st, ga === "LAW" ? "offerLAW" : ga === "NEUTRAL" ? null : "offer", lines);
+      }
+      const roll = Math.random(), stand = Math.min(0.09, 0.02 + 0.015 * v);
+      if (roll < stand) {
+        lines.push(who + `"${say2(e, "accept")}"`);
+        if (e.align !== "CHAOS" && st.party.length < 4 && Math.random() < 0.2) { e.stage = "join"; lines.push(`${THE(e.name)} lowers its guard and offers to join the party.`); }
+        else { lines.push(`${THE(e.name)} is satisfied. ${say2(e, "leave")}`); leaves(st, e); }
+      } else if (roll < stand + 0.25) {
+        lines.push(who + `"${say2(e, "hold")}"`, `${THE(e.name)} turns the gift over. It holds its blow.`);
+      } else {
+        // It takes the gift only to wreck it: the gift is already spent above, so only the line changes.
+        lines.push(who + `"${say2(e, "ignore")}"`, ruinLine(e, g));
+        demonTurn(st, lines);
+      }
+    }
+    st.round = lines;
+    st.roundOver = !st.encounter || st.dead;
+    return show(st);
+  }
+
   // CODEX: an encyclopedia of every demon met and item found. It lives in the save but RST never
   // clears it, so it fills up over many runs. The how-it-works notes live here, not on the item itself.
   function note(st, kind, name, what) {
@@ -1694,7 +1787,7 @@
     ];
   }
 
-  const api = { summary, next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, codex, reply, feedIchor, drinkIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { summary, next, reset, search, go, turn, available, tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

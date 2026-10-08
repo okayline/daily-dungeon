@@ -4,10 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Daily Dungeon</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <style>
+  /* VT323, self-hosted (fonts/OFL.txt has its license). */
+  @font-face { font-family: "VT323"; src: url("fonts/VT323-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
   :root {
     --bg: #07090a;
     --fg: #e4e4df;
@@ -56,9 +55,9 @@
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
   .btn.armed { background: var(--gold); color: var(--bg); }
-  .btn.flee { color: var(--bright); text-shadow: 0 0 8px var(--bright), 0 0 2px var(--bright); animation: blink 1.2s steps(1) infinite; }
+  .btn.flee { color: var(--bright); text-shadow: 0 0 1.5px var(--bright); animation: blink 1.2s steps(1) infinite; }
   .runlabel.flash { animation: blink 1.2s steps(1) infinite; }
-  .runlabel { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
+  .runlabel { color: var(--bright); text-shadow: 0 0 1px var(--bright); }
   .unsaved { color: var(--gold); }
   .frame { position: relative; }
   .logview { position: absolute; inset: 0; background: rgba(7, 9, 10, 0.96); overflow: auto; cursor: pointer;
@@ -74,6 +73,13 @@
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
+  /* The fight box sits inside the 3D view (rows 6-20, columns 1-47), like the bag, so the party and map stay in sight. */
+  .foundbox.inframe { left: auto; top: auto; transform: none; border: none; outline: 1px solid var(--trail); box-shadow: none;
+    box-sizing: border-box; overflow: hidden; cursor: default; }
+  .foundbox.inframe pre { text-align: left; }
+  .foundbox.inframe .brow { display: flex; justify-content: space-between; }
+  .foundbox .artframe { color: var(--trail); }
+  .foundbox .arrow { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   /* Rarity colors, Diablo-style. */
   .lit { color: var(--moon); text-shadow: 0 0 6px var(--moon); animation: breathe 4s ease-in-out infinite; }
   @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
@@ -361,13 +367,16 @@
     return out;
   }
   // Fit a popup exactly over the 3D view: screen rows 6-22, columns 1-47.
-  function placeInView(box) {
+  function placeInView(box, tall = 17) {
     const scr = document.getElementById("screen"), r = scr.getBoundingClientRect();
     const rows = scr.textContent.split("\n").length, rh = r.height / rows, cw = r.width / 80;
     Object.assign(box.style, { left: scr.offsetLeft + cw + "px", top: scr.offsetTop + 6 * rh + "px",
-      width: 47 * cw + "px", height: 17 * rh + "px", padding: `${rh / 2}px ${cw}px` });
+      width: 47 * cw + "px", height: tall * rh + "px", padding: `${rh / 2}px ${cw}px` });
   }
-  window.addEventListener("resize", () => { const b = document.getElementById("inv"); if (!b.hidden) placeInView(b); });
+  window.addEventListener("resize", () => {
+    const b = document.getElementById("inv"); if (!b.hidden) placeInView(b);
+    const f = document.getElementById("found"); if (!f.hidden && f.classList.contains("inframe")) placeInView(f, 15);
+  });
   function showInv(open) {
     const box = document.getElementById("inv");
     box.hidden = !open;
@@ -430,6 +439,7 @@
       "  [<] [>] / arrows ... turn (free)",
       "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
+      "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
       "  [^] in a fight ..... run through a door (uses the day's step; it may block you)",
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "  1-8 ................ pick a gift when a demon asks for one",
@@ -502,6 +512,7 @@
   function confirmBox(dir, again) {
     reallySure = !!again;
     const box = document.getElementById("found"), pre = box.querySelector("pre");
+    floatBox(box);
     pre.innerHTML = "";
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
     add(again ? "ARE YOU REALLY SURE?" : `GO ${NAMES[dir]}?`, "gold");
@@ -534,6 +545,7 @@
     const pre = box.querySelector("pre");
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
     if (!lines.length) return;
+    floatBox(box);
     pre.innerHTML = "";
     add("KURA FOUND");
     add(" ");
@@ -554,49 +566,115 @@
     endLog();
   }
 
-  // ENCOUNTER box: the demon, its HP, what happened this round, and the choices. It stays open until
-  // the demon is gone (or KURA falls); then [ENTER] closes it.
-  function encounterBox() {
+  // ENCOUNTER box: inside the 3D view. Art slot, the demon and its HP, what happened this round (played back
+  // line by line, with the > following whoever acts), and the choices. It stays open until the demon is gone
+  // (or KURA falls); then [ENTER] closes it.
+  const floatBox = box => { box.className = "foundbox"; box.removeAttribute("style"); };
+  const wrapText = (s, n) => { const out = []; let rest = String(s); while (rest.length > n) { let cut = rest.lastIndexOf(" ", n); if (cut <= 0) cut = n; out.push(rest.slice(0, cut)); rest = rest.slice(cut).trimStart(); } out.push(rest); return out; };
+  let replayTimer = null, prevDemonHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
+  function finishReplay() { if (replayTimer) { clearInterval(replayTimer); replayTimer = null; encounterBox(false); } }
+  function encounterBox(animate) {
+    if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
     const e = save && save.encounter, lines = (save && save.round) || [];
     if (!e && !(save && save.roundOver)) return false;
     const box = document.getElementById("found"), pre = box.querySelector("pre");
-    pre.innerHTML = "";
-    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
-    if (e) {
-      const filled = Math.round(10 * e.hp / e.hpmax);
-      add(`${e.name}   [${"#".repeat(filled)}${"-".repeat(10 - filled)}]`, "demon");
-    } else add(save.dead ? "DEFEAT" : "THE WAY IS CLEAR", save.dead ? "demon" : "gold");
-    add(" ");
-    for (const l of lines) add(l, /falls\.  \+|leaves|slips away|pays|escapes/.test(l) ? "gold" : /KURA falls|FALLS/.test(l) ? "demon" : "");
-    add(" ");
-    if (e) {
-      const opt = (label, act) => { const d = document.createElement("span"); d.textContent = label; d.className = "btn"; d.dataset.fact = act; return d; };
-      const row = document.createElement("div");
-      if (e.stage === "gift") {
-        // The demon asks for anything: one line per choice (SILVER, then items), then NOTHING.
+    const COLS = 45, ROWS = 14;                        // text area of the box: 47 columns less the padding, 15 rows less the padding
+    box.className = "foundbox inframe"; box.removeAttribute("style");
+    box.hidden = false;
+    placeInView(box, 15);
+    box.dataset.mode = e ? "encounter" : "done";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
+    const opt = (label, act) => { const d = document.createElement("span"); d.textContent = label; d.className = "btn"; d.dataset.fact = act; return d; };
+    const lineClass = l => /falls\.  \+|leaves|slips away|pays|escapes/.test(l) ? "gold" : /KURA falls|FALLS/.test(l) ? "demon" : "";
+    const isDemon = l => { if (!e) return false; const u = l.toUpperCase(), n = e.name.toUpperCase(); return u.startsWith(n + ":") || u.startsWith("THE " + n) || u.startsWith(n + " "); };
+    const tail = (arr, n) => arr.slice(Math.max(0, arr.length - n));
+
+    if (!e) {                                          // the fight is over
+      pre.innerHTML = "";
+      add(save.dead ? "DEFEAT" : "THE WAY IS CLEAR", save.dead ? "demon" : "gold");
+      add(" ");
+      for (const l of lines) for (const w of wrapText(l, COLS)) add(w, lineClass(l));
+      add(" ");
+      add("[ OK ]", "btn");
+      return true;
+    }
+    const barFor = hp => { const f = Math.round(10 * hp / e.hpmax); return `[${"#".repeat(f)}${"-".repeat(10 - f)}]`; };
+    const round = (e.round || 0) + 1;
+
+    // One frame of the box. shown = how many result lines are visible; who = whose > it is (null = KURA, waiting).
+    const frame = (shown, who, final) => {
+      pre.innerHTML = "";
+      const gl = lines.slice(0, shown);
+      if (e.stage === "offer") {                       // GIVE: just the list
+        RULES.gifts(save).forEach((g, i) => {
+          const line = document.createElement("div"), o = opt(`[${i + 1}] ${g.label}`, "offer-" + i);
+          if (!g.ok) o.classList.add("off");
+          line.append(o); pre.appendChild(line);
+        });
+        add(" ");
+        const row = document.createElement("div"); row.append(opt("[B]ACK", "offer-none")); pre.appendChild(row);
+        return;
+      }
+      if (e.stage === "gift") {                        // the demon asks for a gift: what it said, then the list
+        for (const l of lines) for (const w of wrapText(l, COLS)) add(w, lineClass(l));
+        add(" ");
         RULES.gifts(save).forEach((g, i) => {
           const line = document.createElement("div"), o = opt(`[${i + 1}] ${g.label}`, "give-" + i);
           if (!g.ok) o.classList.add("off");
           line.append(o); pre.appendChild(line);
         });
-        row.append(opt("[N]OTHING", "give-none"));
-      } else if (e.stage === "ask" || e.stage === "join" || e.stage === "chat") row.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
-      else if (e.stage === "swap") {
-        save.party.forEach((p, i) => { if (i > 0) row.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
-        row.append(opt("[N]O", "swap-none"));
-      } else {
-        // Running is the [^] step (or the up arrow) through a door.
-        row.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[I]NVOKE", "invoke"));
+        const row = document.createElement("div"); row.append(opt("[N]OTHING", "give-none")); pre.appendChild(row);
+        return;
       }
-      pre.appendChild(row);
+      const wrapped = [];
+      for (const l of gl) for (const w of wrapText(l, COLS)) wrapped.push([w, lineClass(l)]);
+      const maxLines = ROWS - 5;                       // blank + 2 name rows + blank + button row
+      const body = tail(wrapped, maxLines);
+      let art = Math.min(5, ROWS - 5 - body.length - 1);
+      if (art < 3) art = 0;
+      if (art) {                                       // the art slot: a faint empty frame for now
+        for (let i = 0; i < art; i++) {
+          const w = COLS; const s = i === 0 ? "." + " ".repeat(w - 2) + "." : i === art - 1 ? "'" + " ".repeat(w - 2) + "'" : " ".repeat(w);
+          add(s, "artframe");
+        }
+        add(" ");
+      }
+      const arrow = (on, text, cls) => { const d = document.createElement("div"); const a = document.createElement("span"); a.textContent = on ? "> " : "  "; if (on) a.className = "arrow"; d.append(a, document.createTextNode(text)); if (cls) d.className = cls; pre.appendChild(d); };
+      arrow(who === null, "KURA");
+      arrow(who === "demon", `${e.name}   ${barFor(shown >= 1 || final || prevDemonHp === null ? e.hp : prevDemonHp)}`, "demon");
+      for (const [w, c] of body) add(w, c);
+      const rest = ROWS - (art ? art + 1 : 0) - 2 - body.length - 1;
+      for (let i = 0; i < rest; i++) add(" ");
+      const row = document.createElement("div"); row.className = "brow";
+      const left = document.createElement("span");
+      if (final) {
+        if (e.stage === "ask" || e.stage === "join" || e.stage === "chat") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
+        else if (e.stage === "swap") {
+          save.party.forEach((p, i) => { if (i > 0) left.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
+          left.append(opt("[N]O", "swap-none"));
+        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[G]IVE", "offer"));
+      }
+      const tag = document.createElement("span"); tag.textContent = `ROUND ${round}`; tag.className = "artframe";
+      row.append(left, tag); pre.appendChild(row);
+    };
 
-    } else add("[ OK ]", "btn");
-    box.hidden = false;
-    box.dataset.mode = e ? "encounter" : "done";
+    if (animate && lines.length > 1 && !e.stage) {     // play the round back: the > moves to whoever acts
+      let n = 0;
+      frame(0, null, false);
+      replayTimer = setInterval(() => {
+        n++;
+        if (n >= lines.length) { clearInterval(replayTimer); replayTimer = null; frame(lines.length, null, true); return; }
+        frame(n, isDemon(lines[n - 1]) ? "demon" : null, false);
+      }, 450);
+      return true;
+    }
+    frame(lines.length, null, true);
     return true;
   }
 
   function act(name) {
+    if (replayTimer) finishReplay();
+    prevDemonHp = save && save.encounter ? save.encounter.hp : null;
     if (name === "forward" && save) name = "go-" + save.facing;
     if ((name === "qyes" || name === "qno") && save) {
       const log = save.log;
@@ -619,8 +697,11 @@
     }
     disarm();
     if (name === "invoke") {
-      if (save && save.encounter) document.getElementById("found").hidden = true;   // the fight box comes back after
-      return showInv(document.getElementById("inv").hidden);
+      const closing = !document.getElementById("inv").hidden;
+      if (save && save.encounter && !closing) document.getElementById("found").hidden = true;   // the fight box comes back after
+      showInv(!closing);
+      if (closing && save && save.encounter) encounterBox();   // closing the bag from the menu brings the fight box back too
+      return;
     }
     if (name === "log") return toggleLog();
     if (name === "about") return showAbout(document.getElementById("about").hidden);
@@ -632,13 +713,14 @@
     const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
       : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
+      : name.startsWith("offer-") ? RULES.offerGive(save, name === "offer-none" ? null : Number(name.slice(6)))
       : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
       : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
     if (name === "reset") save.history = [];
     remember(name === "reset" || save.steps !== steps ? "" : log);
     persist(); draw();
-    if (name !== "reset" && !encounterBox()) foundBox(before);
+    if (name !== "reset" && !encounterBox(true)) foundBox(before);
   }
 
   document.getElementById("screen").addEventListener("click", e => {
@@ -651,6 +733,7 @@
     if (e.target.closest("[data-codex]")) { codexSel = -1; showCodex(true); }
   });
   document.getElementById("found").addEventListener("click", e => {
+    if (replayTimer) return finishReplay();     // a click skips the round's playback
     const c = e.target.closest("[data-cact]");
     if (c) return answerConfirm(c.dataset.cact === "yes");
     if (document.getElementById("found").dataset.mode === "confirm") return answerConfirm(false);
@@ -689,9 +772,10 @@
         const st2 = save.encounter && save.encounter.stage;
         let k;
         if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", escape: "give-none" }[key];
+        else if (st2 === "offer") k = /^[1-8]$/.test(key) ? "offer-" + (Number(key) - 1) : { b: "offer-none", n: "offer-none", escape: "offer-none" }[key];
         else if (st2 === "ask" || st2 === "join" || st2 === "chat") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", i: "invoke", arrowup: "run" }[key];
+        else k = { f: "fight", t: "talk", g: "offer", i: "invoke", arrowup: "run" }[key];
         if (k) act(k);
       } else if (key === "enter" || key === " " || key === "escape") closeFound();
       return;

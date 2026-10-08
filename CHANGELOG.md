@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.32 - Oct 7 2026, 16:19 HST
+
+![v0.32](screenshots/v0.32.png)
+
+- **The block moon was backwards.** Waxing is now lit on the right and waning on the left, as in the northern sky, so today's waning crescent shows its sliver on the left.
+- **The fight box moved into the 3D view**, like the bag, so the party panel and map stay in sight (and `[^] RUN` and the turn buttons stay clickable under it). It has a faint empty slot at the top for art later, a `>` that points at KURA when it's your move and at the demon while its lines play, and `ROUND N` at the right end of the button row. A round plays back one line at a time; click or act to skip it.
+- **`[G]IVE` replaces `[I]NVOKE` in the fight box** (`[I]NVOKE` on the bottom menu still opens the bag, and closing it from the menu now brings the fight box back). GIVE opens the gift list straight away, with `[B]ACK` to close it for free. A demon that is already fighting mostly doesn't care: it stands down rarely (under 9%, and sometimes offers to join), holds its blow about a quarter of the time, and otherwise takes the gift only to break it or throw it away and strike anyway. A gift it hates is lost the same way, and the demon stops listening. Every family has new voice lines for it.
+- The blinking `[^]` and `RUN` glow less.
+- VT323 now ships with the game (`fonts/`, with its license), so the page no longer loads anything from Google.
+
 ## v0.31 - Oct 7 2026, 15:01 HST
 
 ![v0.31](screenshots/v0.31.png)

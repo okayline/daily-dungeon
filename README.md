@@ -28,3 +28,4 @@ Your run saves itself in your browser. `[?]` explains the keys, `[L]OG` keeps th
 - `save.json` is the chat version's run (`/smt-screen`). The page doesn't use it.
 - `CHANGELOG.md` lists every update with its time and a screenshot.
 - `screenshots/` holds a screenshot of each build (the page itself uses the VT323 font).
+- `fonts/` holds the VT323 font the page uses, with its license (SIL Open Font License).

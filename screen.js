@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.31";
+  const VERSION = "v0.32";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const pad = (s, n) => (s + " ".repeat(n)).slice(0, Math.max(n, s.length));
@@ -187,8 +187,8 @@
     const long = ["NEW", "WAX CRESC", "1ST QTR", "WAX GIBB", "FULL", "WANE GIBB", "LAST QTR", "WANE CRESC"];
     const r = s => "|" + ljust(s, W - 2) + "|";
     const rc = s => "|" + center(s, W - 2) + "|";
-    // The block moon at the far left: 4 rows, lit columns filling in as it waxes and emptying as it wanes.
-    const LIT = ["    ", "░   ", "▓▓  ", "███ ", "████", " ███", "  ▓▓", "   ░"][idx];
+    // The block moon at the far left: 4 rows. Lit columns fill in from the right as it waxes and empty toward the left as it wanes (northern sky: waxing is lit on the right, waning on the left).
+    const LIT = ["    ", "   ░", "  ▓▓", " ███", "████", "███ ", "▓▓  ", "░   "][idx];
     const box = [" ╭────╮ ", ` │${LIT}│ `, ` │${LIT}│ `, " ╰────╯ "];
     const BW = W - 2 - box[0].length;      // 70 columns to the right of the moon
     const bar = s => box[0] && center(s, BW);
