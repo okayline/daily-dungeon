@@ -2,6 +2,15 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.48.1 - Oct 8 2026, 00:24 HST
+
+![v0.48.1](screenshots/v0.48.1.png)
+
+A new name, and gentler demons.
+
+- **Name:** the game is now called Daily Digital Demon Dungeon.
+- **Talking:** demons are a little more patient with silence.
+
 ## v0.48 - Oct 8 2026, 00:14 HST
 
 ![v0.48](screenshots/v0.48.png)

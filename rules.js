@@ -2010,9 +2010,12 @@
     const [, likes, good, bad] = DEMON_ASK[e.family || "folklore"][e.q];
     const quiet = yes === "silent";
     if (quiet) {                                      // a third answer: say nothing, and let its nature decide
-      const [say, feel] = SILENCE[personaOf(e)] || SILENCE.PRIM, d = feel();
+      const [say, feel] = SILENCE[personaOf(e)] || SILENCE.PRIM, first = !e.quiet;
+      let d = feel();
+      if (first) d = Math.max(d, 0);                  // the first silence is forgiven, and the talk goes on a little longer
       lines.push("KURA says nothing.", say(e.name));
-      e.mood += d;
+      e.mood += d; e.quiet = (e.quiet || 0) + 1;
+      if (first && e.left <= 1) e.left += 1;
     } else {
       if (tripping(st) && Math.random() < 0.3) { yes = !yes; lines.push("KURA meant to say the other thing."); }
       const wanted = likes === true ? true : likes === "LAW" ? e.align === "LAW" || e.align === "NEUTRAL" && Math.random() < 0.5

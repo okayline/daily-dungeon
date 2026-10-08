@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Daily Dungeon</title>
+<title>Daily Digital Demon Dungeon</title>
 <style>
   /* VT323, self-hosted (fonts/OFL.txt has its license). */
   @font-face { font-family: "VT323"; src: url("fonts/VT323-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
@@ -342,7 +342,7 @@
         "\n\n[R]ESET begins a new run.\n\n" : "";
       // The CODEX opens from here: a button at the top of the log.
       const pre = box.querySelector("pre");
-      logText = "DAILY DUNGEON " + SMT.VERSION + "  -  " + hstDate() + "\n\n" + end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
+      logText = "DAILY DIGITAL DEMON DUNGEON " + SMT.VERSION + "  -  " + hstDate() + "\n\n" + end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
         // Newest first, but each action keeps its follow-up lines underneath it.
         (h.length ? h.reduce((g, l) => (/^ /.test(l) && g.length ? g[g.length - 1].push(l) : g.push([l]), g), [])
           .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.");
@@ -477,7 +477,7 @@
     const two = (a, b, c, d) => "  " + (a + " ").padEnd(16, ".") + " " + String(b).padEnd(10) + " " + (c + " ").padEnd(16, ".") + " " + d;
     const line = "-".repeat(71);
     const text = [
-      "DAILY DUNGEON   {{CODEX}}   {{PASS}}" + ("build " + SMT.VERSION).padStart(71 - 16 - 7 - 13), line,
+      "DAILY DIGITAL DEMON DUNGEON   {{CODEX}}   {{PASS}}" + ("build " + SMT.VERSION).padStart(71 - 30 - 7 - 13), line,
       "A dungeon crawler you play one charge a day, on the real calendar.",
       "Each floor is four wings. Three times, two locked doors offer two",
       "rooms: take one and the other seals. Listen at the doors; dead ends",
