@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.53 - Oct 8 2026, 03:30 HST
+
+![v0.53](screenshots/v0.53.png)
+
+A leaderboard, and tidier menus.
+
+- **Leaderboard:** when a run ends you can post it under a name and see how it ranks. Open the board from the [?] menu, the bottom border or the B key.
+- **Menus:** the bag and the log close with [C]LOSE, and copying the log is now [O].
+- **Screen:** clicking no longer highlights the text.
+- **Floors:** arriving on a new floor no longer repeats the deadline on the bottom line.
+
 ## v0.52 - Oct 8 2026, 02:58 HST
 
 ![v0.52](screenshots/v0.52.png)

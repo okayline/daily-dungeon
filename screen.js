@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.52";
+  const VERSION = "v0.53";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -284,7 +284,7 @@
     const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", cell = `CELL [${(st.today || {}).stepped && !st.freeSteps ? " " : "#"}][${st.spare > 0 ? "+" : " "}]`,   // today's charge, and a stored spare
       daily = cell.padEnd(15) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
+    const sys = boardOn ? " [?] [L]OG [B]OARD [R]ESET " : " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");
@@ -303,7 +303,9 @@
     return S.join("\n");
   }
 
-  const api = { VERSION, moonNote, renderView, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  let boardOn = false;                                  // the leaderboard button shows only once the page has a board to talk to
+  const setBoard = v => { boardOn = !!v; };
+  const api = { setBoard, VERSION, moonNote, renderView, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);

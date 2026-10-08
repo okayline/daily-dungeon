@@ -1,0 +1,14 @@
+name = "daily-dungeon-board"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "daily-dungeon-board"
+database_id = "PASTE-THE-ID-FROM-wrangler-d1-create"
+
+[vars]
+# Only this page may post scores (reads are open to anyone). Put the game's real address here, no trailing slash.
+ALLOW_ORIGIN = "https://okayline.github.io"
+# Optional: comma-separated words a name may not contain (lowercase).
+BLOCKLIST = ""

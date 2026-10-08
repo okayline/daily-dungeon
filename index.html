@@ -18,6 +18,8 @@
     --moon: #9fc4ff;
   }
   html, body { margin: 0; background: var(--bg); color: var(--fg); }
+  body { -webkit-user-select: none; user-select: none; }      /* clicks never highlight the screen text */
+  textarea, input, #log pre { -webkit-user-select: text; user-select: text; }   /* but the password box and the log can still be selected and copied */
   body {
     min-height: 100vh; display: flex; flex-direction: column;
     align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
@@ -77,6 +79,7 @@
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
+  .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
   .passfield { display: block; width: 100%; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; resize: none; margin: 4px 0; }
   /* The fight box sits inside the 3D view (rows 6-20, columns 1-47), like the bag, so the party and map stay in sight. */
   .foundbox.inframe { left: auto; top: auto; transform: none; border: none; outline: 1px solid var(--trail); box-shadow: none;
@@ -111,6 +114,7 @@
     <div id="log" class="logview" role="dialog" aria-modal="true" aria-label="Adventure log" hidden><pre></pre></div>
     <div id="inv" class="viewpop" role="dialog" aria-modal="true" aria-label="Invoke: your bag" hidden><pre></pre></div>
     <div id="codex" class="logview" role="dialog" aria-modal="true" aria-label="Codex" hidden><pre></pre></div>
+    <div id="board" class="logview" role="dialog" aria-modal="true" aria-label="Leaderboard" hidden><pre></pre></div>
     <div id="about" class="logview" role="dialog" aria-modal="true" aria-label="About" hidden><pre></pre></div>
     <div id="ver" class="ver"></div>
     <div id="cheat" class="ver cheat"></div>
@@ -203,6 +207,7 @@
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
         .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
+        .replace("[B]OARD", '<span class="btn" data-act="board">[B]OARD</span>')
         .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>');
       return esc(line);
     }).join("\n")
@@ -307,7 +312,10 @@
       if (!isNaN(server)) SMT.setSkew(server + age * 1000 + 500 - (t0 + Date.now()) / 2);   // the header is whole seconds
     } catch (e) {}
   }
+  // The leaderboard's address (the Cloudflare Worker, see leaderboard/README.md). Empty: every board button stays hidden.
+  const LEADERBOARD_URL = "https://daily-dungeon-board.ddddungeon.workers.dev";
   async function start() {
+    SMT.setBoard(!!LEADERBOARD_URL);
     document.getElementById("ver").textContent = SMT.VERSION;
     await syncTime();
     let s = null, raw = null;
@@ -335,9 +343,65 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
   function copyLog(btn) {
-    const done = ok => { if (btn) { btn.textContent = ok ? "COPIED" : "COPY FAILED"; setTimeout(() => btn.textContent = "[C]OPY", 1500); } };
+    const done = ok => { if (btn) { btn.textContent = ok ? "COPIED" : "COPY FAILED"; setTimeout(() => btn.textContent = "C[O]PY", 1500); } };
     if (navigator.clipboard) navigator.clipboard.writeText(logText).then(() => done(true), () => done(false));
     else done(false);
+  }
+  // LEADERBOARD: post this run's score once, and read the top of the board. Ranked by floor, then days; TURNS are shown only.
+  async function submitScore() {
+    const inp = document.getElementById("scorename"), msg = document.getElementById("scoremsg");
+    if (!LEADERBOARD_URL || !save || !save.dead || save.submitted || !inp) return;
+    const name = inp.value.trim().replace(/\s+/g, " ");
+    if (!/^[A-Za-z0-9 _.\-]{3,10}$/.test(name)) { msg.textContent = "A NAME TAKES 3 TO 10 LETTERS, NUMBERS, SPACE _ . -"; return; }
+    msg.textContent = "SENDING...";
+    try {
+      const r = await fetch(LEADERBOARD_URL + "/score", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...RULES.score(save), name, version: SMT.VERSION }) });
+      const d = await r.json();
+      if (!r.ok || !d.ok) { msg.textContent = d.error === "slow down" ? "TOO MANY POSTS. TRY LATER." : d.error === "name" ? "THAT NAME IS NOT ALLOWED." : "THE BOARD TURNED IT DOWN."; return; }
+      save.submitted = { name, rank: d.rank }; persist();
+      toggleLog(true);
+    } catch (e) { msg.textContent = "COULD NOT REACH THE BOARD."; }
+  }
+  // In X mode (the infinite-steps cheat) the board becomes an admin list: up/down pick a row, D deletes it (needs the Worker's ADMIN_KEY).
+  let boardData = null, boardSel = 0;
+  function renderBoard() {
+    const pre = document.querySelector("#board pre"), d = boardData, admin = !!(save && save.freeSteps);
+    const row = (rank, x, sel) => `${sel ? ">" : x.you ? (admin ? "*" : ">") : " "} ${String(rank).padStart(3)}  ${x.name.toUpperCase().padEnd(10)}  ${("B" + x.floor + "F").padEnd(5)} ${String(x.days).padStart(4)}  ${String(x.demons).padStart(6)}  ${String(x.turns).padStart(6)}`;
+    const lines = ["LEADERBOARD".padEnd(41) + "[C]LOSE", "", "  RANK  NAME        FLOOR  DAYS  DEMONS   TURNS", ""];
+    d.rows.forEach((x, i) => lines.push(row(i + 1, x, admin && i === boardSel)));
+    if (!d.rows.length) lines.push("  Nobody yet.");
+    if (d.you) lines.push("  ...", row(d.you.rank, { ...d.you, you: true }));
+    lines.push("", admin ? "  X MODE: up/down choose, [D]ELETE removes it." : "  Ranked by floor, then days. Turns are for show.");
+    pre.textContent = lines.join("\n");
+  }
+  async function loadBoard() {
+    const pre = document.querySelector("#board pre");
+    try {
+      const r = await fetch(`${LEADERBOARD_URL}/top?n=20&run=${encodeURIComponent((save && save.runId) || "")}`);
+      boardData = await r.json(); boardSel = Math.max(0, Math.min(boardSel, boardData.rows.length - 1)); renderBoard();
+    } catch (e) { console.error("board", e.message); boardData = null; pre.textContent = "LEADERBOARD".padEnd(41) + "[C]LOSE\n\nCOULD NOT REACH THE BOARD."; }
+  }
+  async function deleteEntry() {
+    const x = boardData && boardData.rows[boardSel];
+    if (!x || !save || !save.freeSteps) return;
+    let key = ""; try { key = localStorage.getItem("dd-admin") || ""; } catch (e) {}
+    if (!key) { key = prompt("Admin key:") || ""; if (!key) return; }
+    if (!confirm(`Delete ${x.name} (B${x.floor}F, ${x.days} days) from the board?`)) return;
+    try {
+      const r = await fetch(`${LEADERBOARD_URL}/score?id=${x.id}`, { method: "DELETE", headers: { "x-admin-key": key } });
+      if (r.status === 403) { try { localStorage.removeItem("dd-admin"); } catch (e) {} alert("That key was not accepted."); return; }
+      try { localStorage.setItem("dd-admin", key); } catch (e) {}
+    } catch (e) { alert("Could not reach the board."); return; }
+    loadBoard();
+  }
+  async function toggleBoard(force) {
+    const box = document.getElementById("board"), open = force === undefined ? box.hidden : force;
+    box.hidden = !open;
+    if (!open) return;
+    boardSel = 0;
+    box.querySelector("pre").textContent = "LEADERBOARD".padEnd(41) + "[C]LOSE\n\nLOADING...";
+    loadBoard();
   }
   function toggleLog(force) {
     const box = document.getElementById("log");
@@ -363,8 +427,22 @@
       const button = (label, key) => { const b = document.createElement("span"); b.className = "btn"; b.dataset[key] = "1"; b.textContent = label; return b; };
       const top = document.createElement("div");
       top.style.textAlign = "right";
-      top.append(button("[D]OWNLOAD", "download"), "   ", button("[C]OPY", "copy"), "   [L] or Esc closes");
-      pre.append(top, shown.slice(hEnd));
+      top.append(button("[D]OWNLOAD", "download"), "   ", button("C[O]PY", "copy"), "   ", button("[C]LOSE", "close"));
+      pre.append(top);
+      // Once a run is over (and a board is set up) the player can post it under a name, once.
+      if (LEADERBOARD_URL && save && save.dead) {
+        const row = document.createElement("div");
+        row.className = "submitrow";
+        if (save.submitted) row.append(`POSTED AS ${save.submitted.name}.  RANK ${save.submitted.rank}.  `, button("[B]OARD", "board"));
+        else {
+          const inp = document.createElement("input");
+          inp.className = "nameinput"; inp.id = "scorename"; inp.maxLength = 10; inp.spellcheck = false; inp.autocomplete = "off";
+          row.append("POST YOUR SCORE  NAME ", inp, "  ", button("[ENTER] SEND", "submit"), " ", button("[B]OARD", "board"));
+        }
+        const msg = document.createElement("div"); msg.id = "scoremsg"; msg.textContent = " ";
+        pre.append(row, msg);
+      }
+      pre.append(shown.slice(hEnd));
     }
   }
 
@@ -466,7 +544,7 @@
       return;
     }
     if (ichorPick >= 0) ichorPick = -1;
-    add("INVOKE".padEnd(35) + "[I] closes", "");
+    add("INVOKE", "");
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
@@ -484,7 +562,7 @@
     add(" ");
     // What happened on the last try to use something (cleared when another item is chosen).
     const help = add("[1-9] choose  "), btn = (t, k) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = "btn"; sp.dataset[k] = "1"; return sp; };
-    help.append(btn("[ENTER] use", "use"), "  ");
+    help.append(btn("[ENTER] use", "use"), "  ", btn("[C]LOSE", "close"));
   }
   // ABOUT: the build, what the game is, a few numbers from this run and the codex.
   // (The full stats only show at the end of a run.)
@@ -530,18 +608,20 @@
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
       "  [C]ODEX ............ every demon and item found, over all runs (press C on the main screen)",
       "  [L]OG .............. the adventure log",
+      ...(LEADERBOARD_URL ? ["  {{BOARD}} ........... the leaderboard (post your score when a run ends)"] : []),
       "  [P]ASSWORD ......... this run's password: copy it to keep or move the run,",
       "                       or paste one in to continue that run",
       "  [R]ESET ............ start a new run       [?] this page",
       "",
       "Made by okayline.   [?] or Esc closes",
     ].join("\n");
-    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{PASS}}", '<span class="btn" data-pass>[P]ASSWORD</span>');
+    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{PASS}}", '<span class="btn" data-pass>[P]ASSWORD</span>').replace("{{BOARD}}", '<span class="btn" data-board>[B]OARD</span>');
   }
   document.getElementById("about").addEventListener("click", e => {
     showAbout(false);
     if (e.target.closest("[data-codex]")) { codexSel = -1; showCodex(true); }   // the link in the help page
     if (e.target.closest("[data-pass]")) backup();                              // PASS lives here now
+    if (e.target.closest("[data-board]")) toggleBoard(true);
   });
 
   // CODEX: every demon met and item found, over all runs. Unknown ones show as ???.
@@ -1015,6 +1095,7 @@
       return;
     }
     if (name === "log") return toggleLog();
+    if (name === "board") return LEADERBOARD_URL ? toggleBoard() : undefined;
     if (name === "about") return showAbout(document.getElementById("about").hidden);
     if (name === "codex") { codexSel = -1; return showCodex(document.getElementById("codex").hidden); }
     if (name === "backup") return backup();
@@ -1074,11 +1155,15 @@
     act(b.dataset.act);
   });
   document.getElementById("log").addEventListener("click", e => {
+    if (e.target.closest("[data-submit]")) return submitScore();
+    if (e.target.closest("[data-board]")) { toggleLog(false); return toggleBoard(true); }
+    if (e.target.closest(".submitrow")) return;                      // typing a name must not close the log
     if (e.target.closest("[data-download]")) return downloadLog();
     if (e.target.closest("[data-copy]")) return copyLog(e.target.closest("[data-copy]"));
     toggleLog(false);
     if (e.target.closest("[data-codex]")) { codexSel = -1; showCodex(true); }
   });
+  document.getElementById("board").addEventListener("click", () => { if (!(save && save.freeSteps)) toggleBoard(false); });
   document.getElementById("found").addEventListener("click", e => {
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
     if (e.target.closest("[data-intro]")) return introOK();
@@ -1099,10 +1184,11 @@
   // Clicking an item chooses it; clicking the chosen one again uses it. Clicking elsewhere closes.
   document.getElementById("inv").addEventListener("click", e => {
     if (e.target.closest("[data-use]")) return useInv(invSel);
+    if (e.target.closest("[data-close]")) { showInv(false); if (save && save.encounter) encounterBox(); return; }
     if (e.target.closest("[data-codex]")) { showInv(false); codexSel = -1; return showCodex(true); }
     const line = e.target.closest("[data-i]");
     if (ichorPick >= 0) { if (!line) { ichorPick = -1; return showInv(true); } const n = Number(line.dataset.i); if (n === ichorPick) return useInv(invSel, n || "0"); ichorPick = n; return showInv(true); }
-    if (!line) { showInv(false); if (save && save.encounter) encounterBox(); return; }
+    if (!line) return;                                    // no click-to-close here: only [C]LOSE, I or Esc
     const i = Number(line.dataset.i);
     if (i === invSel) useInv(i); else { invSel = i; showInv(true); }
   });
@@ -1115,6 +1201,7 @@
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
+    if (e.target && e.target.tagName === "INPUT") { if (key === "enter") { e.preventDefault(); submitScore(); } else if (key === "escape") e.target.blur(); return; }   // typing a name
     const fbox = document.getElementById("found");
     if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (key === "enter") introOK(); return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
@@ -1152,6 +1239,7 @@
       e.preventDefault();
       if (key === "?" || key === "escape") showAbout(false);
       else if (key === "c") { showAbout(false); codexSel = -1; showCodex(true); }
+      else if (key === "b" && LEADERBOARD_URL) { showAbout(false); toggleBoard(true); }
       return;
     }
     if (!document.getElementById("codex").hidden) {
@@ -1172,21 +1260,28 @@
         else if (key === "enter") return useInv(invSel, ichorPick || "0");
         return showInv(true);
       }
-      if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
+      if (key === "i" || key === "c" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
       else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; showInv(true); }
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
       return;
     }
+    if (!document.getElementById("board").hidden) {
+      e.preventDefault();
+      if (key === "c" || key === "b" || key === "escape") toggleBoard(false);
+      else if (save && save.freeSteps && boardData && (key === "arrowdown" || key === "arrowup")) { boardSel = (boardSel + (key === "arrowdown" ? 1 : boardData.rows.length - 1)) % Math.max(1, boardData.rows.length); renderBoard(); }
+      else if (key === "d" && save && save.freeSteps) deleteEntry();
+      return;
+    }
     if (!document.getElementById("log").hidden) {
-      if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
-      else if (key === "c") { e.preventDefault(); copyLog(document.querySelector("#log [data-copy]")); }
+      if (key === "l" || key === "c" || key === "escape") { e.preventDefault(); toggleLog(false); }
+      else if (key === "o") { e.preventDefault(); copyLog(document.querySelector("#log [data-copy]")); }
       else if (key === "d") { e.preventDefault(); downloadLog(); }
       return;
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
-    const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", p: "backup", r: "reset",
+    const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
       s: "search", n: "hold", g: "altar", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
     if (k) { e.preventDefault(); act(k); }

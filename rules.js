@@ -940,7 +940,7 @@
       const deadline = sundayOf(clock(st)) + 7;
       arrive(st, floorNum(st) + 1, deadline);
       st.log = `> KURA goes ${NAME[dir]} and descends to ${st.floor}.`;
-      st.extra = `> The way down from here closes ${fmt(deadline)}.`;
+      st.extra = atmosphere(st);   // line 3 is flavor only: the deadline already shows on the status line
       return show(st);
     }
     const i = FLOOR.grow(d.floor, d.at, dir);               // builds the room behind a locked door the first time
@@ -1266,6 +1266,7 @@
     st.timeFixed = true;
     st.tz = tz;
     st.omenSalt = 1 + Math.floor(Math.random() * 100000);   // a new run rerolls the omens
+    st.runId = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(""); delete st.submitted;   // the leaderboard takes one entry per run
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },
@@ -1286,7 +1287,7 @@
     const deadline = firstDeadline(t);
     arrive(st, 1, deadline);
     st.log = `> KURA descends into B1F.${lucky ? " Her bag feels heavier than it should." : ""}`;
-    st.extra = `> The way down from here closes ${fmt(deadline)}.`;
+    st.extra = atmosphere(st);   // line 3 is flavor only: the deadline already shows on the status line
     st.unsaved = true;
     return show(st);
   }
@@ -2566,7 +2567,9 @@
     ];
   }
 
-  const api = { summary, next, discharge, chargeLeft: st => { const t = st.today || {}; return (!t.stepped || st.freeSteps ? 1 : 0) + ((st.spare || 0) > 0 ? 1 : 0); }, freesteps, debugInfo, reset, hold, altarOpen, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  // What the leaderboard gets: deepest floor, days survived, demons beaten, and the real turn count (never the on-screen one).
+  const score = st => ({ run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: (st.stats || {}).beaten || 0, turns: st.steps || 0 });
+  const api = { score, summary, next, discharge, chargeLeft: st => { const t = st.today || {}; return (!t.stepped || st.freeSteps ? 1 : 0) + ((st.spare || 0) > 0 ? 1 : 0); }, freesteps, debugInfo, reset, hold, altarOpen, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);
