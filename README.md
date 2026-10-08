@@ -2,29 +2,29 @@
 
 **Play it here: https://okayline.github.io/daily-dungeon/**
 
-<img width="60%" alt="Daily Dungeon, build v0.29" src="screenshots/v0.29.png" />
+<img width="60%" alt="Daily Dungeon, build v0.31" src="screenshots/v0.31.png" />
 
 An 80-column ASCII roguelike dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played one step a day on the real calendar. The real moon phase impacts gameplay in different ways.
 
 ## How it plays
 
-- **One step a day.** `[^]` in the 3D view walks KURA the way she faces, through a door or down the stairs once found. Turn first with `[<]` and `[>]` (free). The up arrow works too. The step comes back at midnight, your local time.
-- **Search as much as you like.** `[S]EARCH` digs at the wall KURA faces; each wall hides its own things, and finds are a matter of luck and patience. Every search heats the room up, and a hot room draws wandering demons, more often under a bright moon.
-- **Demons stay until they're dealt with.** `[F]IGHT` them, `[T]ALK` to them, or `[R]UN` through a door (that uses the day's step, and they may block it). A demon that listens sizes KURA up with a question or two (`[Y]ES` / `[N]O`), then asks for a gift: SILVER, any item, or nothing. Each kind wants something different, a good mood and a good gift can win it over to the party, and CHAOS demons are tricksters. Data demons sometimes speak binary, which only a data demon in your party can read.
-- **Alignment.** Every demon is LAW, NEUTRAL or CHAOS, and so is KURA. Her choices pull her one way or the other (an arrow on `ALIGN` shows which), and demons treat her by it.
-- **Talk to your party.** With no demon around, `[T]ALK` gets a reply from the party, and their mood tells you how hot the room is getting. Sometimes they ask you something back (`[Y]ES` / `[N]O`). Don't pester them, fiddle with junk, or do the same thing over and over: their patience runs out, and then they lash out or leave.
-- **Items.** `[I]NVOKE` opens the bag. Rare finds have alignments, junk can break (and sometimes something was inside), and the `CODEX` keeps track of every demon and item you've ever found.
-- **Omens and reports.** Every day has an omen, written across the top of the 3D view; some change the day's luck. The first log line is a running status report: days left on the floor, rooms surveyed, the moon, and the air and smell of the room.
-- **Each floor is a real week.** Its way down closes at the end of Sunday. Find the stairs early and the next floor gives you bonus days; miss the deadline, or let KURA fall to a demon, and the run is over.
-- **Each run is a real month.** 4 weeks, 4 levels to explore.
-- **Your run lives in your browser** and saves itself after every action. `[?]` is About (with a guide to every key), `[L]OG` shows the adventure log, `[P]ASS` gives your run's password (copy it to keep or move the run, or paste one in to continue it), and `[R]ESET` starts over. The game goes by the server's real time, not your device clock.
+- **One step a day.** Press `[^]`. Then wait for tomorrow.
+- **Search all you like.** The walls hide things. Something else may notice.
+- **Demons don't leave.** Fight them, talk to them, or run. Some want gifts. Some want to join you. Some are lying.
+- **Your party has opinions.** Talk to them. Don't push your luck.
+- **Every choice leans you.** LAW, NEUTRAL or CHAOS. The demons can tell.
+- **The moon is real.** So are the omens.
+- **Each floor is a week.** The way down closes Sunday night. Miss it and the run is over.
+- **Don't drink the ichor.** Or do.
+
+Your run saves itself in your browser. `[?]` explains the keys, `[L]OG` keeps the story, `[P]ASS` moves your run to another device.
 
 ## Files
 
 - `index.html` is the page: buttons, keys, popups and the in-browser save.
 - `screen.js` draws the 80-column screen and keeps the time. Every line is checked to be exactly 80 characters.
 - `floor.js` rolls each floor: 3 rooms in a 3x3 grid, joined by doors, with the stairs hidden behind a wall.
-- `rules.js` holds the rules: steps, searching, heat, demons, talking and gifts, alignment, items, omens, real days and the weekly deadline.
+- `rules.js` holds the rules.
 - `save.json` is the chat version's run (`/smt-screen`). The page doesn't use it.
 - `CHANGELOG.md` lists every update with its time and a screenshot.
 - `screenshots/` holds a screenshot of each build (the page itself uses the VT323 font).

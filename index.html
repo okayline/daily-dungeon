@@ -57,6 +57,7 @@
   .btn.off { color: var(--dim); }
   .btn.armed { background: var(--gold); color: var(--bg); }
   .btn.flee { color: var(--bright); text-shadow: 0 0 8px var(--bright), 0 0 2px var(--bright); animation: blink 1.2s steps(1) infinite; }
+  .runlabel.flash { animation: blink 1.2s steps(1) infinite; }
   .runlabel { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .unsaved { color: var(--gold); }
   .frame { position: relative; }
@@ -84,8 +85,9 @@
   .ver { text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
   /* The day's one step: drawn bigger than the other buttons (scaled in place, so the grid doesn't move). */
   .step { color: var(--bright); display: inline-block; transform: scale(1.6); transform-origin: center 60%;
-    text-shadow: 0 0 6px var(--bright); font-weight: bold; }
-  .step.off { text-shadow: none; }
+    text-shadow: 0 0 2px var(--bright); font-weight: bold; }
+  /* Spent (or a wall ahead): a dark blue, no glow. */
+  .btn.step.off { color: #111829; text-shadow: none; }   /* the dark blue, 60% toward black */
   .ask { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .t-ICHOR { color: var(--demon); }
@@ -111,6 +113,9 @@
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   let save = null;
 
+  // In a fight with KURA facing a wall: the turn buttons flash, to find a way out (if there is one today).
+  const fleeTurn = () => { if (!save || !save.encounter) return false; const can = RULES.available(save);
+    return !can[save.facing] && ["N", "E", "S", "W"].some(d => can[d]); };
   // Color only the minimap rows (right panel) and the moon marker.
   function colorize(text) {
     const lines = text.split("\n");
@@ -133,10 +138,13 @@
       // Turn controls under the 3D view (only the left 48 columns, so the map is never touched).
       if (i === 21 || i === 22) {
         const left = esc(line.slice(0, 48))
-          .replace("[&lt;]", '<span class="btn" data-act="left">[&lt;]</span>')
-          .replace("[&gt;]", '<span class="btn" data-act="right">[&gt;]</span>')
+          .replace("[&lt;]", `<span class="btn${fleeTurn() ? " flee" : ""}" data-act="left">[&lt;]</span>`)
+          .replace("[&gt;]", `<span class="btn${fleeTurn() ? " flee" : ""}" data-act="right">[&gt;]</span>`)
           // [^] takes the day's step forward; dim when that way is a wall or the step is spent.
-          .replace("[^]", `<span class="btn step${save && RULES.available(save)[save.facing] ? "" : " off"}" data-act="forward">[^]</span>`)
+          // In a fight, the ways out flash: [^] with RUN beside it if KURA faces an open way, otherwise the
+          // turn buttons, to find one.
+          .replace("[^]", `<span class="btn step${save && RULES.available(save)[save.facing] ? (save.encounter ? " flee" : "") : " off"}" data-act="forward">[^]</span>`)
+          .replace(/ RUN/, m => save && save.encounter ? ` <span class="runlabel${RULES.available(save)[save.facing] ? " flash" : ""}">RUN</span>` : m)
           .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         return left + esc(line.slice(48));
       }
@@ -277,6 +285,20 @@
   }
 
   // LOG: the run's adventure log, newest first. Click, L or Escape closes it.
+  // The log as plain text, for the download and copy buttons.
+  let logText = "";
+  function downloadLog() {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([logText], { type: "text/plain" }));
+    a.download = `daily-dungeon-log-${hstDate()}.txt`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  function copyLog(btn) {
+    const done = ok => { if (btn) { btn.textContent = ok ? "[COPIED]" : "[COPY FAILED]"; setTimeout(() => btn.textContent = "[COPY]", 1500); } };
+    if (navigator.clipboard) navigator.clipboard.writeText(logText).then(() => done(true), () => done(false));
+    else done(false);
+  }
   function toggleLog(force) {
     const box = document.getElementById("log");
     const open = force === undefined ? box.hidden : force;
@@ -290,12 +312,16 @@
         "\n\n[R]ESET begins a new run.\n\n" : "";
       // The CODEX opens from here: a button at the top of the log.
       const pre = box.querySelector("pre");
-      pre.textContent = end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
+      logText = "DAILY DUNGEON " + SMT.VERSION + "  -  " + hstDate() + "\n\n" + end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
         // Newest first, but each action keeps its follow-up lines underneath it.
         (h.length ? h.reduce((g, l) => (/^ /.test(l) && g.length ? g[g.length - 1].push(l) : g.push([l]), g), [])
           .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.");
-      const cx = document.createElement("span"); cx.className = "btn"; cx.dataset.codex = "1"; cx.textContent = "[C]ODEX";
-      const top = document.createElement("div"); top.append(cx, "   [L] or Esc closes"); pre.prepend(top, "\n");
+      pre.textContent = logText.slice(logText.indexOf("\n\n") + 2);
+      // Buttons at the top: the CODEX, and ways to keep the log (a text file, or the clipboard).
+      const button = (label, key) => { const b = document.createElement("span"); b.className = "btn"; b.dataset[key] = "1"; b.textContent = label; return b; };
+      const top = document.createElement("div");
+      top.append(button("[C]ODEX", "codex"), "   ", button("[D]OWNLOAD", "download"), "   ", button("[COPY]", "copy"), "   [L] or Esc closes");
+      pre.prepend(top, "\n");
     }
   }
 
@@ -404,7 +430,7 @@
       "  [<] [>] / arrows ... turn (free)",
       "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
-      "  [R]UN .............. in a fight: run through a door (uses the day's step)",
+      "  [^] in a fight ..... run through a door (uses the day's step; it may block you)",
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "  1-8 ................ pick a gift when a demon asks for one",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
@@ -459,6 +485,7 @@
     save = it.ichor ? (drink ? RULES.drinkIchor(save) : RULES.feedIchor(save)) : RULES.useItem(save, it.name);
     logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
+    if (save.encounter) { showInv(false); encounterBox(); return; }   // mid-fight: back to the fight box
     // Something fell out of broken junk: close the bag and show it like any find.
     if (/Something was inside/.test(save.log)) { showInv(false); foundBox({ items: save.items.slice(0, -1), silver: save.silver }); return; }
     showInv(true);
@@ -558,11 +585,8 @@
         save.party.forEach((p, i) => { if (i > 0) row.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
         row.append(opt("[N]O", "swap-none"));
       } else {
-        // RUN takes today's step through a door (the one KURA faces if she can, else any open one).
-        const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]);
-        const run = opt("[R]UN", "run");
-        if (!out.length) run.classList.add("off");
-        row.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", run);
+        // Running is the [^] step (or the up arrow) through a door.
+        row.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[I]NVOKE", "invoke"));
       }
       pre.appendChild(row);
 
@@ -594,7 +618,10 @@
       }
     }
     disarm();
-    if (name === "invoke") return showInv(document.getElementById("inv").hidden);
+    if (name === "invoke") {
+      if (save && save.encounter) document.getElementById("found").hidden = true;   // the fight box comes back after
+      return showInv(document.getElementById("inv").hidden);
+    }
     if (name === "log") return toggleLog();
     if (name === "about") return showAbout(document.getElementById("about").hidden);
     if (name === "codex") { codexSel = -1; return showCodex(document.getElementById("codex").hidden); }
@@ -618,6 +645,8 @@
     const b = e.target.closest(".btn"); if (b) act(b.dataset.act);
   });
   document.getElementById("log").addEventListener("click", e => {
+    if (e.target.closest("[data-download]")) return downloadLog();
+    if (e.target.closest("[data-copy]")) return copyLog(e.target.closest("[data-copy]"));
     toggleLog(false);
     if (e.target.closest("[data-codex]")) { codexSel = -1; showCodex(true); }
   });
@@ -635,7 +664,7 @@
     if (e.target.closest("[data-drink]")) return useInv(invSel, true);
     if (e.target.closest("[data-codex]")) { showInv(false); codexSel = -1; return showCodex(true); }
     const line = e.target.closest("[data-i]");
-    if (!line) return showInv(false);
+    if (!line) { showInv(false); if (save && save.encounter) encounterBox(); return; }
     const i = Number(line.dataset.i);
     if (i === invSel) useInv(i); else { invSel = i; invMsg = ""; showInv(true); }
   });
@@ -662,7 +691,7 @@
         if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", escape: "give-none" }[key];
         else if (st2 === "ask" || st2 === "join" || st2 === "chat") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", r: "run", arrowup: "run" }[key];
+        else k = { f: "fight", t: "talk", i: "invoke", arrowup: "run" }[key];
         if (k) act(k);
       } else if (key === "enter" || key === " " || key === "escape") closeFound();
       return;
@@ -681,7 +710,7 @@
       return;
     }
     if (!document.getElementById("inv").hidden) {
-      if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); }
+      if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
       else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; invMsg = ""; showInv(true); }
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; invMsg = ""; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
@@ -691,6 +720,7 @@
     if (!document.getElementById("log").hidden) {
       if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
       else if (key === "c") { e.preventDefault(); toggleLog(false); codexSel = -1; showCodex(true); }
+      else if (key === "d") { e.preventDefault(); downloadLog(); }
       return;
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).

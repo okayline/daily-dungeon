@@ -315,7 +315,7 @@
     if (st.extra) st.extra = translate(st, st.extra);
     st.omenText = omen(clock(st)).text;                 // the omen, framed under the 3D view
     status(st);                                         // line 1
-    if (st.tell) { st.extra = st.tell; delete st.tell; } // a heat tell takes line 3 right away
+    if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; } // a heat tell takes line 3 right away (not over a question)
     st.map = FLOOR.minimap(d.floor, { ...d, facing: st.facing });
     const door = dir => dir in room.doors;
     if (st.dead) {
@@ -777,6 +777,8 @@
     : line.replace("> " + the.replace(/^t/, "T"), "> It").replace(the, "it").slice(0, 77);
   // Per try. Things are hard to break by hand: about 12 tries on average for COMMON, 17 UNCOMMON, 33 RARE, 100 MYTHIC.
   const BREAK = { COMMON: 0.08, UNCOMMON: 0.06, RARE: 0.03, MYTHIC: 0.01, MOON: 0 };
+  // Nothing breaks early: no item can break before this many tries (then the per-try odds above apply).
+  const BREAK_MIN = { COMMON: 10, UNCOMMON: 12, RARE: 20, MYTHIC: 40, MOON: Infinity };
   // When KURA breaks something a party member loves (folklore: old spirit things; data and
   // hardware: tech; hybrids: things that are both), they take it hard.
   const GRIEF = {
@@ -808,7 +810,7 @@
       const w = st.wear[name] = (st.wear[name] || 0) + 1;
       // Party members who love this kind of thing care what happens to it (see GRIEF).
       const fans = (st.party || []).slice(1).filter(p => p.hp > 0 && (TASTE[p.family || "folklore"] || {})[nat] >= 1.5);
-      if (odds && Math.random() < odds) {
+      if (odds && w >= BREAK_MIN[tier] && Math.random() < odds) {
         // Once per kind of item, someone who loves it may grab it before it breaks.
         st.snatched = st.snatched || {};
         if (fans.length && !st.snatched[name] && Math.random() < 0.3) {
@@ -1275,14 +1277,44 @@
   // after a few repeats the party starts to say something, more often the longer it goes on, and
   // each remark costs that member a point of patience (so it can end in a snap, like any pestering).
   const LOOPED = {
-    ELF: ['ELF: "You have searched that wall a hundred times."', 'ELF: "Are you well?"', "ELF watches KURA, then the wall, then KURA."],
-    PIXIE: ['PIXIE: "Are you CRAZY? What are you DOING??"', 'PIXIE: "It\'s the SAME WALL."', 'PIXIE: "Okay. I\'m counting now."'],
-    "CU SITH": ["CU SITH lies down. It knows this will take a while.", "CU SITH tilts its head at KURA, then at the wall."],
-    data: ['{n}: "LOOP DETECTED."', '{n}: "INFINITE LOOP? Y / N"'],
-    hardware: ['{n}: "you\'re doing the thing again"', '{n}: "same input, same output. trust me"'],
-    hybrid: ['{n}: "Even machines know when to stop."', '{n}: "You are stuck in a loop, flesh."'],
-    folklore: ['{n}: "Madness, or patience. I cannot tell."', '{n}: "The wall will not change its mind."'],
+    ELF: ['ELF: "You have searched that wall a hundred times."', 'ELF: "Are you well?"', "ELF watches KURA, then the wall, then KURA.",
+      'ELF: "If you stare long enough, it will not blink first."', 'ELF: "I have lived nine hundred years. This is the longest."',
+      'ELF: "The wall has no secrets left. Only patience."', "ELF has started braiding her hair."],
+    PIXIE: ['PIXIE: "Are you CRAZY? What are you DOING??"', 'PIXIE: "It\'s the SAME WALL."', 'PIXIE: "Okay. I\'m counting now."',
+      'PIXIE: "I\'m naming it. This is Gerald."', 'PIXIE: "Maybe if you say please."', 'PIXIE: "Wake me up when it\'s a door."',
+      "PIXIE lies down on KURA's head in protest.", 'PIXIE: "Gerald says no."'],
+    "CU SITH": ["CU SITH lies down. It knows this will take a while.", "CU SITH tilts its head at KURA, then at the wall.",
+      "CU SITH sighs through its nose. Loudly.", "CU SITH starts digging at the wall too. Then stops. Pointless.",
+      "CU SITH puts its chin on KURA's foot.", "CU SITH falls asleep standing up."],
+    data: ['{n}: "LOOP DETECTED."', '{n}: "INFINITE LOOP? Y / N"', '{n}: "SAME QUERY. SAME RESULT."',
+      '{n}: "HAVE YOU TRIED TURNING IT OFF AND ON AGAIN?"', '{n}: "WHILE(TRUE) { SEARCH(WALL); }"'],
+    hardware: ['{n}: "you\'re doing the thing again"', '{n}: "same input, same output. trust me"',
+      '{n}: "I did this for nine years. a vending machine. same coin."', '{n}: "is it a puzzle? I don\'t do puzzles"'],
+    hybrid: ['{n}: "Even machines know when to stop."', '{n}: "You are stuck in a loop, flesh."',
+      '{n}: "I have half a mind to stop you. The other half is bored."', '{n}: "The wall is winning."'],
+    folklore: ['{n}: "Madness, or patience. I cannot tell."', '{n}: "The wall will not change its mind."',
+      '{n}: "I have seen mountains worn down slower."', '{n}: "Humans. Always knocking."'],
   };
+  // Very rarely, a remark turns into a question: [Y]ES / [N]O, answered like any other party question.
+  const BANTER_ASK = {
+    ELF: [['ELF: "Shall I try? Elves have a way with walls."', ["ELF touches the wall. Nothing. She looks offended.", 1], ['ELF: "Suit yourself."', 0]]],
+    PIXIE: [['PIXIE: "Can we PLEASE do something else?"', ['PIXIE: "YES. Thank you."', 2], ["PIXIE groans into KURA's hair.", -1]],
+      ['PIXIE: "Do you want me to search it FOR you?"', ['PIXIE pats the wall once. "There. Searched."', 1], ['PIXIE: "Fine. FINE."', 0]]],
+    "CU SITH": [["CU SITH brings KURA a pebble. Is this what she's looking for?", ["CU SITH is very proud of itself.", 2], ["CU SITH puts the pebble back exactly where it was.", -1]]],
+    data: [['{n}: "SUGGEST NEW TASK? Y / N"', ['{n}: "ACKNOWLEDGED. THANK YOU."', 2], ['{n}: "CONTINUING. RELUCTANTLY."', -1]]],
+    hardware: [['{n}: "can I hold it? whatever it is?"', ['{n} holds it very carefully. "ok. ok."', 2], ['{n}: "ok. just asking"', -1]]],
+    hybrid: [['{n}: "Shall I listen to it for you?"', ['{n} listens. "It says no."', 1], ['{n}: "Your loss."', 0]]],
+    folklore: [['{n}: "Is this a ritual? Should I chant?"', ["{n} chants something old. Nothing happens. It seems pleased anyway.", 1], ['{n}: "Pity."', -1]]],
+  };
+  function banterAsk(st, p) {
+    if (Math.random() >= 0.06 || st.encounter) return false;
+    const key = BANTER_ASK[p.name] ? p.name : (p.family || "folklore");
+    ASK["banter:" + key] = BANTER_ASK[key];
+    const k = R(0, BANTER_ASK[key].length - 1);
+    st.question = { who: p.name, pool: "banter:" + key, k };
+    st.extra = "> " + BANTER_ASK[key][k][0].replace(/\{n\}/g, p.name);
+    return true;
+  }
   function nag(st, key) {
     st.loop = st.loop && st.loop.key === key ? { key, n: st.loop.n + 1 } : { key, n: 1 };
     const n = st.loop.n, friends = (st.party || []).slice(1).filter(p => p.hp > 0);
@@ -1290,6 +1322,7 @@
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; return true; }
     p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
+    if (p.patience > 1 && banterAsk(st, p)) return true;
     const lines = p.patience <= 1 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[p.patience] : (LOOPED[p.name] || LOOPED[p.family || "folklore"]);
     st.extra = "> " + pick(lines.filter(l => "> " + l.replace(/\{n\}/g, p.name) !== st.extra)).replace(/\{n\}/g, p.name);
     return true;
@@ -1297,7 +1330,9 @@
 
   // Fiddling with something useless, over and over, wears on the party too.
   const FIDDLE = ['{n} watches KURA fiddle with it.', '{n}: "What are you doing?"', "{n} pretends not to notice.",
-    '{n}: "It\'s not going to do anything."'];
+    '{n}: "It\'s not going to do anything."', '{n}: "Is it supposed to do something?"', '{n}: "Shake it harder. That always works."',
+    '{n}: "I don\'t think that\'s how it works."', "{n} is trying very hard not to laugh.", '{n}: "Maybe it\'s decorative."',
+    '{n}: "You\'re going to break it. ...You\'re going to break it."', '{n}: "Have you tried asking it nicely?"'];
   // w = how many times KURA has tried this thing: the longer she keeps at it, the likelier someone reacts
   // (rarely at first, then up to half the time after a couple dozen tries).
   function fidget(st, w = 1) {
@@ -1307,6 +1342,7 @@
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; st.fidgetLine = st.extra; return; }   // line 2 keeps the item; line 3 the snap
     p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
+    if (p.patience > 2 && banterAsk(st, p)) { st.fidgetLine = st.extra; return; }
     const lines = p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[p.patience] : FIDDLE;
     st.extra = st.fidgetLine = "> " + pick(lines).replace(/\{n\}/g, p.name);
   }

@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.31 - Oct 7 2026, 15:01 HST
+
+![v0.31](screenshots/v0.31.png)
+
+- The README is shorter and punchier: what the game feels like, not how every system works.
+- The fight box reads `[F]IGHT [T]ALK [I]NVOKE`: INVOKE opens the bag mid-fight (using something, then back to the fight), and RUN is gone from the box. Running is still the `[^]` step (or the up arrow) through a door.
+- The LOG page (and the end-of-run log) has `[D]OWNLOAD`, which saves the log as a text file, and `[COPY]`, which copies it to the clipboard. The text includes the end-of-run stats when the run is over.
+- Nothing breaks early any more: an item can't break before 10 tries (COMMON), 12 (UNCOMMON), 20 (RARE) or 40 (MYTHIC). After that each try has the same small chance as before, so a common thing lasts about 20 tries on average.
+- The `[^]` step button glows more softly, and when it's spent (or facing a wall) it dims to a dark blue.
+- In a fight, the way out flashes: `[^]` blinks with RUN beside it when KURA faces an open way, and the turn buttons blink when she faces a wall (turn to find a door). Nothing flashes once today's step is spent.
+
 ## v0.30 - Oct 6 2026, 20:58 HST
 
 ![v0.30](screenshots/v0.30.png)
