@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.37";
+  const VERSION = "v0.38";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const pad = (s, n) => (s + " ".repeat(n)).slice(0, Math.max(n, s.length));
@@ -168,8 +168,8 @@
     // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 18, `[<]  ${st.facing || "?"}  [>]`);
-    overlay(VH - 2, 22, "[^]");          // the day's step: forward, the way KURA faces
-    if (st.encounter) overlay(VH - 2, 26, "RUN");   // in a fight, the step is the way out
+    overlay(VH - 2, 20, "[  ^  ]");          // the day's step: forward, the way KURA faces
+    if (st.encounter) overlay(VH - 2, 28, "RUN");   // in a fight, the step is the way out
     // The day's omen, centered across the top of the 3D view, like writing on the ceiling.
     const omenT = (st.omenText || "").replace(/^> /, "");
     // A long one wraps onto a second row (split at the space nearest the middle), so the walls always show.
@@ -263,16 +263,13 @@
     // Line 1 is the day's omen when the rules provide one; otherwise the moon line.
     // Line 1 is the status report when the rules provide one; otherwise the moon line.
     const moonLine = st.status || "> " + lines[realDay % lines.length];
-    // While a party member's question is open, [Y]ES and [N]O sit in the log box's right side,
-    // divided down all three lines, and the log lines are cut to fit beside them.
-    if (st.question) {
-      const btn = ["|          |           ", "|  [Y]ES   |   [N]O    ", "|          |           "];
-      [moonLine, st.log || "", extra].forEach((m, k) => S.push("|" + ljust((" " + m).slice(0, 55), 55) + btn[k] + "|"));
-    } else for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
+    for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step on the right.
     // The day's step is the [^] button in the 3D view now; the right side waits for answers ([Y]ES [N]O, later).
-    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = " ".repeat(21) + "STA[N]DBY ";
+    // While a party member's question is open, [Y]ES and [N]O take STA[N]DBY's place at the right end of this bar
+    // (nothing else can be done until it's answered anyway), so the log lines above keep their full width.
+    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = st.question ? " ".repeat(18) + "[Y]ES   [N]O " : " ".repeat(21) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.

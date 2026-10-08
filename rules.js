@@ -482,10 +482,10 @@
     if (d && t > d.deadline) {
       st.dead = true;
       st.party = st.party.map(p => ({ ...p, hp: 0 }));
-      st.log = `> Day ${st.day}. The week ended. The dark closed over KURA.`;
+      st.log = `> The week ended. The dark closed over KURA.`;
       return st;
     }
-    st.log = `> Day ${st.day}. KURA wakes on ${st.floor}.`;
+    st.log = `> KURA wakes on ${st.floor}.`;
     st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight."
       : held ? pick(STANDBY_LINES) : settled ? "> The room settles." : atmosphere(st);
     return st;
@@ -595,7 +595,7 @@
     sync(st);
     if (st.dungeon) return true;
     arrive(st, floorNum(st), firstDeadline(clock(st)));
-    st.log = `> Day ${st.day}. KURA enters ${st.floor}.`;
+    st.log = `> KURA enters ${st.floor}.`;
     st.unsaved = true;
     return false;
   }
@@ -669,10 +669,10 @@
     const fx = omen(clock(st)).fx;
     const where = `KURA searches the ${NAME[dir]} wall.`;
     const say = text => {
-      const long = `> Day ${st.day}. ${where} ${text}`;
+      const long = `> ${where} ${text}`;
       if (long.length <= 77) return long;
-      const short = `> Day ${st.day}. KURA searches ${NAME[dir]}. ${text}`;
-      return short.length <= 77 ? short : `> Day ${st.day}. ${text.replace(/^KURA finds /, "Found ")}`.slice(0, 77);
+      const short = `> KURA searches ${NAME[dir]}. ${text}`;
+      return short.length <= 77 ? short : `> ${text.replace(/^KURA finds /, "Found ")}`.slice(0, 77);
     };
     if (Math.random() < chance) {
       st.log = say(reveal(st, "demon").replace(" appears!", " wanders in!"));
@@ -751,7 +751,7 @@
       st.roundOver = false;
       if (Math.random() < 0.5) {
         lines.push(`KURA runs ${NAME[dir]}. ${THE(e.name)} blocks the door.`);
-        st.log = `> Day ${st.day}. KURA tries to run ${NAME[dir]}. ${THE(e.name)} blocks it.`;
+        st.log = `> KURA tries to run ${NAME[dir]}. ${THE(e.name)} blocks it.`;
         demonTurn(st, lines);
         st.round = lines;
         if (st.dead) st.roundOver = true;
@@ -770,15 +770,15 @@
       // Bonus days: the next floor belongs to next week, so going down early banks the rest of this one.
       const deadline = sundayOf(clock(st)) + 7;
       arrive(st, floorNum(st) + 1, deadline);
-      st.log = `> Day ${st.day}. KURA goes ${NAME[dir]} and descends to ${st.floor}.`;
+      st.log = `> KURA goes ${NAME[dir]} and descends to ${st.floor}.`;
       st.extra = `> The way down from here closes ${fmt(deadline)}.`;
       return show(st);
     }
     const i = FLOOR.grow(d.floor, d.at, dir);               // builds the room behind a locked door the first time
     const isNew = !RS(d, i).visited;
     d.at = i; RS(d, i).visited = true;
-    st.log = locked ? `> Day ${st.day}. KURA unlocks the ${NAME[dir]} door and steps into a new room.`
-      : `> Day ${st.day}. KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
+    st.log = locked ? `> KURA unlocks the ${NAME[dir]} door and steps into a new room.`
+      : `> KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
     enterKind(st, i, locked || isNew);
     st.extra = atmosphere(st);
     return show(st);
@@ -880,7 +880,7 @@
     LEAN.altarTmp = amt; lean(st, "altarTmp");
     RS(d).altarDay = st.day;
     tally(st, "offerings");
-    st.log = `> Day ${st.day}. KURA makes an offering.`;
+    st.log = `> KURA makes an offering.`;
     st.altar = { open: true, used: true, result: { mood, face: ALTAR_FACE[mood], say: pick(ALTAR_SAYS[mood]), lines: ALTAR_FLAVOR[mood] } };
     return show(st);
   }
@@ -909,7 +909,7 @@
     act(st, "hold");
     today(st).stepped = true; today(st).held = true;
     tally(st, "holds");
-    st.log = `> Day ${st.day}. ` + pick(["KURA settles in for the day.", "KURA stays where she is. The room goes quiet.", "KURA holds here. Let the dark pass over."]);
+    st.log = `> ` + pick(["KURA settles in for the day.", "KURA stays where she is. The room goes quiet.", "KURA holds here. Let the dark pass over."]);
     return show(st);
   }
 
@@ -1004,7 +1004,7 @@
     st.stats = {};                                     // the starting bag doesn't count as finds
     const deadline = firstDeadline(t);
     arrive(st, 1, deadline);
-    st.log = `> Day 1. KURA descends into B1F.${lucky ? " Her bag feels heavier than it should." : ""}`;
+    st.log = `> KURA descends into B1F.${lucky ? " Her bag feels heavier than it should." : ""}`;
     st.extra = `> The way down from here closes ${fmt(deadline)}.`;
     st.unsaved = true;
     return show(st);
@@ -1139,7 +1139,7 @@
       st.dead = true;
       st.party = st.party.map(p => ({ ...p, hp: 0 }));
       lines.push("KURA falls. The run is over.");
-      st.log = `> Day ${st.day}. ${THE(e.name)} strikes KURA down.`;
+      st.log = `> ${THE(e.name)} strikes KURA down.`;
       st.encounter = null;
       st.round = lines;
       st.roundOver = true;
@@ -1157,7 +1157,7 @@
       lines.push(`It leaves ${it}.`);
       gain(st, it, lines);
     }
-    st.log = `> Day ${st.day}. ${THE(e.name)} falls. ${n} ICHOR.`;
+    st.log = `> ${THE(e.name)} falls. ${n} ICHOR.`;
     st.dungeon.scent = { room: st.dungeon.at, text: "Copper in the air" };
     st.encounter = null;
   }
@@ -1199,7 +1199,7 @@
       }
       e.hp = Math.max(0, e.hp - total);
       lines.push(`The party strikes. -${total}`);
-      st.log = `> Day ${st.day}. KURA's party fights ${the(e.name)}.`;
+      st.log = `> KURA's party fights ${the(e.name)}.`;
       if (e.hp <= 0) { win(st, lines); lean(st, "kill", lines); } else lean(st, "fight", lines);
     }, "> Nothing here to fight.");
   }
@@ -1322,7 +1322,7 @@
     act(st, "talk:demon");
     const lines = [];
     st.roundOver = false;
-    st.log = `> Day ${st.day}. KURA speaks to ${the(e.name)}.`;
+    st.log = `> KURA speaks to ${the(e.name)}.`;
     tally(st, "demonTalks");
     lean(st, "talk", lines);
     if (e.angered || (UNIQUE[e.name] && !UNIQUE[e.name].talks)) {
@@ -1442,12 +1442,12 @@
     const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
     const odd = moon() === 4 ? 0.25 : 0.12;
     if (!friends.length || Math.random() < odd) {
-      st.log = `> Day ${st.day}. KURA speaks into the dark.`;
+      st.log = `> KURA speaks into the dark.`;
       st.extra = "> " + pick(friends.length || Math.random() < 0.5 ? VOICE_FROM_DARK : ["Only the walls answer.", "Her voice comes back, thinner."]);
       return show(st);
     }
     const p = pick(friends);
-    st.log = `> Day ${st.day}. KURA talks to ${p.name}.`;
+    st.log = `> KURA talks to ${p.name}.`;
     const tier = heatTier(RS(st.dungeon).heat), fam = p.family || "folklore";
     // Out of patience and still being talked to: half the time they snap. CHAOS members lash out at
     // KURA (it never kills her); LAW and NEUTRAL ones leave the party for good.
@@ -1532,11 +1532,11 @@
     if (p.align === "CHAOS") {
       const kura = st.party[0], dmg = Math.min(kura.hp - 1, R(2, Math.ceil(kura.hpmax / 5)));
       st.party = st.party.map((q, i) => i === 0 ? { ...q, hp: q.hp - Math.max(0, dmg) } : q);
-      st.log = `> Day ${st.day}. ${p.name} has had enough.`;
+      st.log = `> ${p.name} has had enough.`;
       st.extra = "> " + (SNAP[p.name] || `${p.name} strikes KURA.`) + (dmg > 0 ? ` -${dmg} HP` : "");
     } else {
       st.party = st.party.filter(q => q !== p);
-      st.log = `> Day ${st.day}. ${p.name} leaves the party.`;
+      st.log = `> ${p.name} leaves the party.`;
       st.extra = "> " + (QUIT[p.name] || QUIT[p.family || "folklore"]).replace(/\{n\}/g, p.name);
     }
     return true;
@@ -1907,7 +1907,7 @@
     e.round++; e.stage = null;
     const lines = [], who = `${e.name}: `, v = worth(e, g);
     st.roundOver = false;
-    st.log = `> Day ${st.day}. KURA offers ${the(e.name)} a gift.`;
+    st.log = `> KURA offers ${the(e.name)} a gift.`;
     if (v < 0) {
       // Hated: it breaks it or throws it away, and the fight gets uglier.
       lines.push(`KURA offers ${g.label}.`, who + `"${say2(e, "insult")}"`);
@@ -2006,7 +2006,7 @@
     st.roundOver = true;
     return show(st);
   }
-  function leaves(st, e) { st.log = `> Day ${st.day}. ${THE(e.name)} leaves.`; st.encounter = null; }
+  function leaves(st, e) { st.log = `> ${THE(e.name)} leaves.`; st.encounter = null; }
   function recruit(st, e, lines) {
     const lv = Math.max(1, 2 * floorNum(st) + R(-1, 2));
     const hpmax = 12 + lv * 5, mpmax = lv * 2 + R(0, 4);
@@ -2014,7 +2014,7 @@
     lines.push(`${e.name}: "${say2(e, "join")}"`, `${e.name} joins the party.`);
     note(st, "demons", e.name, "joined"); tally(st, "recruited");
     lean(st, e.align, lines);
-    st.log = `> Day ${st.day}. ${e.name} joins the party.`;
+    st.log = `> ${e.name} joins the party.`;
     st.encounter = null;
   }
 

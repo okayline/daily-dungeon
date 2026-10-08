@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.38 - Oct 7 2026, 19:31 HST
+
+![v0.38](screenshots/v0.38.png)
+
+- **`[  ^  ]`** is a new, wider forward button (7 characters, same type size as `[<]` `[>]`, no scaling or glow); RUN moved over to make room.
+- **Yes/No in the bar.** A party member's `[Y]ES` / `[N]O` question now sits at the right of the bottom bar (replacing STA[N]DBY) so it never covers the log; searching and moving wait for the answer. Demon questions stay in the fight popup.
+- **Items that break get a popup** (`IT BROKE`), listing anything that was inside, and it waits for `[ OK ]`. If something came to see what broke, the fight opens after it.
+- **INVOKE:** the `[ENTER] use` row stays at the foot of the bag so it no longer jumps up a line when you use or switch items.
+- **Line 1 never says the day** (line 2 already shows it). Item descriptions no longer show an alignment.
+
 ## v0.37 - Oct 7 2026, 19:13 HST
 
 ![v0.37](screenshots/v0.37.png)

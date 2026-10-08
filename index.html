@@ -69,7 +69,9 @@
   /* INVOKE opens inside the 3D view (rows 6-22, columns 1-47); placeInView() sizes it to that area. */
   .viewpop { position: absolute; background: var(--bg); overflow: auto; cursor: pointer; box-sizing: border-box;
     outline: 1px solid var(--trail); }
-  .viewpop pre { white-space: pre; }
+  .viewpop pre { white-space: pre; display: flex; flex-direction: column; min-height: 100%; margin: 0; }
+  .viewpop pre > div { flex: none; }
+  .viewpop pre > div:last-child { margin-top: auto; }   /* the [ENTER] use row sits at the foot, so it never moves when the list or the box changes size */
   .logview .dim { color: var(--trail); }
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
@@ -88,9 +90,7 @@
   @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
   .mframe { color: var(--trail); }
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
-  .logline.q { width: 55ch; }
-  .logline.nudge { animation: blink 0.35s steps(1) 2; }   /* a nudge when keys are pressed while a question waits */
-  .qcell { display: inline-block; white-space: pre; vertical-align: top; }
+  .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* a nudge when keys are pressed while a question waits */
   /* The build number, small, under the screen's lower right corner. */
   .ver { white-space: pre-line; text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
   .ask { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
@@ -148,7 +148,7 @@
           // [^] takes the day's step forward; dim when that way is a wall or the step is spent.
           // In a fight, the ways out flash: [^] with RUN beside it if KURA faces an open way, otherwise the
           // turn buttons, to find one.
-          .replace("[^]", `<span class="btn${save && RULES.available(save)[save.facing] ? (save.encounter ? " flee" : "") : " off"}" data-act="forward">[^]</span>`)
+          .replace("[  ^  ]", `<span class="btn${save && RULES.available(save)[save.facing] ? (save.encounter ? " flee" : "") : " off"}" data-act="forward">[  ^  ]</span>`)
           .replace(/ RUN/, m => save && save.encounter ? ` <span class="runlabel${RULES.available(save)[save.facing] ? " flash" : ""}">RUN</span>` : m)
           .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
@@ -167,13 +167,6 @@
       // straight even if a glyph in the font (an apostrophe, say) isn't exactly one cell wide.
       // Line 2 glows gold right after using an item.
       if (i >= lines.length - 6 && i <= lines.length - 4) {
-        // With a question open, the right side holds [Y]ES | [N]O, each the full height of the box.
-        if (save && save.question) {
-          const k = i - (lines.length - 6), gold = k === 1 && logGlow;
-          const cell = (t, act) => `<span class="btn ask qcell" data-act="${act}">${esc(t)}</span>`;
-          const yes = ["          ", "  [Y]ES   ", "          "][k], no = ["           ", "   [N]O    ", "           "][k];
-          return `|<span class="logline q${gold ? " gold" : ""}">${esc(line.slice(1, 56))}</span>|` + cell(yes, "qyes") + "|" + cell(no, "qno") + "|";
-        }
         const inner = esc(line.slice(1, -1)), gold = i === lines.length - 5 && logGlow;
         return `|<span class="logline${gold ? " gold" : ""}">${inner}</span>|`;
       }
@@ -187,6 +180,8 @@
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace("[S]EARCH", b("[S]EARCH", "search", can.search))
           .replace("STA[N]DBY", b("STA[N]DBY", "hold", can.hold))
+          .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')       // a party member's question: answered down here
+          .replace("[N]O ", '<span class="btn ask" data-act="qno">[N]O</span> ')
 
           .replace(/\[([NSEW])\](ORTH|OUTH|AST|EST)/g, (m, x) =>
             b(m, "go-" + x, can[x]).replace('class="btn', 'class="btn' + (armed === x ? " armed" : save && save.encounter && can[x] ? " flee" : "")));
@@ -416,7 +411,7 @@
     const it = invList[invSel];
     if (it) {
       add(" ");
-      const tag = it.ichor ? `${save.ichor} in hand` : it.tier + (it.align ? ` [${it.align}]` : "");
+      const tag = it.ichor ? `${save.ichor} in hand` : it.tier;
       const lines = it.ichor ? [it.text, "Enter feeds the wounded. [D]RINK: KURA."]
         : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
       textBox(it.name, tag, lines, 41).forEach(l => add(l, "t-" + it.tier));
@@ -521,9 +516,9 @@
     save = it.ichor ? (drink ? RULES.drinkIchor(save) : RULES.feedIchor(save)) : RULES.useItem(save, it.name);
     logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
+    // Something broke: a popup says so (and what was inside, if anything). It waits for its [ OK ], like a find.
+    if (!it.ichor && /comes apart in KURA/.test(save.log)) { showInv(false); breakBox(it, /Something was inside/.test(save.log)); return; }
     if (save.encounter) { showInv(false); encounterBox(); return; }   // mid-fight: back to the fight box
-    // Something fell out of broken junk: close the bag and show it like any find.
-    if (/Something was inside/.test(save.log)) { showInv(false); foundBox({ items: save.items.slice(0, -1), silver: save.silver }); return; }
     showInv(true);
   }
 
@@ -577,7 +572,7 @@
     add(" ");
     for (const l of lines) {
       if (typeof l === "string") add(l, "gold");
-      else { const a = RULES.itemAlign(l.text); add(l.text, "t-" + l.tier); add(l.tier + (a ? `  [${a.slice(0, 3)}]` : ""), "t-" + l.tier); }
+      else { add(l.text, "t-" + l.tier); add(l.tier, "t-" + l.tier); }
     }
     const notes = newItems.map(n => (RULES.inventory({ items: [n] })[0] || {}).text).filter(Boolean);
     if (notes.length) { add(" "); notes.forEach(n => add(n)); }
@@ -586,8 +581,33 @@
     box.hidden = false;
     box.dataset.mode = "found";
   }
+  // An item breaks: a box says so, lists what fell out (if anything) and waits for [ OK ]. If something came to
+  // see what broke, the fight box opens when the break box closes.
+  let afterBreak = false;
+  function breakBox(it, inside) {
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    floatBox(box);
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
+    add("IT BROKE", "gold");
+    add(" ");
+    add(it.name.replace(/^an? /, "the ").replace(/^t/, "T") + " comes apart in KURA's hands.");
+    if (inside) {
+      const got = save.items[save.items.length - 1];
+      add(" ");
+      add("Something was inside:");
+      add(got, "t-" + RULES.tierOf(got));
+      add(RULES.tierOf(got), "t-" + RULES.tierOf(got));
+    }
+    add(" ");
+    add("[ OK ]", "btn");
+    box.hidden = false;
+    box.dataset.mode = "found";
+    afterBreak = true;
+  }
   function closeFound() {
     document.getElementById("found").hidden = true;
+    if (afterBreak) { afterBreak = false; if (save && save.encounter) { encounterBox(); return; } showInv(true); return; }
     if (save && save.roundOver) { delete save.round; delete save.roundOver; persist(); draw(); }
     endLog();
   }
@@ -794,7 +814,7 @@
     // A party member's question waits for [Y]ES or [N]O: nothing else moves the game on until it's answered
     // (the bag, codex, log, help and password still open, so the player can think it over).
     if (save && save.question && /^(search|hold|left|right|forward|run|fight|talk|altar|go-)/.test(name)) {
-      document.querySelectorAll(".logline.q").forEach(el => { el.classList.remove("nudge"); void el.offsetWidth; el.classList.add("nudge"); });
+      document.querySelectorAll(".btn.ask").forEach(el => { el.classList.remove("nudge"); void el.offsetWidth; el.classList.add("nudge"); });
       return;
     }
     if (name === "run" && save && save.encounter) {
