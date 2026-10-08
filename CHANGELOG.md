@@ -2,6 +2,18 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.37 - Oct 7 2026, 19:13 HST
+
+![v0.37](screenshots/v0.37.png)
+
+- **Back to the two-door choice: floors are built from wings.** A floor is four wings of three spaces each (a room, a passage and a dead end) joined by open doors, so you can walk a wing freely. Each wing but the last has two locked doors out of it: an offer of two rooms. The six room kinds are dealt out over the floor's three offers, so every kind is offered once. Open one door (one key a day) and the other **seals** for good (`x` on the map and the door, dimmed). A wing is built when its door is unlocked. This replaces the random branching map and the hidden path.
+- **Clues are the puzzle.** SEARCHing a locked door sometimes gives a faint hint of what's behind it (the senses overlap: warm for the Den and the Forge, a hum for the Bay and the Altar, cold and static for the Vault and the Relay). Each wing's **dead end hides a big clue**: a scrap that says outright what one of its two doors is, never which door. The Signal Relay now gives the other door's clue.
+- **False doors.** About 4 wings in 10 have a door that looks locked (`+`) but is only paint. It asks the same popup, costs no key, and searching it gives it away.
+- **Passages** are now free spaces inside a wing: no kind, at most one find, and never a demon (the dread answer can't come in either).
+- **The stairs** are hidden in the last wing's passage or dead end. The old distance clues, the hidden path and the glowing `?` are gone; a visited room still shows `?` while its locker is unfound (about 6 floors in 10 have one, in a dead end).
+- **Fixes and polish:** the find popup only closes on its `[ OK ]` (Enter or a click); a party member's `[Y]ES`/`[N]O` question waits for an answer; `[^]` matches `[<]` `[>]` (no glow, same size); the X cheat info is on two lines (with each wing's exits and clue); the fight popup has a blank line under the names; a `[C]ODEX` link sits at the top of the `[?]` page; the help text explains `+` and `x`.
+- Runs saved before this change start over.
+
 ## v0.36 - Oct 7 2026, 18:45 HST
 
 ![v0.36](screenshots/v0.36.png)

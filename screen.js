@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.36";
+  const VERSION = "v0.37";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const pad = (s, n) => (s + " ".repeat(n)).slice(0, Math.max(n, s.length));
@@ -16,7 +16,7 @@
     return " ".repeat(left) + s + " ".repeat(total - left);
   };
 
-  function renderView(left, right, end, depth, locked) {
+  function renderView(left, right, end, depth, lock) {
     const c = Array.from({ length: VH }, () => Array(VW).fill(" "));
     const put = (x, y, ch) => { if (x >= 0 && x < VW && y >= 0 && y < VH) c[y][x] = ch; };
     for (let k = 0; k < depth; k++) {
@@ -46,7 +46,7 @@
         const dl = cx - 4, dr = cx + 4, dt = depth === 2 ? t + 1 : t + 2;
         for (let x = dl; x <= dr; x++) { put(x, dt - 1, "_"); put(x, bm, "_"); }
         for (let y = dt; y <= bm; y++) { put(dl, y, "|"); put(dr, y, "|"); }
-        put(cx + 2, Math.floor((dt + bm) / 2), locked ? "+" : "o");   // a locked door shows the same + as on the map
+        put(cx + 2, Math.floor((dt + bm) / 2), lock || "o");   // a locked (or false) door shows the same + as on the map; a sealed one an x
       }
       if (end === "terminal") {            // a small screen set into the wall
         const T = [".---------.", "| > _     |", "|  :: ::  |", "'---------'", "   [===]"], y0 = Math.max(t + 1, bm - 8);
@@ -163,7 +163,7 @@
     now = now || SMT_now(); extra = extra || "";
     const idx = moonIndex(now), when = hst(now, st.tz);
     const v = st.view;
-    const view = renderView(v.left, v.right, v.end, (v.end === "dark" || v.end === "door") ? 2 : 1, !!v.locked);
+    const view = renderView(v.left, v.right, v.end, (v.end === "dark" || v.end === "door") ? 2 : 1, v.lock);
     // Look controls at the foot of the 3D view: [<] and [>] turn KURA to look around (never move her),
     // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
