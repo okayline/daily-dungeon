@@ -2,10 +2,9 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.40";
+  const VERSION = "v0.41";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
-  const pad = (s, n) => (s + " ".repeat(n)).slice(0, Math.max(n, s.length));
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
   const rjust = (s, n) => s.length >= n ? s : " ".repeat(n - s.length) + s;
   const center = (s, n) => {           // matches Python str.center
@@ -168,7 +167,7 @@
     // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 18, `[<]  ${st.facing || "?"}  [>]`);
-    overlay(VH - 2, 19, "[   ^   ]");          // the day's step: forward, the way KURA faces
+    overlay(VH - 2, 20, "[  ^  ]");          // the day's step: forward, the way KURA faces
     // The day's omen, centered across the top of the 3D view, like writing on the ceiling.
     const omenT = (st.omenText || "").replace(/^> /, "");
     // A long one wraps onto a second row (split at the space nearest the middle), so the walls always show.
@@ -270,13 +269,22 @@
     // (nothing else can be done until it's answered anyway), so the log lines above keep their full width.
     const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = st.question ? " ".repeat(18) + "[Y]ES   [N]O " : " ".repeat(21) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
+    const sys = " [?] [C]ODEX [P]ASS [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");
     // Width check counts CJK characters (the weekday kanji) as two columns, as they show on screen.
     const cols = t => [...t].reduce((n, ch) => n + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 2 : 1), 0);
-    for (const line of S) if (cols(line) !== W) throw new Error(`bad width ${cols(line)}: ${line}`);
+    // A line that comes out the wrong width would break the borders. In tests that is an error; on the page the
+    // inside of the line is trimmed or padded so the frame stays straight (and the game keeps going).
+    const strict = typeof module !== "undefined" && module.exports;
+    for (let n = 0; n < S.length; n++) {
+      const w = cols(S[n]);
+      if (w === W) continue;
+      if (strict) throw new Error(`bad width ${w}: ${S[n]}`);
+      const line = S[n], inner = line.slice(1, -1);
+      S[n] = line[0] + (w > W ? inner.slice(0, Math.max(0, inner.length - (w - W))) : inner + " ".repeat(W - w)) + line.slice(-1);
+    }
     return S.join("\n");
   }
 

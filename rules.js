@@ -100,7 +100,6 @@
   const ITEM_INFO = {}, TIER = {};
   for (const t of TIERS) for (const [name, text, use, say] of CATALOG[t]) { ITEM_INFO[name] = { text, use, say }; TIER[name] = t; }
   const names = t => CATALOG[t].map(x => x[0]);
-  const ITEMS = names("COMMON").concat(names("UNCOMMON"));       // what a talked-down demon may leave
   const MOON_DROPS = names("MOON");
   // A found item's rarity: mostly common, sometimes uncommon, rarely rare.
   function rollItem(st) {
@@ -140,6 +139,10 @@
     return d && k && k.startsWith(`search:${d.at}:`) ? st.loop.n : 0;
   }
   function pickDemon(st) {
+    for (let i = 0; i < 8; i++) { const n = pickDemon1(st); if (!(st.party || []).some(p => p.name === n)) return n; }
+    return pickDemon1(st);
+  }
+  function pickDemon1(st) {
     if (Math.random() < 0.03) return "ATOM SLASHER";
     const d = st.dungeon, w = { ...LADDER[Math.min(floorNum(st), 4) - 1] }, om = omen(clock(st)).fx;
     const wall = wallLoop(st), linger = d ? RS(d).linger : 0;
@@ -357,6 +360,7 @@
       const name = "ATOM SLASHER", u = UNIQUE[name];
       const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * u.hp);
       st.encounter = { name, family: familyOf(name), align: alignOf(name), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
+      st.question = null;
       st.round = ["Something answers.", `${name} steps out of the quiet.`];
       st.loop = { key: "", n: 0 }; st.extra = "> It was listening the whole time."; st.extraUrgent = true;
       note(st, "demons", name, "met"); tally(st, "met");
@@ -368,6 +372,7 @@
     }
   }
   function show(st) {
+    if (!st.dungeon) return st;
     if (st.dreadCheck) dread(st);
     const d = st.dungeon, room = d.floor.rooms[d.at];
     if (st.round) st.round = st.round.map(l => translate(st, l));
@@ -412,7 +417,7 @@
 
   // KURA arrives on a fresh floor. Its way down closes at the end of `deadline` (a Sunday).
   function arrive(st, num, deadline) {
-    const floor = FLOOR.generate(undefined, Math.max(1, deadline - clock(st) + 1));
+    const floor = FLOOR.generate();
     const a = FLOOR.arrive(floor);
     st.floor = `B${num}F`;
     st.facing = a.facing;
@@ -481,6 +486,7 @@
     const d = st.dungeon;
     if (d && t > d.deadline) {
       st.dead = true;
+      st.encounter = null; st.question = null; st.altar = null;          // nothing is left pending on a dead run
       st.party = st.party.map(p => ({ ...p, hp: 0 }));
       st.log = `> The week ended. The dark closed over KURA.`;
       return st;
@@ -514,6 +520,7 @@
         const name = pickDemon(st);
         const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * (UNIQUE[name] ? UNIQUE[name].hp : 1));
         st.encounter = { name, family: familyOf(name), align: alignOf(name), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
+        st.question = null;                             // a waiting question lapses when a demon steps in
         st.round = [`${A(name)} blocks the way.`, STANCE_LINE[stance(st, st.encounter)](name)];
         note(st, "demons", name, "met"); tally(st, "met");
         return `${A(name)} appears!`;
@@ -556,7 +563,7 @@
     "Pipes ticking", "Footsteps? None"];
   function report(st, kind) {
     const d = st.dungeon, t = clock(st), n = floorNum(st);
-    const name = FLOOR_NAME[n] || st.floor, left = d.deadline - t, onFloor = t - (d.arrived ?? t) + 1;
+    const name = FLOOR_NAME[n] || st.floor, left = d.deadline - t, onFloor = Math.max(1, t - (d.arrived ?? t) + 1);
     const closes = left <= 0 ? "The way down closes tonight" : left === 1 ? "The way down closes tomorrow"
       : pick([`${left} days until the way down closes`, `The way down closes ${fmt(d.deadline)}`]);
     if (kind === "air" || (kind !== "news" && Math.random() < 0.3)) {
@@ -616,18 +623,22 @@
     const rs = RS(d, i);
     if (rs.walls) return rs.walls;
     const room = d.floor.rooms[i];
-    const free = CW.filter(x => !doorWall(room, x));
+    // The terminal's wall can't be searched for hidden things (it wakes the terminal instead), so nothing hides there.
+    const altar = room.kind === "altar" ? altarDir(d.floor, i) : null;
+    const free = CW.filter(x => !doorWall(room, x) && x !== altar);
     const w = { taken: {} };
     free.forEach(x => { w[x] = []; w.taken[x] = 0; });
     const sd = stairsDir(d.floor, i);
+    // A small LCG kept inside 32 bits (Math.imul), reading its high bits: the low bits of an LCG are not random.
     let k = (d.floor.seed + i * 31) >>> 0;
+    const next = () => { k = (Math.imul(k, 1103515245) + 12345) >>> 0; return k >>> 8; };
     for (const thing of room.hidden) {
       if (thing === "stairs") w[sd].push(thing);
-      else { w[free[k % free.length]].push(thing); k = (k * 1103515245 + 12345) >>> 0; }
+      else if (free.length) w[free[next() % free.length]].push(thing);
     }
     // About one room in three hides something deep in one wall: findable, but only 1 in 35 per search,
     // and that wall may look empty for a very long time.
-    if (k % 3 === 0) w.deep = { dir: free[(k >>> 4) % free.length], item: names("MYTHIC")[(k >>> 8) % CATALOG.MYTHIC.length], found: false };
+    if (free.length && next() % 3 === 0) w.deep = { dir: free[next() % free.length], item: names("MYTHIC")[next() % CATALOG.MYTHIC.length], found: false };
     return (rs.walls = w);
   }
 
@@ -677,7 +688,6 @@
     if (Math.random() < chance) {
       st.log = say(reveal(st, "demon").replace(" appears!", " wanders in!"));
       drift(st);
-      if (st.drop) { st.extra = st.drop; delete st.drop; }
       return show(st);
     }
     const w = walls(d, d.at), pile = w[dir] || [];
@@ -689,7 +699,6 @@
       if (found.length === 1 && st.log.length + doorList(room).length < 77) st.log += " " + doorList(room);
       drift(st);
       if (st.clue) { st.extra = st.clue; delete st.clue; delete st.tell; }   // the scrap's words take line 3 (over a heat tell)
-      if (st.drop) { st.extra = st.drop; delete st.drop; }
       return show(st);
     }
     if (w.deep && w.deep.dir === dir && !w.deep.found && Math.random() < DEEP_FIND * fx.find * (tripping(st) ? 3 : 1)) {
@@ -983,6 +992,9 @@
     if (st.tz !== tz) { delete st.lastSeen; delete st.rewindNoted; }
     // A new run starts on the real calendar: the X testing cheat doesn't carry over.
     if (st.clockOffset) { delete st.clockOffset; delete st.lastSeen; delete st.rewindNoted; }
+    // Nothing from the last run carries over except the codex, the timezone and the cheats.
+    for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
+      "fidgetLine", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     const t = clock(st);
@@ -1102,7 +1114,7 @@
           p.patience = Math.max(0, p.patience - 1);
           st.extra = st.fidgetLine = "> " + pick(GRIEF[p.name] || GRIEF[p.family || "folklore"]).replace(/\{n\}/g, p.name);
         } else fidget(st, 20);
-        if (Math.random() < encounterChance(st) && !st.encounter) {
+        if (Math.random() < encounterChance(st) && !st.encounter && !st.question) {
           st.extra = "> " + reveal(st, "demon").replace(" appears!", " comes to see what broke.");
         }
         return show(st);
@@ -1245,8 +1257,8 @@
   function lean(st, why, lines) {
     const base = LEAN[why] || 0;
     if (!base) return;
-    st.alignShifts = (st.alignShifts || 0) + 1;
-    const w = Math.max(0.4, 1 - 0.02 * (st.alignShifts - 1));
+    if (Math.abs(base) >= 0.1) st.alignShifts = (st.alignShifts || 0) + 1;      // tiny nudges (patient searching) don't age the weighting
+    const w = Math.max(0.4, 1 - 0.02 * Math.max(0, (st.alignShifts || 0) - 1));
     st.alignScore = Math.max(-6, Math.min(6, Math.round(((st.alignScore || 0) + base * w) * 1000) / 1000));
     // Which way this action pulled, for the arrow on the ALIGN tag: <NEU] toward LAW, [NEU> toward CHAOS.
     // Only real choices show an arrow; tiny nudges (patient searching) move the score quietly.
@@ -1574,10 +1586,10 @@
     hybrid: [['{n}: "Shall I listen to it for you?"', ['{n} listens. "It says no."', 1], ['{n}: "Your loss."', 0]]],
     folklore: [['{n}: "Is this a ritual? Should I chant?"', ["{n} chants something old. Nothing happens. It seems pleased anyway.", 1], ['{n}: "Pity."', -1]]],
   };
+  for (const k of Object.keys(BANTER_ASK)) ASK["banter:" + k] = BANTER_ASK[k];      // so a saved question still works after a reload
   function banterAsk(st, p) {
     if (Math.random() >= 0.06 || st.encounter) return false;
     const key = BANTER_ASK[p.name] ? p.name : (p.family || "folklore");
-    ASK["banter:" + key] = BANTER_ASK[key];
     const k = R(0, BANTER_ASK[key].length - 1);
     st.question = { who: p.name, pool: "banter:" + key, k };
     st.extra = "> " + BANTER_ASK[key][k][0].replace(/\{n\}/g, p.name);
@@ -1766,7 +1778,7 @@
       if (!yes) { lines.push(`KURA declines. ${say2(e, "leave")}`); leaves(st, e); }
       else if (st.party.length < 4) recruit(st, e, lines);
       else { e.stage = "swap"; lines.push("The party is full. Send someone away?"); }
-    }
+    } else return show(st);                            // any other stage has its own buttons; YES/NO means nothing there
     st.round = lines;
     st.roundOver = !st.encounter || st.dead;
     return show(st);
@@ -1945,7 +1957,6 @@
     const e = c[kind][name] = c[kind][name] || {};
     e[what] = (e[what] || 0) + 1;
   }
-  const FAM_NAME = { data: "data", hardware: "hardware", hybrid: "hybrid", folklore: "folklore" };
   const NATURE_NAME = { tech: "Tech", spirit: "Old spirit thing", both: "Half machine, half spirit", plain: "Plain stuff" };
   function tastes(nature) {
     const by = { loves: [], likes: [], hates: [] };
@@ -1966,7 +1977,7 @@
   };
   function codex(st) {
     const c = st.codex || { demons: {}, items: {} };
-    const demons = Object.keys(FAMILY).map(f => ({ group: FAM_NAME[f], entries: FAMILY[f].concat(f === "folklore" ? Object.keys(UNIQUE) : []).map(name => {
+    const demons = Object.keys(FAMILY).map(f => ({ group: f, entries: FAMILY[f].concat(f === "folklore" ? Object.keys(UNIQUE) : []).map(name => {
       const seen = c.demons[name] || {}, fam = familyOf(name), al = alignOf(name);
       const known = !!(seen.met || seen.joined || (st.party || []).some(p => p.name === name));
       if (!known) return { name, known };

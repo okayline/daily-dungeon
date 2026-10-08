@@ -32,7 +32,6 @@
   .you { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .demon { color: var(--demon); }
   .gold { color: var(--gold); }
-  .visited { color: var(--dim); }
   .moon { color: var(--moon); }
   /* The clock's colon blinks slowly (1s on, 1s off); hidden, it still keeps its space. */
   .colon { animation: blink 2s steps(1) infinite; }
@@ -90,7 +89,7 @@
   @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
   .mframe { color: var(--trail); }
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
-  .caret { display: inline-block; width: 1ch; font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
+  .caret { display: inline-block; width: calc(1ch / 1.5); font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
   .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* a nudge when keys are pressed while a question waits */
   /* The build number, small, under the screen's lower right corner. */
   .ver { white-space: pre-line; text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
@@ -106,12 +105,12 @@
 </head>
 <body>
   <div class="frame"><pre id="screen">LOADING...</pre>
-    <div id="log" class="logview" hidden><pre></pre></div>
-    <div id="inv" class="viewpop" hidden><pre></pre></div>
-    <div id="codex" class="logview" hidden><pre></pre></div>
-    <div id="about" class="logview" hidden><pre></pre></div>
+    <div id="log" class="logview" role="dialog" aria-modal="true" aria-label="Adventure log" hidden><pre></pre></div>
+    <div id="inv" class="viewpop" role="dialog" aria-modal="true" aria-label="Invoke: your bag" hidden><pre></pre></div>
+    <div id="codex" class="logview" role="dialog" aria-modal="true" aria-label="Codex" hidden><pre></pre></div>
+    <div id="about" class="logview" role="dialog" aria-modal="true" aria-label="About" hidden><pre></pre></div>
     <div id="ver" class="ver"></div>
-    <div id="found" class="foundbox" hidden><pre></pre></div></div>
+    <div id="found" class="foundbox" role="dialog" aria-modal="true" aria-live="polite" hidden><pre></pre></div></div>
 <script src="screen.js"></script>
 <script src="floor.js"></script>
 <script src="rules.js"></script>
@@ -151,7 +150,7 @@
           .replace("[&gt;]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="right">[&gt;]</span>`)
           // [^] takes the day's step forward; dim when that way is a wall or the step is spent, and in a fight
           // (running is a button in the fight box).
-          .replace("[   ^   ]", `<span class="btn${save && !save.encounter && RULES.available(save)[save.facing] ? "" : " off"}" data-act="forward">[   <span class="caret">^</span>   ]</span>`)
+          .replace("[  ^  ]", `<span class="btn${save && !save.encounter && RULES.available(save)[save.facing] ? "" : " off"}" data-act="forward">[  <span class="caret">^</span>  ]</span>`)
           .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
         const tail = esc(line.slice(48)).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
@@ -193,6 +192,7 @@
         .replace(/ (NOT SAVED|SAVED \d{4}-\d\d-\d\d) /, (m, t) => Date.now() < statusUntil
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
         .replace("[C]ODEX", '<span class="btn" data-act="codex">[C]ODEX</span>')
+        .replace("[P]ASS", '<span class="btn" data-act="backup">[P]ASS</span>')
         .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
         .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>');
@@ -216,9 +216,15 @@
     if (steps - h.steps >= 2) setTimeout(draw, h.t + 2000 - now + 30);   // the turns are up: wait out the clock
     return h.text;
   }
+  // Put back the fight or altar box that belongs to the run (after a cancelled question, a loaded password...).
+  function restoreBoxes() { if (save) { encounterBox(); altarBox(); } }
   function draw() {
     if (!save) return;
-    document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extraToShow()));
+    try { document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extraToShow())); }
+    catch (err) {                                  // never freeze on a bad frame: say so, and keep the keys working
+      console.error(err);
+      document.getElementById("screen").textContent = "The screen could not be drawn. [R] begins a new run, [P] restores a password.";
+    }
     // While the infinite-steps cheat is on, the line under the screen shows the room and the counters.
     document.getElementById("ver").textContent = (save.freeSteps ? RULES.debugInfo(save) + "   " : "") + SMT.VERSION;
   }
@@ -276,7 +282,7 @@
   function endLog() {
     if (!save || !save.dead || save.endShown || !document.getElementById("found").hidden) return;
     save.endShown = true; persist();
-    setTimeout(() => toggleLog(true), 300);
+    setTimeout(() => { if (save && save.dead && document.getElementById("found").hidden) toggleLog(true); }, 300);
   }
 
   // Before anything reads the clock, ask the server for the real time (the Date on its reply to a
@@ -288,15 +294,21 @@
       const r = await fetch(location.href, { method: "HEAD", cache: "no-store", signal: ctl.signal });
       clearTimeout(timer);
       const server = Date.parse(r.headers.get("Date") || "");
-      if (!isNaN(server)) SMT.setSkew(server + 500 - (t0 + Date.now()) / 2);   // the header is whole seconds
+      const age = Number(r.headers.get("Age")) || 0;                 // a cache (CDN) says how old its copy is
+      if (!isNaN(server)) SMT.setSkew(server + age * 1000 + 500 - (t0 + Date.now()) / 2);   // the header is whole seconds
     } catch (e) {}
   }
   async function start() {
     document.getElementById("ver").textContent = SMT.VERSION;
     await syncTime();
-    let s = null;
-    try { s = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
-    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 5 && s.party) { save = s; tick(); flashStatus(); draw(); encounterBox(); altarBox(); return; }
+    let s = null, raw = null;
+    const stash = suffix => { try { if (raw) localStorage.setItem(KEY + suffix, raw); } catch (e) {} };   // keep what we can't use, never just overwrite it
+    try { raw = localStorage.getItem(KEY); s = JSON.parse(raw || "null"); } catch (e) { stash("-corrupt"); s = null; }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.dispatchEvent(new Event("resize")));   // popups are placed by measuring the font
+    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 5 && s.party) {
+      try { save = s; tick(); flashStatus(); draw(); encounterBox(); altarBox(); return; }
+      catch (err) { console.error(err); stash("-corrupt"); save = null; }
+    } else if (s) stash("-old");
     save = RULES.reset({});
     save.history = [];
     remember("");
@@ -314,7 +326,7 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
   function copyLog(btn) {
-    const done = ok => { if (btn) { btn.textContent = ok ? "[COPIED]" : "[COPY FAILED]"; setTimeout(() => btn.textContent = "[COPY]", 1500); } };
+    const done = ok => { if (btn) { btn.textContent = ok ? "COPIED" : "COPY FAILED"; setTimeout(() => btn.textContent = "[C]OPY", 1500); } };
     if (navigator.clipboard) navigator.clipboard.writeText(logText).then(() => done(true), () => done(false));
     else done(false);
   }
@@ -336,10 +348,11 @@
         (h.length ? h.reduce((g, l) => (/^ /.test(l) && g.length ? g[g.length - 1].push(l) : g.push([l]), g), [])
           .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.");
       pre.textContent = logText.slice(logText.indexOf("\n\n") + 2);
-      // Buttons at the top: the CODEX, and ways to keep the log (a text file, or the clipboard).
+      // Buttons at the top right: ways to keep the log (a text file, or the clipboard).
       const button = (label, key) => { const b = document.createElement("span"); b.className = "btn"; b.dataset[key] = "1"; b.textContent = label; return b; };
       const top = document.createElement("div");
-      top.append(button("[C]ODEX", "codex"), "   ", button("[D]OWNLOAD", "download"), "   ", button("[COPY]", "copy"), "   [L] or Esc closes");
+      top.style.textAlign = "right";
+      top.append(button("[D]OWNLOAD", "download"), "   ", button("[C]OPY", "copy"), "   [L] or Esc closes");
       pre.prepend(top, "\n");
     }
   }
@@ -369,12 +382,18 @@
     box.hidden = false;
     passAct = a => {
       if (a === "close") { box.hidden = true; draw(); return; }
-      if (a === "copy") { mine.select(); try { navigator.clipboard.writeText(code); } catch (e) { document.execCommand("copy"); } msg.textContent = "Copied."; return; }
+      if (a === "copy") {
+        mine.select();
+        const ok = () => { msg.textContent = "Copied."; }, no = () => { try { document.execCommand("copy"); ok(); } catch (e) { msg.textContent = "Select the text above and copy it."; } };
+        try { navigator.clipboard.writeText(code).then(ok, no); } catch (e) { no(); }
+        return;
+      }
       const got = theirs.value.trim();
       if (!got || got === code) { msg.textContent = got ? "That is this run already." : "Paste a password first."; return; }
       try {
         const s = JSON.parse(decodeURIComponent(escape(atob(got))));
         if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 5) throw new Error("not a run");
+        const trial = JSON.parse(JSON.stringify(s)); RULES.tick(trial); SMT.renderScreen(trial, "");      // it must really run, not just parse
         loadCode = s;
         askBox("load", "REPLACE THIS RUN?", ["The run in the password takes this one's place."]);
       } catch (e) { msg.textContent = "That password didn't work. Nothing was changed."; }
@@ -384,7 +403,7 @@
 
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
-  let invList = [], invSel = 0, invMsg = "", logGlow = false;
+  let invList = [], invSel = 0, logGlow = false;
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
   function textBox(title, tag, lines, W = 70) {
     const out = ["+" + "-".repeat(W + 2) + "+"];
@@ -485,7 +504,7 @@
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "  1-8 ................ pick a gift when a demon asks for one",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
-      "  [C]ODEX ............ every demon and item found, over all runs (in the LOG)",
+      "  [C]ODEX ............ every demon and item found, over all runs (press C on the main screen)",
       "  [L]OG .............. the adventure log",
       "  [P]ASS ............. this run's password: copy it to keep or move the run,",
       "                       or paste one in to continue that run",
@@ -573,9 +592,9 @@
   // STANDBY, a new run and loading a password all ask in the game too (no browser dialogs).
   let pending = null, holdOK = false, resetOK = false, loadCode = null;
   function askBox(kind, title, lines) {
-    pending = kind;
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     floatBox(box);
+    pending = kind;
     pre.innerHTML = "";
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
     add(title, "gold");
@@ -594,14 +613,22 @@
     if (pending) {
       const kind = pending; pending = null;
       document.getElementById("found").hidden = true;
-      if (kind === "load") { if (yes && loadCode) { save = loadCode; loadCode = null; tick(); persist(); draw(); } else { loadCode = null; draw(); } return; }
-      if (yes) { if (kind === "hold") holdOK = true; else resetOK = true; act(kind); } else draw();
+      if (kind === "load") {
+        if (yes && loadCode) {
+          save = loadCode; loadCode = null; tick();
+          if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
+          heldExtra = null; disarm(); logGlow = false; invSel = 0;
+          persist(); draw(); restoreBoxes();
+        } else { loadCode = null; draw(); restoreBoxes(); }
+        return;
+      }
+      if (yes) { if (kind === "hold") holdOK = true; else resetOK = true; act(kind); } else { draw(); restoreBoxes(); }
       return;
     }
     const dir = armed;
     document.getElementById("found").hidden = true;
     if (yes && dir && save && save.day === 1 && !reallySure && !save.encounter) return confirmBox(dir, true);
-    if (yes && dir) act("go-" + dir); else { disarm(); draw(); }
+    if (yes && dir) act("go-" + dir); else { disarm(); draw(); restoreBoxes(); }
   }
   // When a search turns something up, a box says what it was and waits for Enter, Space, Esc or a
   // click, so a quick run of searches can't skip past it. Holding A won't dismiss it.
@@ -680,7 +707,7 @@
   // ENCOUNTER box: inside the 3D view. Art slot, the demon and its HP, what happened this round (played back
   // line by line, with the > following whoever acts), and the choices. It stays open until the demon is gone
   // (or KURA falls); then [ENTER] closes it.
-  const floatBox = box => { box.className = "foundbox"; box.removeAttribute("style"); };
+  const floatBox = box => { pending = null; passAct = null; box.className = "foundbox"; box.removeAttribute("style"); };   // a new box replaces whatever was waiting
   const wrapText = (s, n) => { const out = []; let rest = String(s); while (rest.length > n) { let cut = rest.lastIndexOf(" ", n); if (cut <= 0) cut = n; out.push(rest.slice(0, cut)); rest = rest.slice(cut).trimStart(); } out.push(rest); return out; };
   let replayTimer = null, prevDemonHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
   function finishReplay() { if (replayTimer) { clearInterval(replayTimer); replayTimer = null; encounterBox(false); } }
@@ -886,6 +913,7 @@
   }
 
   function act(name) {
+    const okHold = holdOK, okReset = resetOK; holdOK = resetOK = false;      // a confirmation is good for this one call only
     if (replayTimer) finishReplay();
     prevDemonHp = save && save.encounter ? save.encounter.hp : null;
     // [^] toward a bare wall is just a search of that wall; toward a door it takes the step.
@@ -936,9 +964,9 @@
     if (name === "codex") { codexSel = -1; return showCodex(document.getElementById("codex").hidden); }
     if (name === "backup") return backup();
     if (!save) return;
-    if (name === "reset") { if (!resetOK) { resetBox(); return; } resetOK = false; }
-    if (name === "hold") { if (!holdOK) { holdBox(); return; } holdOK = false; }
-    const log = save.log, steps = save.steps, exBefore = save.extra;
+    if (name === "reset") { if (!okReset) { resetBox(); return; } }
+    if (name === "hold") { if (!okHold) { holdBox(); return; } }
+    const log = save.log, steps = save.steps, exBefore = save.extra, partyBefore = (save.party || []).map(p => p.name);
     const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
       : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
@@ -948,7 +976,11 @@
       : name.startsWith("altar-") ? RULES.altarGive(save, name === "altar-none" ? null : Number(name.slice(6)))
       : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
-    if (name === "reset") save.history = [];
+    if (name === "reset") {
+      save.history = [];
+      if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
+      heldExtra = null; logGlow = false; invSel = 0;
+    }
     remember(name === "reset" || save.steps !== steps ? "" : log);
     persist(); draw();
     if (name !== "reset" && !encounterBox(true) && !altarBox()) {
@@ -956,8 +988,11 @@
       // Nothing else opened: if this action brought something significant, say so in a box.
       if (document.getElementById("found").hidden && !save.encounter) {
         const lines = [];
-        if (save.log !== log && SIGNIFICANT.test(save.log)) lines.push(save.log.replace(/^> /, ""));
-        if (save.extra && save.extra !== exBefore && SIGNIFICANT.test(save.extra)) lines.push(save.extra.replace(/^> /, ""));
+        // Someone left the party (the log line can be hidden behind a repeat, so go by the party itself).
+        const gone = partyBefore.filter(n => !(save.party || []).some(p => p.name === n));
+        if (gone.length) lines.push(`${gone.join(" and ")} leaves the party.`);
+        else if (save.log !== log && SIGNIFICANT.test(save.log)) lines.push(save.log.replace(/^> /, ""));
+        if (save.extra && save.extra !== exBefore && (gone.length || SIGNIFICANT.test(save.extra))) lines.push(save.extra.replace(/^> /, ""));
         if (lines.length) noticeBox(lines);
       }
     }
@@ -965,8 +1000,10 @@
 
   document.getElementById("screen").addEventListener("click", e => {
     const fb = document.getElementById("found");
-    if (!fb.hidden && fb.dataset.mode === "found") return;       // a find waits for its [ OK ]; the buttons behind it do nothing
-    const b = e.target.closest(".btn"); if (b) act(b.dataset.act);
+    if (!fb.hidden && fb.dataset.mode !== "encounter") return;   // a box waiting for its answer: the buttons behind it do nothing
+    const b = e.target.closest(".btn");
+    if (!b || (b.classList.contains("off") && b.dataset.act !== "forward")) return;
+    act(b.dataset.act);
   });
   document.getElementById("log").addEventListener("click", e => {
     if (e.target.closest("[data-download]")) return downloadLog();
@@ -977,16 +1014,19 @@
   document.getElementById("found").addEventListener("click", e => {
     if (replayTimer) return finishReplay();     // a click skips the round's playback
     if (e.target.closest("[data-intro]")) return introOK();
-    if (document.getElementById("found").dataset.mode === "intro") return;
+    const mode = document.getElementById("found").dataset.mode;
+    if (mode === "intro") return;
     const pa = e.target.closest("[data-pact]");
     if (pa && passAct) return passAct(pa.dataset.pact);
+    if (mode === "pass") return;                 // clicking a field to paste must not close the box
     const c = e.target.closest("[data-cact]");
     if (c) return answerConfirm(c.dataset.cact === "yes");
     if (document.getElementById("found").dataset.mode === "confirm") return answerConfirm(false);
     const b = e.target.closest("[data-fact]");
     if (b) act(b.dataset.fact);
-    else if (document.getElementById("found").dataset.mode === "found") { if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
-    else if (document.getElementById("found").dataset.mode !== "encounter") closeFound();
+    else if (mode === "found") { if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
+    else if (mode === "altar" || mode === "encounter") return;                   // their own buttons only
+    else closeFound();
   });
   // Clicking an item chooses it; clicking the chosen one again uses it. Clicking elsewhere closes.
   document.getElementById("inv").addEventListener("click", e => {
@@ -996,7 +1036,7 @@
     const line = e.target.closest("[data-i]");
     if (!line) { showInv(false); if (save && save.encounter) encounterBox(); return; }
     const i = Number(line.dataset.i);
-    if (i === invSel) useInv(i); else { invSel = i; invMsg = ""; showInv(true); }
+    if (i === invSel) useInv(i); else { invSel = i; showInv(true); }
   });
   document.getElementById("codex").addEventListener("click", e => {
     const tab = e.target.closest("[data-tab]"), line = e.target.closest("[data-i]");
@@ -1011,10 +1051,10 @@
     if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (key === "enter") introOK(); return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
     if (!fbox.hidden) {
-      e.preventDefault();
+      if (!/^(tab|f\d+)$/.test(key)) e.preventDefault();
+      if (e.repeat) return;                        // holding a key can't answer a box
       if (fbox.dataset.mode === "confirm") {
-        const same = armed && (key === armed.toLowerCase() || key === "arrowup");
-        answerConfirm(key === "enter" || key === "y" || same);
+        answerConfirm(key === "enter" || key === "y" || (key === "arrowup" && !!armed));     // anything else is NO
         return;
       }
       if (fbox.dataset.mode === "altar") {
@@ -1054,15 +1094,15 @@
     }
     if (!document.getElementById("inv").hidden) {
       if (key === "i" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
-      else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; invMsg = ""; showInv(true); }
-      else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; invMsg = ""; showInv(true); }
+      else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; showInv(true); }
+      else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
       else if (key === "d" && invList[invSel] && invList[invSel].ichor) { e.preventDefault(); useInv(invSel, true); }
       return;
     }
     if (!document.getElementById("log").hidden) {
       if (key === "l" || key === "escape") { e.preventDefault(); toggleLog(false); }
-      else if (key === "c") { e.preventDefault(); toggleLog(false); codexSel = -1; showCodex(true); }
+      else if (key === "c") { e.preventDefault(); copyLog(document.querySelector("#log [data-copy]")); }
       else if (key === "d") { e.preventDefault(); downloadLog(); }
       return;
     }

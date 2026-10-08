@@ -60,9 +60,9 @@
     const at = (p, d) => ({ r: p.r + DIRS[d][0], c: p.c + DIRS[d][1] });
     const key = p => p.r + "," + p.c;
 
-    // Cells to keep clear: next to any other door still locked, so that room keeps space to build its own wing.
+    // Cells to keep clear: next to any other door still locked (a sealed one never gets built), so that room keeps space to build its own wing.
     const halo = new Set();
-    for (let j = 0; j < floor.count; j++) if (j !== k && !floor.rooms[j]) for (const d of Object.keys(DIRS)) halo.add(key(at(floor.pos[j], d)));
+    for (let j = 0; j < floor.count; j++) if (j !== k && !floor.rooms[j] && !(floor.sealed && floor.sealed[j])) for (const d of Object.keys(DIRS)) halo.add(key(at(floor.pos[j], d)));
     const roomy = (p, taken) => Object.keys(DIRS).filter(d => !(key(at(p, d)) in floor.cells) && !taken.has(key(at(p, d)))).length >= 3;
 
     // Try one layout: pick free cells for the spaces and the exits. Returns a plan, or null if it doesn't fit.
@@ -105,7 +105,7 @@
       return plan;
     }
     let plan = null;
-    for (let tries = 0; !plan && tries < 600; tries++) plan = attempt(tries % 50 === 49 || tries >= 300 ? "solo" : rand() < 0.5 ? "chain" : "star", tries >= 150);
+    for (let tries = 0; !plan && tries < 600; tries++) plan = attempt(tries % 50 === 49 || tries >= 300 ? "solo" : rand() < 0.5 ? "chain" : "star", tries >= 40);
     if (!plan) { plan = { layout: "solo", links: [], exits: [], falseDoors: { K: [], P: [], X: [] }, pos: { K: floor.pos[k] } }; floor.stuck = (floor.stuck || 0) + 1; }   // never reached in practice
 
     // Commit the plan: book the spaces and the exits.

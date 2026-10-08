@@ -2,6 +2,22 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.41 - Oct 7 2026, 20:59 HST
+
+![v0.41](screenshots/v0.41.png)
+
+A pass over the code, fixing what a review found, plus a few small changes.
+
+- **A party member leaving opens a popup** (`[ OK ]`), wherever it happens. `[  ^  ]` is two spaces each side with a bigger `^`, and the lines no longer shift on that row.
+
+- **Safer boxes and keys.** In the unlock box only Enter or Y says yes (a compass letter, or a held key, no longer confirms and spends the key); everything else is no. A new box replaces any stale one (so a cancelled standby can't run when you confirm a door). Clicking a field in the password box no longer closes it, buttons behind an open box do nothing, dim buttons do nothing (the step button still searches a wall), and cancelling a question brings back the fight or altar box.
+- **New runs start clean.** Reset clears the last run's taint, item wear, pending question, altar and counters. A run that dies at the deadline no longer keeps a live demon or question.
+- **Hidden things fixed.** Items are spread over a room's walls properly (the wall picker was stuck on one wall), and an Altar room no longer hides things behind its terminal.
+- **Saves.** A corrupt or older save is kept aside instead of overwritten; a password must actually run before it can replace your run; a bad frame no longer freezes the screen.
+- **Smaller fixes.** A waiting party question survives a reload; YES/NO in the swap stage keeps the text; a question lapses when a demon steps in; demons you already have don't turn up as strangers; real choices (not patient searching) wear down the alignment weighting; wing building finds a layout sooner; the cached `Date` header is corrected for age.
+- **Buttons.** `[C]ODEX` and `[P]ASS` are on the bottom bar; popups are marked as dialogs and Tab and F-keys work.
+- Dead code removed.
+
 ## v0.40 - Oct 7 2026, 19:57 HST
 
 ![v0.40](screenshots/v0.40.png)
