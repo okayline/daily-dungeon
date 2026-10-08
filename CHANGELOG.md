@@ -2,6 +2,19 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.50 - Oct 8 2026, 01:31 HST
+
+![v0.50](screenshots/v0.50.png)
+
+Rooms that want something from you, and a party that talks back.
+
+- **Rooms:** walking into a room no longer hands you its benefit. Each room has something in it to find and use.
+- **Party:** every time you walk into a room, someone in the party has something to say about it.
+- **Minimap:** a locked door you are facing shows up white.
+- **Looking around:** an open doorway is described as an opening, not a shut door. The turn buttons read `[ < ]` and `[ > ]`.
+- **Room name:** TURN and DAY stay put whatever the room's name.
+- **Demons:** they ask a couple of questions before they ever ask you for anything, and the questions themselves are gentler.
+
 ## v0.49 - Oct 8 2026, 01:10 HST
 
 ![v0.49](screenshots/v0.49.png)

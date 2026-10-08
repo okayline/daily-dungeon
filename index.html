@@ -52,6 +52,7 @@
   .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
   .door { color: var(--trail); }
+  .door.focus { color: #ffffff; text-shadow: none; }   /* the locked door KURA faces: flat white, no glow */
   .door .g { position: relative; left: -0.1em; }   /* the fallback font draws || a touch right of its cell */
   .wall { color: var(--dim); opacity: 0.4; }
   .btn { cursor: pointer; color: var(--bright); }
@@ -127,6 +128,9 @@
       if (i >= 15 && i <= 19) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
         // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
+        // The locked door KURA faces gets a slightly brighter #: it sits in the gap beside her @ on that side.
+        const ctr = (lines[17] || "").slice(49).indexOf("@"), face = save && save.facing;
+        const focus = ctr < 0 ? null : face === "N" ? [16, ctr] : face === "S" ? [18, ctr] : face === "E" ? [17, ctr + 2] : face === "W" ? [17, ctr - 2] : null;
         const map = right.replace(/[\[)][\^v][\](]|[@^v<>&$?□=‖#+\-|]/g, (m, at) => {
           // The outline walls (+ - |) are dim; a # is a locked door and stays bright. The panel's own edges are left alone.
           if (/[+\-|]/.test(m)) {
@@ -141,15 +145,16 @@
           // Plain keyboard characters (? > < ^ v $ &) stay in the screen font;
           // only real Unicode symbols switch to the fallback symbol font.
           const inner = ch.charCodeAt(0) < 128 ? esc(ch) : `<span class="g">${esc(ch)}</span>`;
-          return `<span class="cell ${cls}">${inner}</span>`;
+          const lit = ch === "#" && focus && i === focus[0] && at === focus[1] ? " focus" : "";
+          return `<span class="cell ${cls}${lit}">${inner}</span>`;
         });
         return left + map;
       }
       // Turn controls under the 3D view (only the left 48 columns, so the map is never touched).
       if (i === 21 || i === 22) {
         const left = esc(line.slice(0, 48))
-          .replace("[&lt;]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="left">[&lt;]</span>`)
-          .replace("[&gt;]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="right">[&gt;]</span>`)
+          .replace("[ &lt; ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="left">[ &lt; ]</span>`)
+          .replace("[ &gt; ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="right">[ &gt; ]</span>`)
           // [^] takes the day's step forward; dim when that way is a wall or the step is spent, and in a fight
           // (running is a button in the fight box).
           .replace("[  ^  ]", `<span class="btn" data-act="forward">[  <span class="caret">^</span>  ]</span>`)
@@ -497,7 +502,7 @@
       two("Demons", count(cx.demons), "Items", count(cx.items)), "",
       "KEYS",
       "  [^] / up arrow ..... go through the door KURA faces",
-      "  [<] [>] / arrows ... turn (free)",
+      "  [ < ] [ > ] / arrows ... turn (free)",
       "  + .................. a door that wants a charge (or is only paint)",
       "  x .................. a door sealed for good (its pair was opened)",
       "  [S]EARCH ........... search the wall KURA faces (as much as you like)",

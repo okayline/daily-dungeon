@@ -297,9 +297,12 @@
       "A terminal in the wall. The cursor blinks."],
     stairs: ["The stairs drop into the dark.", "Steps lead down. They do not end.",
       "The stairs wait."],
+    arch: ["An open arch. The dark goes on beyond it.", "A bare archway, and the way through.", "An opening in the stone, the dark past it.",
+      "An arch, empty, with a draft coming through."],
   };
   function sight(st) {
     const v = st.dungeon ? (show(st), st.view.end) : "wall";
+    if (v === "door" && st.dungeon && !looksLocked(st.dungeon, st.facing) && !isSealed(st.dungeon, st.facing)) return pick(SEE.arch);   // an open door is an arch, not a shut door
     return pick(SEE[v] || SEE.wall);
   }
   // DOOR HINTS and DEAD-END CLUES. Each locked door hides a room of one kind. SEARCHing a locked door sometimes gives a
@@ -577,10 +580,19 @@
   }
   const inArchive = st => { const d = st.dungeon; return !!(d && d.floor.rooms[d.at] && d.floor.rooms[d.at].kind === "archive"); };
   // What a search turns up. Placeholder effects: random damage, SILVER and ICHOR.
+  // FIXTURES: what a room's one useful thing looks like when searching finds it, and what it does when used. (No type names.)
+  const FIXTURE = {
+    den: "A heap of loose parts and old gear, still warm to the touch.",
+    bay: "A cradle of cables, humming softly in the wall.",
+    relay: "A dish bolted to the wall, turning slowly.",
+    vault: "A hatch of heavy drawers, shut tight.",
+    forge: "A scarred workbench, its tools cold and laid out.",
+  };
   function reveal(st, thing) {
     const silver = st.silver ?? st.macca ?? 0, ichor = st.ichor ?? st.mag ?? 0;
     switch (thing) {
       case "stairs": return "A floor stone shifts. Stairs lead down.";
+      case "fixture": return FIXTURE[st.dungeon.floor.rooms[st.dungeon.at].kind] + " It can be used.";
       // The ? is a hidden locker. For now it holds a rare item (shops and special rooms come later).
       // The ? is a hidden locker: usually a RARE, sometimes MYTHIC; under a full moon, half the time a MOON item.
       case "lure": {
@@ -722,6 +734,8 @@
       if (thing === "stairs") w[sd].push(thing);
       else if (free.length) w[free[next() % free.length]].push(thing);
     }
+    // Rooms with an effect hide a fixture behind one wall. Finding it takes searching, like any find; using it is a SEARCH of that wall.
+    if (FIXTURE[room.kind] && free.length) { const fd = free[next() % free.length]; w[fd].unshift("fixture"); w.fixtureDir = fd; }
     // Nothing turns up on a first look. Each thing needs 5 to 10 points (half again more for each find already made on that wall) of searching (rolled now, hidden from the
     // player); every search of its wall adds a point or so (see SEARCH). prog is what each wall has had so far.
     w.need = {}; w.prog = {};
@@ -768,6 +782,12 @@
       return show(st);
     }
     if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { act(st, "stairs"); st.log = "> The stairs wait. Nothing more here."; return show(st); }
+    // A found fixture is used by searching its wall again: once a day per room.
+    if (found.includes("fixture") && walls(d, d.at).fixtureDir === dir && RS(d).fixtureDay !== st.day) {
+      act(st, `fixture:${d.at}`); RS(d).fixtureDay = st.day;
+      useFixture(st, room.kind);
+      return show(st);
+    }
     act(st, `search:${d.at}:${dir}`);
     // Heat: the loop and linger counts (see act) decide what kind of noise KURA is making.
     const chance = encounterChance(st);
@@ -925,43 +945,114 @@
       : `> KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
     enterKind(st, i, locked || isNew);
     st.extra = atmosphere(st);
+    partyEnter(st);
     return show(st);
   }
 
+
+  // PARTY ENTRY LINES: when KURA walks into a room that has no flavor line of its own, someone in the party may say something.
+  // Nothing here describes what a room does. Members without lines of their own speak in their family's voice ({n} = their name).
+  const PARTY_ENTER = {
+    ELF: ['ELF: "Another room. Stay close."', 'ELF: "I have seen this sort of place before."', 'ELF glances at the ceiling, then the floor.',
+      'ELF: "Walk lightly. Stone remembers."', 'ELF: "Not much to love in here."', 'ELF: "Mind the corners."'],
+    PIXIE: ['PIXIE: "Ooh, a new room!"', 'PIXIE: "Do you think anything lives here?"', 'PIXIE flits ahead, then flits back.',
+      'PIXIE: "I don\'t like this one. Or maybe I do."', 'PIXIE: "Can we stay a little? No? Fine."', 'PIXIE: "It smells funny in here."'],
+    "CU SITH": ['CU SITH sniffs the air, once.', 'CU SITH pads ahead and comes back.', 'CU SITH: "Hm."',
+      'CU SITH stops in the doorway, ears up.', 'CU SITH circles the room, then sits.', 'CU SITH: "Quiet. For now."'],
+    data: ['{n}: "NEW LOCATION LOGGED."', '{n}: "MAPPING..."', '{n}: "ENTERING. NO THREAT DETECTED."', '{n}: "01001000 01001001"'],
+    hardware: ['{n}: "new room. hm."', '{n}: "it feels like somewhere I was once"', '{n}: "hello? ...no one."', '{n}: "static in here. just a little."'],
+    hybrid: ['{n}: "Another room. Another corner."', '{n} looks around, wires humming.', '{n}: "I know this kind of quiet."', '{n}: "Keep going."'],
+    folklore: ['{n}: "A new place. Old bones."', '{n} looks around, unimpressed.', '{n}: "Watch your step."', '{n}: "I do not like it. I do not mind it."'],
+  };
+  // What the three who speak for themselves say on walking into each kind of room. Flavor only: never the room's type, never what it does.
+  const ENTER_BY_KIND = {
+    den: {
+      ELF: ['ELF: "Someone lived here, and left in a hurry."', 'ELF: "Gear everywhere. Touch nothing you cannot carry."'],
+      PIXIE: ['PIXIE: "Ooh, a messy one! I like it."', 'PIXIE: "It smells like old wires and old socks."'],
+      "CU SITH": ['CU SITH sniffs the heaps, tail low.', 'CU SITH: "Many hands. Long ago."'],
+    },
+    bay: {
+      ELF: ['ELF: "Hush. Do you feel that? It is almost kind."', 'ELF lets out a breath she did not know she held.'],
+      PIXIE: ['PIXIE: "Is it humming? It\'s humming. I love it."', 'PIXIE: "Can we nap? Just a little nap?"'],
+      "CU SITH": ['CU SITH lies down at once. It does not get up.', 'CU SITH: "Safe." That is all it says.'],
+    },
+    relay: {
+      ELF: ['ELF: "Something is listening in here. Not to us."', 'ELF tilts her head. "Do you hear that thin tone?"'],
+      PIXIE: ['PIXIE: "It\'s ticking! Why is it ticking?"', 'PIXIE: "That dish is looking at me."'],
+      "CU SITH": ['CU SITH\'s ears swivel toward the far wall.', 'CU SITH: "Far voices. Far away."'],
+    },
+    vault: {
+      ELF: ['ELF: "Heavy walls. Someone meant this to last."', 'ELF: "Everything in here is shut. Politely, but shut."'],
+      PIXIE: ['PIXIE: "Shiny shiny SHINY. Can I?"', 'PIXIE: "It\'s so quiet my wings are loud."'],
+      "CU SITH": ['CU SITH walks the edge of the room, once.', 'CU SITH: "Closed things. Keep them closed."'],
+    },
+    forge: {
+      ELF: ['ELF: "A workshop. Whoever worked here was careful."', 'ELF runs a finger along the bench and studies the dust.'],
+      PIXIE: ['PIXIE: "Tools! Tiny, pointy tools!"', 'PIXIE: "It smells like burnt hair and rain."'],
+      "CU SITH": ['CU SITH sneezes at the sharp smell.', 'CU SITH: "Fire was here. Not now."'],
+    },
+    altar: {
+      ELF: ['ELF: "Do not stare at the glow. It stares back."', 'ELF: "That was built to be asked things."'],
+      PIXIE: ['PIXIE: "The wall is GLOWING. Should it glow?"', 'PIXIE: "Is that a face? It\'s not a face. Hi anyway."'],
+      "CU SITH": ['CU SITH will not step closer to the glow.', 'CU SITH: "It knows we are here."'],
+    },
+    archive: {
+      ELF: ['ELF: "So many little lights. All of them awake."', 'ELF: "An old library, in a language of light."'],
+      PIXIE: ['PIXIE: "Blinky blinky! There are SO many!"', 'PIXIE: "Everything in here is whispering."'],
+      "CU SITH": ['CU SITH: "Something here is already awake."', 'CU SITH stands very still, watching the racks.'],
+    },
+    hall: {
+      ELF: ['ELF: "Single file. I do not like a long way."', 'ELF: "A passage. Let us not linger in it."'],
+      PIXIE: ['PIXIE: "Are we there yet? We\'re not even anywhere."', 'PIXIE: "Echo! ...echo? Hm. No echo."'],
+      "CU SITH": ['CU SITH walks ahead, nose to the floor.', 'CU SITH: "Narrow. Only forward."'],
+    },
+    dead: {
+      ELF: ['ELF: "A dead end. Someone wanted it this way."', 'ELF: "There is nowhere left to go but back."'],
+      PIXIE: ['PIXIE: "Ugh. A dead end. I hate those."', 'PIXIE: "It just... stops. Rude."'],
+      "CU SITH": ['CU SITH turns in a circle and looks at KURA.', 'CU SITH: "Nothing past here."'],
+    },
+    plain: {
+      ELF: ['ELF: "Another room. Stay close."', 'ELF: "Nothing remarkable. Which can be a warning."'],
+      PIXIE: ['PIXIE: "A room! Just a room."', 'PIXIE: "Is it boring? I think it\'s boring."'],
+      "CU SITH": ['CU SITH sniffs the corners and says nothing.', 'CU SITH: "Quiet. Nothing near."'],
+    },
+  };
+  // Walking in always draws a remark from the party: the key for the day buys it. The three who speak for themselves
+  // have lines for every kind of room; recruits and programs (when no one else is left) speak in their family's voice.
+  function partyEnter(st) {
+    const d = st.dungeon, rm = d && d.floor.rooms[d.at];
+    if (!rm || st.dead || st.encounter) return;
+    const kind = rm.kind || (rm.hall ? "hall" : rm.dead ? "dead" : "plain");
+    const alive = (st.party || []).filter((p, i) => i > 0 && p.hp > 0);
+    const named = alive.filter(p => ENTER_BY_KIND[kind] && ENTER_BY_KIND[kind][p.name]);
+    const pool = named.length ? named : alive;
+    if (!pool.length) return;                                     // KURA alone: the room's own line stands
+    const fresh = pool.filter(p => p.name !== st.lastEnterWho), p = pick(fresh.length ? fresh : pool);
+    const lines = (ENTER_BY_KIND[kind] && ENTER_BY_KIND[kind][p.name]) || PARTY_ENTER[p.name] || PARTY_ENTER[isProgram(p.name) ? "data" : familyOf(p.name)] || PARTY_ENTER.folklore;
+    const say = l => "> " + l.replace(/\{n\}/g, p.name);
+    st.extra = pick(lines.filter(l => say(l) !== st.extra));
+    st.extra = say(st.extra.replace(/^> /, ""));
+    st.lastEnterWho = p.name; delete st.tell;                     // their remark is the room's flavor line now
+  }
 
   // ROOM KINDS. Most rooms have one (see floor.js). The first time KURA enters, the room does its one thing (line 3).
   // The Den, Bay, Forge and Altar keep working: going back does it again at HALF strength, once a day per room.
   // The rest are one-time finds. No kind is better than another: they answer different needs.
   // Placeholders (nothing to act on yet): DEN gear, BAY shield, VAULT keys, FORGE repairs.
   const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR", archive: "THE ARCHIVE" };
+  // Walking into a room only shows its flavor line. Its benefit waits behind a fixture the player has to find (see FIXTURE) and use.
   function enterKind(st, i, isNew) {
     const d = st.dungeon, rm = d.floor.rooms[i], k = rm.kind;
     if (!k) return;
     if (!isNew && !["den", "bay", "forge", "altar"].includes(k)) return;
     if (RS(d, i).kindDay === st.day) return;
     RS(d, i).kindDay = st.day;
-    const f = isNew ? 1 : 0.5;               // a return visit does half as much
-    if (k === "den") {                       // hot from the start: demons come easily, and so does the rest
-      RS(d, i).heat = Math.max(RS(d, i).heat, Math.round(HEAT_MAX * 0.6 * f));
-      st.tell = "> Warm, close air. Loose parts and old gear lie scattered in the dark.";
-    } else if (k === "bay") {                // safe (no demons hide here): the party mends a little
-      const hurt = st.party.some(p => p.hp < p.hpmax);
-      if (hurt) heal(st, 1 / 3 * f, false);
-      st.tell = "> A soft hum, and clean, still air. Nothing here wants anything of KURA.";
-    } else if (k === "relay") {              // a dish turns to the wing's door the dead end's scrap doesn't cover
-      const fl = d.floor, w = fl.wings[rm.wing], other = w && w.exits.map(j => fl.kinds[j]).find(x => x !== w.clueKind);
-      st.tell = other ? pick(KIND_CLUE[other]) : "> A dish turns, then holds still. Something carries in here.";
-    } else if (k === "vault") {              // coin (no keys or checks yet)
-      const n = R(40, 110) * floorNum(st);
-      st.silver = (st.silver ?? 0) + n; tally(st, "silverFound", n);
-      st.tell = "> Cold racks line the walls, heavy with small, hard things.";
-    } else if (k === "forge") {              // purify: clears the ichor taint (no repairs yet). A return visit only halves it.
-      if ((st.taint || 0) > 0 || tripping(st)) {
-        if (isNew) { st.taint = 0; const kura = st.party[0]; delete kura.status; st.tripLeft = 0; delete st.turnShown; }
-        else st.taint = Math.floor((st.taint || 0) / 2);
-        st.tell = "> A bench, cold tools, a smell of solder. The air hums, warm.";
-      } else st.tell = "> A bench, cold tools, a smell of solder. The air hums, warm.";
-    } else if (k === "archive") {            // the bonus room: one rare thing, still spinning
+    if (k === "den") st.tell = "> Warm, close air. Loose parts and old gear lie scattered in the dark.";
+    else if (k === "bay") st.tell = "> A soft hum, and clean, still air. Nothing here wants anything of KURA.";
+    else if (k === "relay") st.tell = "> A dish turns, then holds still. Something carries in here.";
+    else if (k === "vault") st.tell = "> Cold racks line the walls, heavy with small, hard things.";
+    else if (k === "forge") st.tell = "> A bench, cold tools, a smell of solder. The air hums, warm.";
+    else if (k === "archive") {              // the bonus room: one rare thing, still spinning
       st.tell = "> Racks of old drives, most of them still warm.";
       // A program is always waiting among the racks (one KURA doesn't already have), ready to talk.
       const free = PROGRAMS.filter(n => !st.party.some(p => p.name === n));
@@ -972,9 +1063,33 @@
         st.round = [`${A(name)} is running here.`, "It does not seem to mind KURA."];
         note(st, "demons", name, "met"); tally(st, "met");
       }
-    } else if (k === "altar") {              // a terminal in the wall: face it and SEARCH
-      st.tell = "> Something in the wall glows, very faintly.";
+    } else if (k === "altar") st.tell = "> Something in the wall glows, very faintly.";
+  }
+
+  // Using a room's fixture (a SEARCH of its wall, once a day per room). These are the benefits rooms used to give on entry.
+  function useFixture(st, k) {
+    const d = st.dungeon;
+    if (k === "den") {                       // the room stirs: demons come easily, and so does the rest
+      RS(d).heat = Math.max(RS(d).heat, Math.round(HEAT_MAX * 0.6));
+      st.log = "> KURA sorts through the heap. The room stirs.";
+    } else if (k === "bay") {                // the party mends
+      const hurt = st.party.some(p => p.hp < p.hpmax);
+      if (hurt) heal(st, 1 / 3, false);
+      st.log = hurt ? "> KURA plugs in. The party mends a little." : "> KURA plugs in. No one needs it.";
+    } else if (k === "relay") {              // the dish turns to the door the dead end's scrap doesn't cover
+      const rm = d.floor.rooms[d.at], fl = d.floor, w = fl.wings[rm.wing], other = w && w.exits.map(j => fl.kinds[j]).find(x => x !== w.clueKind);
+      st.log = "> KURA turns the dish. It settles on a signal.";
+      st.extra = other ? pick(KIND_CLUE[other]) : "> The dish turns, then holds still. Something carries in here.";
+    } else if (k === "vault") {              // coin
+      const n = R(40, 110) * floorNum(st);
+      st.silver = (st.silver ?? 0) + n; tally(st, "silverFound", n);
+      st.log = `> The drawers slide open. ${n} SILVER.`;
+    } else if (k === "forge") {              // purify: clears the ichor taint
+      const dirty = (st.taint || 0) > 0 || tripping(st);
+      if (dirty) { st.taint = 0; const kura = st.party[0]; delete kura.status; st.tripLeft = 0; delete st.turnShown; }
+      st.log = dirty ? "> KURA works at the bench. The air clears." : "> KURA works at the bench. Nothing needs mending.";
     }
+    tally(st, "fixtures");
   }
 
   // THE ALTAR (the Matrix Altar room): a terminal that takes one offering a day and shifts KURA's lean.
@@ -1531,7 +1646,7 @@
       e.got = 0; e.asks = 1; e.mood = isProgram(e.name) || (e.corrupt && has(st, "PATCH")) ? 1 : 0;      // programs like KURA; PATCH steadies a corrupted one
       e.want = 2 + floorNum(st);
       e.silver = Math.round((20 + 10 * floorNum(st) + R(0, 20)) * { same: 0.7, neutral: 1, opposite: 1.5 }[stance(st, e)]);
-      e.left = R(1, 2); e.asked = [];
+      e.left = R(2, 3); e.asked = [];                    // at least two questions before it ever asks for anything
       demonAsks(st, e, lines);
     } else {
       lines.push(`${e.name}: "${say2(e, "scorn")}"`);
@@ -1978,18 +2093,18 @@
       ["01000110 01010010 01001001 01000101 01001110 01000100 00111111 Y / N", true, "01011001 01000101 01010011", "01001110 01001111"],
     ],
     hardware: [
-      ["do you have a charger? anything?", true, "really?? ok. ok.", "...nobody ever does"],
+      ["do you remember being plugged in?", true, "me too. it hummed.", "...ok. I'll remember for both of us."],
       ["are you here to fix me?", true, "finally. finally.", "oh. ok. sure."],
       ["is it still raining up there?", true, "I liked the rain. on my casing.", "oh. that's worse somehow"],
     ],
     hybrid: [
       ["Do you hear the wires sing too?", true, "Then you're half like me.", "Pity. They sing of you."],
-      ["Would you trade a memory for a secret?", "CHAOS", "A fair trade. Later.", "Clever. Or dull."],
+      ["Do you keep secrets?", "CHAOS", "Good. So do I.", "Clever. Or dull."],
       ["Is the flesh worth keeping?", "LAW", "Sentimental. I like that.", "Then we agree."],
     ],
     folklore: [
       ["Do you fear me?", true, "Good. Manners, at last.", "Bold. Or foolish."],
-      ["Have you come with an offering?", true, "Then we may yet be friends.", "Then why speak to me at all?"],
+      ["Have you come to stay?", true, "Then we may yet be friends.", "Then why speak to me at all?"],
       ["Do you know my name?", "CHAOS", "Liar. But a pleasing one.", "Good. Keep it that way."],
     ],
   };
@@ -2043,7 +2158,7 @@
       e.stage = null; e.angered = true; demonTurn(st, lines);
       return;
     }
-    if (--e.left > 0) return demonAsks(st, e, lines);
+    if (--e.left > 0 && DEMON_ASK[e.family || "folklore"].some((_, i) => !e.asked.includes(i))) return demonAsks(st, e, lines);
     sizeUp(st, e, lines);
   }
   // The questions are over. Only some demons then ask for something (programs hardly ever); the rest

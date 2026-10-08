@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.49";
+  const VERSION = "v0.50";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -176,10 +176,10 @@
     const idx = moonIndex(now), when = hst(now, st.tz);
     const v = st.view;
     const view = renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
-    // Look controls at the foot of the 3D view: [<] and [>] turn KURA to look around (never move her),
+    // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
     // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
-    overlay(VH - 1, 18, `[<]  ${st.facing || "?"}  [>]`);
+    overlay(VH - 1, 16, `[ < ]  ${st.facing || "?"}  [ > ]`);
     overlay(VH - 2, 20, "[  ^  ]");          // the day's step: forward, the way KURA faces
     const moons = ["(     )", "(    ))", "(  ))))", "())))))", "(((O)))", "((((())", "((((  )", "((    )"];
     const names = ["NEW", "CRESC", "HALF", "GIBB", "FULL", "GIBB", "HALF", "CRESC"];
@@ -250,8 +250,9 @@
     // While KURA is tripping, the TURN counter shows what she thinks it is (st.turnShown).
     const face = `TURN ${String(Math.max(0, st.turnShown ?? st.steps ?? 0)).padStart(4, "0")}`, dayStr = `DAY ${String(st.day).padStart(2, "0")}`;
     // The room name sits first, then TURN, then DAY (11 characters fit).
-    const rname = String(st.roomName || "").toUpperCase().slice(0, 11), rgap = PW - 1 - rname.length - face.length - dayStr.length;
-    const bottom = " " + rname + " ".repeat(Math.max(1, Math.ceil(rgap / 2))) + face + " ".repeat(Math.max(1, Math.floor(rgap / 2))) + dayStr;
+    // The room name sits first (up to 11 characters, padded), then TURN and DAY at fixed spots, so they never shift with the name.
+    const rname = String(st.roomName || "").toUpperCase().slice(0, 11).padEnd(11);
+    const bottom = " " + rname + " " + face + " " + dayStr;
     // The moon strip: the eight phases as 3-column blocks (lit on the right while waxing), a . above today's.
     const PHASE = ["   ", "  ▓", " ▓█", "▓██", "███", "██▓", "█▓ ", "▓  "];
     // The dot sits over the middle of the lit part of today's cell (a half column right of the printed spot for the two quarters, which the page shifts).
