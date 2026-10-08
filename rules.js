@@ -126,16 +126,25 @@
     { data: 0, hardware: 1, hybrid: 4, folklore: 6 },
   ];
   const UNIQUE = { "ATOM SLASHER": { hp: 2, hit: 1.5, talks: false } };
+  // LOOP and LINGER. st.loop = { key, n } counts how many times in a row KURA has done the same thing (every action sets a key:
+  // "search:room:wall", "turn", "talk:party", "use:item"...; any different action starts again at 1). The room's linger counts
+  // every action taken in it. Alone, a long loop wears on KURA: whispers, then a TRIP, then something answers.
+  const LINGER_AT = 30;
+  const DREAD = { whisper: 8, trip: 15, answer: 25 };   // searching counts at half (it heats the room already)
   const A = n => (UNIQUE[n] ? n : (/^[AEIOU]/.test(n) ? "An " : "A ") + n), THE = n => (UNIQUE[n] ? n : "The " + n), the = n => (UNIQUE[n] ? n : "the " + n);
   // Pick a demon: the floor sets the families; noise and today's omen tilt them.
   // Repeating one wall draws data things; lingering in a room draws older things.
+  // How many times in a row KURA has searched the wall she is facing in this room.
+  function wallLoop(st) {
+    const d = st.dungeon, k = st.loop && st.loop.key;
+    return d && k && k.startsWith(`search:${d.at}:`) ? st.loop.n : 0;
+  }
   function pickDemon(st) {
     if (Math.random() < 0.03) return "ATOM SLASHER";
     const d = st.dungeon, w = { ...LADDER[Math.min(floorNum(st), 4) - 1] }, om = omen(clock(st)).fx;
-    const streak = d && d.streak && d.streak.room === d.at ? d.streak.count : 0;
-    const linger = d && d.linger ? d.linger[d.at] || 0 : 0;
-    if (streak >= 4) { w.data += 3; w.hardware += 2; }
-    if (linger >= 15) { w.folklore += 3; w.hybrid += 2; }
+    const wall = wallLoop(st), linger = d && d.linger ? d.linger[d.at] || 0 : 0;
+    if (wall >= 4) { w.data += 3; w.hardware += 2; }
+    if (linger >= LINGER_AT) { w.folklore += 3; w.hybrid += 2; }
     w.data *= om.data; w.hardware *= om.data; w.folklore *= om.folk; w.hybrid *= om.folk;
     const fams = Object.keys(w).filter(f => w[f] > 0), total = fams.reduce((n, f) => n + w[f], 0);
     let r = Math.random() * total;
@@ -192,8 +201,8 @@
     const after = heatTier(d.heat[d.at]);
     st.stats = st.stats || {}; st.stats.maxHeat = Math.max(st.stats.maxHeat || 0, d.heat[d.at]);
     if (after > before) {
-      const streak = d.streak && d.streak.room === d.at ? d.streak.count : 0, linger = (d.linger || [])[d.at] || 0;
-      const kind = streak >= 4 ? "data" : linger >= 15 ? "folk" : "plain";
+      const linger = (d.linger || [])[d.at] || 0;
+      const kind = wallLoop(st) >= 4 ? "data" : linger >= LINGER_AT ? "folk" : "plain";
       st.tell = HEAT_TELL[after][kind];
     }
     if (after !== before) { st.statusIn = 0; st.statusKind = "air"; }   // the conditions report updates right away
@@ -309,13 +318,39 @@
     const out = `${line}  [${reader.name}: "${text}"]`;
     return out.length > 77 && line.startsWith("> ") ? line : out;
   }
+
+  // DREAD: KURA alone, doing the same thing again and again. Whispers, then a TRIP, then something answers.
+  const DREAD_LINES = ["> The room seems to lean closer.", "> KURA has done this before. Hasn't she.", "> Something is counting.",
+    "> The silence has a shape now.", "> KURA's own breathing sounds like someone else's."];
+  function dread(st) {
+    st.dreadCheck = false;
+    const d = st.dungeon, k = st.party && st.party[0];
+    if (!d || !k || st.dead || st.encounter || st.question) return;
+    if (st.party.slice(1).some(p => p.hp > 0)) return;          // company keeps the dark away
+    const key = (st.loop && st.loop.key) || "", n = ((st.loop && st.loop.n) || 0) / (key.startsWith("search:") ? 2 : 1);
+    if (n >= DREAD.answer) {
+      const name = "ATOM SLASHER", u = UNIQUE[name];
+      const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * u.hp);
+      st.encounter = { name, family: familyOf(name), align: alignOf(name), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
+      st.round = ["Something answers.", `${name} steps out of the quiet.`];
+      st.loop = { key: "", n: 0 }; st.extra = "> It was listening the whole time."; st.extraUrgent = true;
+      note(st, "demons", name, "met"); tally(st, "met");
+    } else if (n >= DREAD.trip && !tripping(st)) {
+      k.status = "TRIP"; st.tripLeft = R(50, 100); st.turnShown = st.steps; tally(st, "trips");
+      st.extra = "> The walls lean in to listen. KURA is TRIPPING."; st.extraUrgent = true; st.statusIn = 0;
+    } else if (n >= DREAD.whisper && Math.random() < Math.min(0.6, 0.1 * (n - DREAD.whisper + 1))) {
+      st.extra = pick(DREAD_LINES.filter(l => l !== st.extra));
+    }
+  }
   function show(st) {
+    if (st.dreadCheck) dread(st);
     const d = st.dungeon, room = d.floor.rooms[d.at];
     if (st.round) st.round = st.round.map(l => translate(st, l));
     if (st.extra) st.extra = translate(st, st.extra);
     st.omenText = omen(clock(st)).text;                 // the omen, framed under the 3D view
     status(st);                                         // line 1
-    if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; } // a heat tell takes line 3 right away (not over a question)
+    st.extraUrgent = false;                             // the page holds line 3 for a moment, unless this is a warning
+    if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; st.extraUrgent = true; } // a heat tell takes line 3 right away (not over a question)
     st.map = FLOOR.minimap(d.floor, { ...d, facing: st.facing });
     const door = dir => dir in room.doors;
     if (st.dead) {
@@ -449,9 +484,13 @@
   // Searching, turning and the free actions are unlimited. Days follow the real calendar.
   const OVER = "> GAME OVER. Press [R]ESET to begin a new run.";
   const today = st => (st.today = st.today || { stepped: false });
-  function act(st) {                       // every action counts a STEP and marks the game unsaved
+  function bump(st, key) { st.loop = st.loop && st.loop.key === key ? { key, n: st.loop.n + 1 } : { key, n: 1 }; }
+  function act(st, key) {                  // every action counts a STEP and marks the game unsaved
     st.steps = (st.steps || 0) + 1;
     st.unsaved = true;
+    bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
+    if (st.dungeon) { const d = st.dungeon; d.linger = d.linger || [0, 0, 0]; d.linger[d.at] = (d.linger[d.at] || 0) + 1; }
+    st.dreadCheck = true;                  // show() looks at the loop once the action has finished
     st.statusIn = (st.statusIn ?? 0) - 1;  // line 1 (the status report) changes every 5-10 actions
     if (st.question) { st.question = null; }  // a question KURA walks away from just lapses
     if (tripping(st)) {
@@ -563,14 +602,12 @@
         "A door. Whatever's hidden, it isn't here.", "The door gives nothing away. It only opens.",
         "KURA checks the hinges. Old, but only hinges.", "Nothing behind the door but the way on."];
       st.log = "> " + pick(DOOR.filter(l => "> " + l !== st.log));
-      nag(st, "door");
+      bump(st, "door"); nag(st);
       return show(st);
     }
     if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { st.log = "> The stairs wait. Nothing more here."; return show(st); }
-    act(st);
-    // Heat, and what kind of noise KURA is making: the same wall again and again, or just staying.
-    d.streak = d.streak && d.streak.room === d.at && d.streak.dir === dir ? { ...d.streak, count: d.streak.count + 1 } : { room: d.at, dir, count: 1 };
-    d.linger = d.linger || [0, 0, 0]; d.linger[d.at]++;
+    act(st, `search:${d.at}:${dir}`);
+    // Heat: the loop and linger counts (see act) decide what kind of noise KURA is making.
     const chance = encounterChance(st);
     tally(st, "searches");
     lean(st, heatTier((d.heat || [])[d.at] || 0) >= 2 ? "hot" : "search");
@@ -610,7 +647,7 @@
     // A near-miss line only when it's true: this wall still hides something.
     const warm = w.taken[dir] < pile.length && Math.random() < 0.12;
     st.log = say(warm ? "The wall is warmer than the others." : pick(MISSES));
-    if (!nag(st, `search:${d.at}:${dir}`)) drift(st);
+    if (!nag(st)) drift(st);
     return show(st);
   }
 
@@ -639,7 +676,7 @@
     // and half the time the demon blocks it and strikes.
     if (st.encounter) {
       const e = st.encounter, lines = [];
-      act(st);
+      act(st, "run");
       today(st).stepped = true;
       lean(st, "run", lines);
       st.facing = dir;
@@ -656,7 +693,7 @@
       st.roundOver = true;
       st.round = [`KURA runs ${NAME[dir]} and leaves ${the(e.name)} behind.`, ...lines];
       tally(st, "fled");
-    } else act(st);
+    } else act(st, "go");
     const descending = d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at);
     // Taking the stairs down doesn't use the day's step; walking to another room does.
     if (!descending) { st.today.stepped = true; tally(st, "steps"); }
@@ -685,9 +722,9 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (!st.dungeon) return st;
     st.facing = how === "L" ? LEFT[st.facing] : RIGHT[st.facing];
-    act(st);
+    act(st, "turn");
     st.log = `> KURA turns to face ${NAME[st.facing]}. ${sight(st)}`;
-    if (!nag(st, "turn")) drift(st);
+    if (!nag(st)) drift(st);
     return show(st);
   }
 
@@ -802,7 +839,7 @@
     // Most things can't be used (yet). Trying anyway can break it: every try is a roll, so one battery
     // survives a dozen tries and the next snaps on the first. Rarer things are sturdier; MOON things never break.
     if (!info.use) {
-      act(st);
+      act(st, `use:${name}`);
       const the = name.replace(/^an? /, "the "), tier = TIER[name] || "COMMON", nat = natureOf(name), m = moon();
       // Spirit things are more fragile under a full moon and tougher at the new moon.
       const odds = BREAK[tier] * (nat === "spirit" ? (m === 4 ? 1.5 : m === 0 ? 0.5 : 1) : 1);
@@ -865,7 +902,7 @@
       return show(st);
     }
     st.items.splice(i, 1);
-    act(st);
+    act(st, `use:${name}`);
     info.use(st);
     st.log = `> KURA uses ${name}. ${info.say}`;
     return show(st);
@@ -913,7 +950,7 @@
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     if (!st.encounter) { if (idle) st.log = idle; return show(st); }
-    act(st);
+    act(st, "fight");
     st.encounter.round++;
     const lines = [];
     st.roundOver = false;
@@ -1067,7 +1104,7 @@
     const e = st.encounter;
     if (!e) return chat(st);
     if (e.stage) return show(st);                        // waiting on a YES/NO already
-    act(st);
+    act(st, "talk:demon");
     const lines = [];
     st.roundOver = false;
     st.log = `> Day ${st.day}. KURA speaks to ${the(e.name)}.`;
@@ -1185,7 +1222,7 @@
     "A voice below counts to seven, then stops.", 'A whisper: "We heard you the first time."'];
   function chat(st) {
     if (!ensureFloor(st)) return show(st);
-    act(st);
+    act(st, "talk:party");
     tally(st, "partyTalks");
     const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
     const odd = moon() === 4 ? 0.25 : 0.12;
@@ -1331,9 +1368,8 @@
     st.extra = "> " + BANTER_ASK[key][k][0].replace(/\{n\}/g, p.name);
     return true;
   }
-  function nag(st, key) {
-    st.loop = st.loop && st.loop.key === key ? { key, n: st.loop.n + 1 } : { key, n: 1 };
-    const n = st.loop.n, friends = (st.party || []).slice(1).filter(p => p.hp > 0);
+  function nag(st) {
+    const n = (st.loop && st.loop.n) || 0, friends = (st.party || []).slice(1).filter(p => p.hp > 0);
     if (n < 8 || !friends.length || Math.random() >= Math.min(0.5, 0.04 * (n - 7))) return false;
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; return true; }
@@ -1389,7 +1425,7 @@
     }
     const spent = (st.ichor || 0) - have;
     if (!spent) { st.log = (st.ichor || 0) ? "> No one in the party needs it." : "> There's no ICHOR left."; return show(st); }
-    act(st);
+    act(st, "ichor:feed");
     st.ichor = have;
     tally(st, "ichorFed", spent);
     st.log = `> ${fed.length === 1 ? fed[0] + " drinks" : "The party drinks"}. ICHOR -${spent}.`;
@@ -1411,7 +1447,7 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (!ensureFloor(st)) return show(st);
     if ((st.ichor || 0) < DRINK) { st.log = `> KURA needs ${DRINK} ICHOR to drink. There isn't enough.`; return show(st); }
-    act(st);
+    act(st, "ichor:drink");
     const k = st.party[0];
     st.ichor -= DRINK;
     k.hp = Math.min(k.hpmax, k.hp + 5);
@@ -1652,7 +1688,7 @@
     const g = gifts(st)[i];
     if (!g) return show(st);
     if (!g.ok) { st.round = [`KURA has only ${st.silver ?? 0} SILVER.`]; return show(st); }
-    act(st);
+    act(st, "give");
     e.round++; e.stage = null;
     const lines = [], who = `${e.name}: `, v = worth(e, g);
     st.roundOver = false;

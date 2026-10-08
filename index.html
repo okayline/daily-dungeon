@@ -203,11 +203,22 @@
         (l === "&lt;" ? '<span class="pull">&lt;</span>' : l) + t + (r === "&gt;" ? '<span class="pull">&gt;</span>' : r));
   }
 
+  // Line 3 (voices, flavor, clues) stays put for at least 2 actions and 2 seconds before the next one replaces it,
+  // so a quick run of clicks can't skip past it. Anything urgent (a warning, a hit, a new demon) takes over at once.
+  // Only what's drawn is held: the save and the LOG still get every line.
+  let heldExtra = null;                     // { text, steps, t }: the line on screen, and when it went up
+  const EXTRA_URGENT = /closes tonight|GAME OVER|TRIPPING|comes down|-\d+ HP|appears|blocks the way|comes to see what broke|FALLS|calendar|joins the party/i;
+  function extraToShow() {
+    const want = save.extra || "", now = Date.now(), steps = save.steps || 0, h = heldExtra;
+    const take = () => { if (!h || h.text !== want || steps < h.steps) heldExtra = { text: want, steps, t: now }; return want; };
+    if (!h || steps < h.steps || want === h.text || save.dead || save.question || save.extraUrgent || EXTRA_URGENT.test(want)) return take();
+    if (steps - h.steps >= 2 && now - h.t >= 2000) return take();
+    if (steps - h.steps >= 2) setTimeout(draw, h.t + 2000 - now + 30);   // the turns are up: wait out the clock
+    return h.text;
+  }
   function draw() {
     if (!save) return;
-    // While a step is waiting for its second press, line 3 asks for confirmation (never saved).
-    const extra = save.extra || "";
-    document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extra));
+    document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extraToShow()));
   }
 
   // Every player's run lives in their own browser and saves itself after every action.

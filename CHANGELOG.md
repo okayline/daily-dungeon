@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.33 - Oct 7 2026, 16:45 HST
+
+- **Text lines hold for two turns and two seconds.** Line 3 stays on screen until KURA has taken two more actions and two seconds have passed, so fast clicking can't skip past it. Warnings (a demon, damage, a closing way down, game over) still replace it at once.
+- **One loop counter.** Doing the same thing over and over is now a single count for everything (searching, turning, walking, items, fighting, talking). The old separate streak is gone. Searching a wall still counts at half. The party gets restless as before.
+- **Lingering counts every action in a room**, and the trigger is now 30.
+- **Dread, when KURA is alone.** Repeat the same action about 8 times and the room starts to whisper. At 15 she starts TRIPPING. At 25, something answers: ATOM SLASHER (it can't be talked to, tough and hits hard). Company keeps the dark away.
+
 ## v0.32 - Oct 7 2026, 16:19 HST
 
 ![v0.32](screenshots/v0.32.png)
