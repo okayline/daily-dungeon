@@ -2,6 +2,20 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.36 - Oct 7 2026, 18:45 HST
+
+![v0.36](screenshots/v0.36.png)
+
+- **One key a day, and a floor that grows.** The day's one move is now one *new door*. Opening a locked door uses the day's key (a popup asks first: "UNLOCK THE EAST DOOR?"); a door that's already open is free, so you can walk back through rooms you've cleared as much as you like. With the key spent, a locked door stays shut. `STA[N]DBY` spends the key and earns the deeper rest, as before.
+- **Locked doors show.** On the map an unopened door is a `+`; on the door itself in the 3D view the knob becomes a `+`.
+- **A bigger, branching map (up to 12 rooms), built a door at a time.** Rooms are no longer in a line or an L: each has 1 or 2 new doors (the start room 2 or 3), on a 5x5 grid. Nothing past the door exists until it's opened, and then the room's kind is rolled with no thought for the party.
+- **The stairs are fixed from the start.** Each floor hides a path of 2 to 4 doors to the stairs (shorter when fewer days are left, so a floor can always be finished). A room on the path always has one door onward, plus others that lead elsewhere, so some doors get closer and some don't. About 6 floors in 10 also hide a locker (`?`) one door off the path; its `?` glows on the map until found.
+- **Clues come from elsewhere.** A stairs or locker clue only appears two or three doors away, never in the room or next to the room it's about; the stairs room looks like any other. The Signal Relay points along the real path.
+- **Passages.** Two places in five are a narrow passage: no kind, 0 or 1 hidden things, two more locked doors, and no demons at all (none hidden, none wander in, not even a dread answer). On the map a visited passage is `[:]`.
+- **Revisits do half.** Coming back to a Den, Bay, Forge or Altar once a day works at half strength: the Den starts half as hot, the Bay heals half as much, the Forge halves taint without ending a TRIP, and an Altar that's already taken an offering shifts you half as much.
+- **Fight popup.** The art frame is on top, then the enemy's name and HP bar with `ROUND #` at the right, then `> KURA` and the text, indented in from the edge.
+- Runs saved before this change start over (the floors work differently now). Fixed a few lines that were too long for the log.
+
 ## v0.35 - Oct 7 2026, 18:03 HST
 
 ![v0.35](screenshots/v0.35.png)

@@ -79,6 +79,7 @@
   .foundbox.inframe { left: auto; top: auto; transform: none; border: none; outline: 1px solid var(--trail); box-shadow: none;
     box-sizing: border-box; overflow: hidden; cursor: default; }
   .foundbox.inframe pre { text-align: left; }
+  .foundbox.fight pre { padding: 0 2ch; }   /* the fight box's text sits in from the edge */
   .foundbox.inframe .brow { display: flex; justify-content: space-between; }
   .foundbox .artframe { color: var(--trail); }
   .foundbox .arrow { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
@@ -302,7 +303,7 @@
     await syncTime();
     let s = null;
     try { s = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
-    if (s && s.dungeon && s.party) { save = s; tick(); flashStatus(); draw(); encounterBox(); altarBox(); return; }
+    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 4 && s.party) { save = s; tick(); flashStatus(); draw(); encounterBox(); altarBox(); return; }
     save = RULES.reset({});
     save.history = [];
     remember("");
@@ -360,13 +361,13 @@
     if (!got || got.trim() === code) return;
     try {
       const s = JSON.parse(decodeURIComponent(escape(atob(got.trim()))));
-      if (!s.dungeon || !s.party) throw new Error("not a run");
+      if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 4) throw new Error("not a run");
       if (!confirm("Replace this run with the one from the password?")) return;
       save = s; tick(); persist(); draw();
     } catch (e) { alert("That password didn't work. Nothing was changed."); }
   }
 
-  // N/S/E/W take the day's step, SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
+  // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
   let invList = [], invSel = 0, invMsg = "", logGlow = false;
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
@@ -442,11 +443,11 @@
     const line = "-".repeat(71);
     box.querySelector("pre").textContent = [
       "DAILY DUNGEON" + ("build " + SMT.VERSION).padStart(58), line,
-      "A dungeon crawler you play one step a day, on the real calendar.",
+      "A dungeon crawler you play one key a day, on the real calendar.",
       "Each floor's way down closes at the end of Sunday. The moon, the",
       "omens and the demons all follow real time.", "",
       "Search as much as you like. Talk to demons, or fight them.",
-      "Take your one step. Come back tomorrow.", "",
+      "Open your one new door. Come back tomorrow.", "",
       "THIS RUN",
       two("Floor", save.floor, "Day", save.day),
       two("Turns", save.steps || 0, "Alignment", String(save.align).slice(0, 3)),
@@ -454,14 +455,15 @@
       "CODEX",
       two("Demons", count(cx.demons), "Items", count(cx.items)), "",
       "KEYS",
-      "  [^] / up arrow ..... take the day's one step, the way KURA faces",
+      "  [^] / up arrow ..... go through the door KURA faces (a new door takes the day's key)",
       "  [<] [>] / arrows ... turn (free)",
+      "  + .................. a locked door, on the map and on the door itself",
       "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
       "  [G]IVE ............. facing a terminal in the wall: make an offering (SEARCH it works too)",
-      "  STA[N]DBY .......... stay put today (uses the day's step; tonight's rest runs deeper)",
+      "  STA[N]DBY .......... stay put today (uses the day's key; tonight's rest runs deeper)",
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
       "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
-      "  [^] in a fight ..... run through a door (uses the day's step; it may block you)",
+      "  [^] in a fight ..... run through a door (a locked one uses the key; it may block you)",
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "  1-8 ................ pick a gift when a demon asks for one",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
@@ -522,8 +524,8 @@
     showInv(true);
   }
 
-  // The day's one step takes two presses: the first arms it, the second (same direction) moves.
-  // Anything else cancels. A wall or an already-used step answers on the first press.
+  // Opening a locked door takes two presses: the first arms it, the second (same direction) turns the key.
+  // Anything else cancels. Open doors, a wall or an already-spent key answer on the first press.
   const NAMES = { N: "NORTH", S: "SOUTH", E: "EAST", W: "WEST" };
   let armed = null, armTimer = null;
   function disarm() { armed = null; clearTimeout(armTimer); }
@@ -536,9 +538,9 @@
     floatBox(box);
     pre.innerHTML = "";
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
-    add(again ? "ARE YOU REALLY SURE?" : `GO ${NAMES[dir]}?`, "gold");
+    add(again ? "ARE YOU REALLY SURE?" : `UNLOCK THE ${NAMES[dir]} DOOR?`, "gold");
     add(" ");
-    add(again ? "This is your only move for the day." : "This uses today's one step.");
+    add(again ? "Only one new door a day. Today's key is gone once it turns." : "This uses today's key. A door already open is free.");
     add(" ");
     const row = document.createElement("div"), opt = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.cact = a; return e; };
     row.append(opt("[ YES ]", "yes"), "    ", opt("[ NO ]", "no"));
@@ -674,8 +676,8 @@
     const e = save && save.encounter, lines = (save && save.round) || [];
     if (!e && !(save && save.roundOver)) return false;
     const box = document.getElementById("found"), pre = box.querySelector("pre");
-    const COLS = 45, ROWS = 14;                        // text area of the box: 47 columns less the padding, 15 rows less the padding
-    box.className = "foundbox inframe"; box.removeAttribute("style");
+    const COLS = 41, ROWS = 14;                        // text area of the fight box: 47 columns less the padding and a 2-column indent each side, 15 rows less the padding
+    box.className = "foundbox inframe fight"; box.removeAttribute("style");
     box.hidden = false;
     placeInView(box, 15);
     box.dataset.mode = e ? "encounter" : "done";
@@ -735,9 +737,16 @@
         }
         add(" ");
       }
-      const arrow = (on, text, cls) => { const d = document.createElement("div"); const a = document.createElement("span"); a.textContent = on ? "> " : "  "; if (on) a.className = "arrow"; d.append(a, document.createTextNode(text)); if (cls) d.className = cls; pre.appendChild(d); };
+      const arrow = (on, text, cls, tag) => {
+        const d = document.createElement("div"); const a = document.createElement("span"); a.textContent = on ? "> " : "  "; if (on) a.className = "arrow";
+        const left = document.createElement("span"); left.style.whiteSpace = "pre"; left.append(a, document.createTextNode(text));   // one block, so the flex row keeps the arrow's two columns
+        d.append(left); if (cls) d.className = cls;
+        if (tag) { d.classList.add("brow"); const t = document.createElement("span"); t.textContent = tag; t.className = "artframe"; d.append(t); }   // ROUND, at the right, under the art
+        pre.appendChild(d);
+      };
+      // The enemy sits above KURA, under the art, with the round counter at the right end of its row.
+      arrow(who === "demon", `${e.name}   ${barFor(shown >= 1 || final || prevDemonHp === null ? e.hp : prevDemonHp)}`, "demon", `ROUND ${round}`);
       arrow(who === null, "KURA");
-      arrow(who === "demon", `${e.name}   ${barFor(shown >= 1 || final || prevDemonHp === null ? e.hp : prevDemonHp)}`, "demon");
       for (const [w, c] of body) add(w, c);
       const rest = ROWS - (art ? art + 1 : 0) - 2 - body.length - 1;
       for (let i = 0; i < rest; i++) add(" ");
@@ -750,8 +759,8 @@
           left.append(opt("[N]O", "swap-none"));
         } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[G]IVE", "offer"));
       }
-      const tag = document.createElement("span"); tag.textContent = `ROUND ${round}`; tag.className = "artframe";
-      row.append(left, tag); pre.appendChild(row);
+      row.append(left);
+      pre.appendChild(row);
     };
 
     if (animate && lines.length > 1 && !e.stage) {     // play the round back: the > moves to whoever acts
@@ -785,7 +794,7 @@
     if (name !== "invoke" && name !== "codex") logGlow = false;
     if (name.startsWith("go-") && save) {
       const dir = name.slice(3);
-      if (armed !== dir && RULES.available(save)[dir]) {
+      if (armed !== dir && RULES.available(save)[dir] && RULES.isLocked(save, dir)) {   // only a locked door asks: it takes the key
         disarm(); armed = dir;
         draw(); confirmBox(dir);
         return;
@@ -805,7 +814,7 @@
     if (name === "backup") return backup();
     if (!save) return;
     if (name === "reset" && !confirm("Begin a new run? This run will be lost.")) return;
-    if (name === "hold" && !confirm("Go on standby for the day? KURA won't step today, and tonight's rest runs deeper.")) return;
+    if (name === "hold" && !confirm("Go on standby for the day? KURA won't open a new door today, and tonight's rest runs deeper.")) return;
     const log = save.log, steps = save.steps;
     const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
