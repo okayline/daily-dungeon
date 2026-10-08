@@ -700,11 +700,13 @@
     box.hidden = false;
     box.dataset.mode = "found";
   }
+  let queuedNotice = null;
   function closeFound() {
     document.getElementById("found").hidden = true;
     if (blockedRun) { blockedRun = false; encounterBox(true); return; }
     if (afterBreak) { afterBreak = false; if (save && save.encounter) { encounterBox(); return; } showInv(true); return; }
     if (save && save.roundOver) { delete save.round; delete save.roundOver; persist(); draw(); }
+    if (queuedNotice) { const q = queuedNotice; queuedNotice = null; noticeBox(q); return; }
     endLog();
   }
 
@@ -811,12 +813,17 @@
     const lineClass = l => /falls\.  \+|leaves|slips away|pays|escapes/.test(l) ? "gold" : /KURA falls|FALLS/.test(l) ? "demon" : "";
     const isDemon = l => { if (!e) return false; const u = l.toUpperCase(), n = e.name.toUpperCase(); return u.startsWith(n + ":") || u.startsWith("THE " + n) || u.startsWith(n + " "); };
     const tail = (arr, n) => arr.slice(Math.max(0, arr.length - n));
+    // The art slot: the same faint frame the fight box has, kept in the popups around it so the picture has room there too.
+    const artSlot = n => { for (let i = 0; i < n; i++) add(i === 0 ? "." + " ".repeat(COLS - 2) + "." : i === n - 1 ? "'" + " ".repeat(COLS - 2) + "'" : " ".repeat(COLS), "artframe"); add(" "); };
 
     if (!e) {                                          // the fight is over
       pre.innerHTML = "";
+      const wl = []; for (const l of lines) for (const w of wrapText(l, COLS)) wl.push([w, lineClass(l)]);
+      const dArt = Math.min(5, ROWS - 4 - wl.length - 1);      // title, blank, text, blank, [ OK ]
+      if (dArt >= 3) artSlot(dArt);
       add(save.dead ? "DEFEAT" : "THE WAY IS CLEAR", save.dead ? "demon" : "gold");
       add(" ");
-      for (const l of lines) for (const w of wrapText(l, COLS)) add(w, lineClass(l));
+      for (const [w, c] of wl) add(w, c);
       add(" ");
       add("[ OK ]", "btn");
       return true;
@@ -826,9 +833,12 @@
       pre.innerHTML = "";
       box.dataset.mode = "intro";
       introAt = Date.now();
+      const said = [save.extra && save.extra.includes(e.name) ? save.extra : null, ...lines].filter(Boolean).map(l => String(l).replace(/^> /, ""));
+      const iRows = said.reduce((n, l) => n + wrapText(l, COLS).length + 1, 0);
+      const iArt = Math.min(5, ROWS - 2 - iRows - 1);          // title, blank, text (+ a blank after each), [ OK ]
+      if (iArt >= 3) artSlot(iArt);
       add(`${e.name} APPEARS`, "demon");
       add(" ");
-      const said = [save.extra && save.extra.includes(e.name) ? save.extra : null, ...lines].filter(Boolean).map(l => String(l).replace(/^> /, ""));
       for (const l of said) { for (const w of wrapText(l, COLS)) add(w); add(" "); }
       const row = document.createElement("div"), ok = document.createElement("span");
       ok.textContent = "[ OK ]"; ok.className = "btn"; ok.dataset.intro = "1"; row.append(ok); pre.appendChild(row);
@@ -994,7 +1004,7 @@
     if (name === "reset") {
       save.history = [];
       if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
-      heldExtra = null; logGlow = false; invSel = 0;
+      heldExtra = null; logGlow = false; invSel = 0; queuedNotice = null;
     }
     remember(name === "reset" || save.steps !== steps ? "" : log);
     persist(); draw();
@@ -1006,14 +1016,17 @@
     if (name !== "reset" && !encounterBox(true) && !altarBox()) {
       foundBox(before);
       // Nothing else opened: if this action brought something significant, say so in a box.
-      if (document.getElementById("found").hidden && !save.encounter) {
+      if (!save.encounter) {
         const lines = [];
         // Someone left the party (the log line can be hidden behind a repeat, so go by the party itself).
         const gone = partyBefore.filter(n => !(save.party || []).some(p => p.name === n));
         if (gone.length) lines.push(`${gone.join(" and ")} leaves the party.`);
         else if (save.log !== log && SIGNIFICANT.test(save.log)) lines.push(save.log.replace(/^> /, ""));
         if (save.extra && save.extra !== exBefore && (gone.length || SIGNIFICANT.test(save.extra))) lines.push(save.extra.replace(/^> /, ""));
-        if (lines.length) noticeBox(lines);
+        if (lines.length) {
+          if (document.getElementById("found").hidden) noticeBox(lines);
+          else if (gone.length) queuedNotice = lines;      // something else is open (a find, say): the exit waits its turn
+        }
       }
     }
   }

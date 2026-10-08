@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.46 - Oct 7 2026, 23:19 HST
+
+![v0.46](screenshots/v0.46.png)
+
+Fight popups get art space, a clearer cell, and a party exit that always says so.
+
+- **Fight popups:** "APPEARS" and "THE WAY IS CLEAR" keep the same art frame the fight box has.
+- **Cell:** `CELL [##]` when charged and `CELL [  ]` when spent, so the spare `[+]` stays put.
+- **A party member leaving** now always gets its popup, even when a find was already open (it waits its turn).
+
 ## v0.45 - Oct 7 2026, 23:09 HST
 
 ![v0.45](screenshots/v0.45.png)

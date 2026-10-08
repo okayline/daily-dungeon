@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.45";
+  const VERSION = "v0.46";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -272,7 +272,7 @@
     // The day's step is the [^] button in the 3D view now; the right side waits for answers ([Y]ES [N]O, later).
     // While a party member's question is open, [Y]ES and [N]O take STA[N]DBY's place at the right end of this bar
     // (nothing else can be done until it's answered anyway), so the log lines above keep their full width.
-    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", cell = `CELL [${(st.today || {}).stepped && !st.freeSteps ? " " : "#"}]${st.spare > 0 ? "[+]" : ""}`,   // today's charge, and a stored spare
+    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", cell = `CELL [${(st.today || {}).stepped && !st.freeSteps ? "  " : "##"}]${st.spare > 0 ? "[+]" : ""}`,   // today's charge, and a stored spare
       daily = st.question ? " ".repeat(18) + "[Y]ES   [N]O " : cell.padEnd(15) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
