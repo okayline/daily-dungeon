@@ -331,7 +331,7 @@
     persist(); draw(); nameBox();
   }
 
-  // LOG: the run's adventure log, newest first. Click, L or Escape closes it.
+  // LOG: the run's adventure log, newest first. [C]LOSE, L or Escape closes it.
   // The log as plain text, for the download and copy buttons.
   let logText = "";
   function downloadLog() {
@@ -350,6 +350,7 @@
   // THE NAME: asked when a run begins (and on an old save that has none). It follows PARTY in the sidebar and goes on the board.
   const needsName = () => !!(save && !save.dead && (!save.playerName || save.needName));
   function nameBox() {
+    if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     if (!needsName()) { if (box.dataset.mode === "name") { box.hidden = true; box.dataset.mode = ""; pre.innerHTML = ""; } return false; }
     box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
@@ -357,21 +358,33 @@
     box.dataset.mode = "name";
     pre.innerHTML = "";
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
-    const PAD = " ".repeat(10);
+    const PAD = " ".repeat(10), IN = 23, say = "> WHO ARE YOU?";
     add(PAD + ".-----------------------.", "artframe");
-    add(PAD + "| > WHO ARE YOU?        |", "artframe screen");
-    add(PAD + "|_.--'''-.___.--'''-.___|", "artframe screen");
+    const s1 = document.createElement("div"), s2 = document.createElement("div");
+    s1.className = s2.className = "artframe screen";
+    pre.append(s1, s2);
     add(PAD + "'-----------------------'", "artframe");
-    add(" "); add(" ");
+    add(" ", ""); add(" ", "");
     const row = document.createElement("div"), inp = document.createElement("input");
     inp.className = "nameinput"; inp.id = "playername"; inp.maxLength = 10; inp.spellcheck = false; inp.autocomplete = "off"; inp.value = save.playerName || "";
     row.append("  NAME  ", inp);
     pre.appendChild(row);
+    const warn = add("  3 TO 10 LETTERS, NUMBERS, SPACE _ . -", "dim"); warn.id = "namewarn";
     add(" ");
-    add("  3 TO 10 LETTERS, NUMBERS, SPACE _ . -", "dim");
-    add(" ");
-    const go = document.createElement("div"), b = document.createElement("span");
-    b.className = "btn"; b.dataset.namego = "1"; b.textContent = "  [ENTER] BEGIN"; go.appendChild(b); pre.appendChild(go);
+    const go = document.createElement("div"), btn = document.createElement("span");
+    btn.className = "btn"; btn.dataset.namego = "1"; btn.textContent = "  [ENTER] BEGIN"; go.appendChild(btn); pre.appendChild(go);
+    // the terminal screen: line 1 types the question, line 2 is the same drifting wave as the altar's
+    const WAVE = ["_", ".", "-", "'"];
+    let tick = 0;
+    const paint = () => {
+      const typed = Math.min(say.length, Math.floor(tick / 2));
+      let w = ""; for (let x = 0; x < IN; x++) w += WAVE[Math.round((Math.sin((x - tick * 0.35) * 2 * Math.PI / 11) + 1) / 2 * 3)];
+      s1.textContent = PAD + "|" + (" " + say.slice(0, typed) + (typed >= say.length ? (Math.floor(tick / 8) % 2 === 0 ? "_" : " ") : "_")).padEnd(IN) + "|";
+      s2.textContent = PAD + "|" + w + "|";
+      tick++;
+    };
+    paint();
+    altarTimer = setInterval(paint, 55);
     setTimeout(() => { inp.focus(); inp.select(); }, 50);
     return true;
   }
@@ -379,7 +392,12 @@
     const inp = document.getElementById("playername");
     if (!inp || !needsName()) return;
     const next = RULES.setName(save, inp.value);
-    if (next === save) { inp.classList.add("bad"); setTimeout(() => inp.classList.remove("bad"), 400); return; }   // not a good name: nothing happens
+    if (next === save) {                                   // not a good name: say so
+      const w = document.getElementById("namewarn"), v = inp.value.trim();
+      if (w) { w.textContent = !v ? "  TYPE A NAME FIRST." : v.length < 3 ? "  TOO SHORT: AT LEAST 3 CHARACTERS." : v.length > 10 ? "  TOO LONG: 10 CHARACTERS AT MOST." : "  LETTERS, NUMBERS, SPACE _ . - ONLY."; w.className = "demon"; }
+      inp.focus(); return;
+    }
+    if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
     save = next; persist(); nameBox(); draw();
     restoreBoxes();
   }
@@ -404,22 +422,26 @@
   }
   // In X mode (the infinite-steps cheat) the board becomes an admin list: up/down pick a row, D deletes it (needs the Worker's ADMIN_KEY).
   let boardData = null, boardSel = 0;
+  function boardHead(pre, rest) {                  // "LEADERBOARD ... [C]LOSE", the close as a real button
+    const c = document.createElement("span"); c.className = "btn"; c.dataset.close = "1"; c.textContent = "[C]LOSE";
+    pre.textContent = ""; pre.append("LEADERBOARD".padEnd(41), c, "\n" + rest);
+  }
   function renderBoard() {
     const pre = document.querySelector("#board pre"), d = boardData, admin = !!(save && save.freeSteps);
     const row = (rank, x, sel) => `${sel ? ">" : x.you ? (admin ? "*" : ">") : " "} ${String(rank).padStart(3)}  ${x.name.toUpperCase().padEnd(10)}  ${("B" + x.floor + "F").padEnd(5)} ${String(x.days).padStart(4)}  ${String(x.demons).padStart(6)}  ${String(x.turns).padStart(6)}`;
-    const lines = ["LEADERBOARD".padEnd(41) + "[C]LOSE", "", "  RANK  NAME        FLOOR  DAYS  DEMONS   TURNS", ""];
+    const lines = ["", "  RANK  NAME        FLOOR  DAYS  DEMONS   TURNS", ""];
     d.rows.forEach((x, i) => lines.push(row(i + 1, x, admin && i === boardSel)));
     if (!d.rows.length) lines.push("  Nobody yet.");
     if (d.you) lines.push("  ...", row(d.you.rank, { ...d.you, you: true }));
     lines.push("", admin ? "  X MODE: up/down choose, [D]ELETE removes it." : "  Ranked by floor, then days. Turns are for show.");
-    pre.textContent = lines.join("\n");
+    boardHead(pre, lines.join("\n"));
   }
   async function loadBoard() {
     const pre = document.querySelector("#board pre");
     try {
       const r = await fetch(`${LEADERBOARD_URL}/top?n=20&run=${encodeURIComponent((save && save.runId) || "")}`);
       boardData = await r.json(); boardSel = Math.max(0, Math.min(boardSel, boardData.rows.length - 1)); renderBoard();
-    } catch (e) { console.error("board", e.message); boardData = null; pre.textContent = "LEADERBOARD".padEnd(41) + "[C]LOSE\n\nCOULD NOT REACH THE BOARD."; }
+    } catch (e) { console.error("board", e.message); boardData = null; boardHead(pre, "\nCOULD NOT REACH THE BOARD."); }
   }
   async function deleteEntry() {
     const x = boardData && boardData.rows[boardSel];
@@ -439,7 +461,7 @@
     box.hidden = !open;
     if (!open) return;
     boardSel = 0;
-    box.querySelector("pre").textContent = "LEADERBOARD".padEnd(41) + "[C]LOSE\n\nLOADING...";
+    boardHead(box.querySelector("pre"), "\nLOADING...");
     loadBoard();
   }
   function toggleLog(force) {
@@ -471,9 +493,9 @@
       if (LEADERBOARD_URL && save && save.dead) {
         const row = document.createElement("div");
         row.className = "submitrow";
-        if (save.submitted) row.append(`POSTED AS ${save.submitted.name}.  RANK ${save.submitted.rank}.  `, button("[B]OARD", "board"));
+        if (save.submitted) row.append(`POSTED AS ${String(save.submitted.name).toUpperCase()}.  RANK ${save.submitted.rank}.  `, button("[B]OARD", "board"));
         else {
-          row.append(`POST YOUR SCORE AS ${String(save.playerName || "?").toUpperCase()}  `, button("[ENTER] SEND", "submit"), " ", button("[B]OARD", "board"));
+          row.append(button(`[P]OST YOUR HIGH SCORE AS ${String(save.playerName || "?").toUpperCase()}`, "submit"), document.createElement("br"), button("[B]OARD", "board"));
         }
         const msg = document.createElement("div"); msg.id = "scoremsg"; msg.textContent = " ";
         post.push(row, msg);
@@ -653,15 +675,16 @@
       "                       or paste one in to continue that run",
       "  [R]ESET ............ start a new run       [?] this page",
       "",
-      "Made by okayline.   [?] or Esc closes",
+      "Made by okayline.   [?] or {{CLOSE}}",
     ].join("\n");
-    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{PASS}}", '<span class="btn" data-pass>[P]ASSWORD</span>').replace("{{BOARD}}", '<span class="btn" data-board>[B]OARD</span>');
+    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{PASS}}", '<span class="btn" data-pass>[P]ASSWORD</span>').replace("{{BOARD}}", '<span class="btn" data-board>[B]OARD</span>').replace("{{CLOSE}}", '<span class="btn" data-close>[ESC] CLOSE</span>');
   }
   document.getElementById("about").addEventListener("click", e => {
-    showAbout(false);
-    if (e.target.closest("[data-codex]")) { codexSel = -1; showCodex(true); }   // the link in the help page
-    if (e.target.closest("[data-pass]")) backup();                              // PASS lives here now
-    if (e.target.closest("[data-board]")) toggleBoard(true);
+    // Only its own buttons do anything; a click elsewhere on the page leaves it open.
+    if (e.target.closest("[data-close]")) return showAbout(false);
+    if (e.target.closest("[data-codex]")) { showAbout(false); codexSel = -1; showCodex(true); }   // the link in the help page
+    else if (e.target.closest("[data-pass]")) { showAbout(false); backup(); }                      // PASS lives here now
+    else if (e.target.closest("[data-board]")) { showAbout(false); toggleBoard(true); }
   });
 
   // CODEX: every demon met and item found, over all runs. Unknown ones show as ???.
@@ -695,7 +718,8 @@
       add(`${i === codexSel ? ">" : " "}   ${x.known ? x.name : "???"}`, (i === codexSel ? "sel " : "") + (x.known ? "btn" : "dim btn"), i);
     });
     add(" ");
-    add("[D]EMONS / [I]TEMS   arrows or click choose   [C] or Esc closes");
+    const foot = add("[D]EMONS / [I]TEMS   arrows or click choose   ");
+    const cb = document.createElement("span"); cb.className = "btn"; cb.dataset.close = "1"; cb.textContent = "[C]LOSE"; foot.append(cb);
   }
   function useInv(i, drink) {
     const it = invList[i];
@@ -974,9 +998,9 @@
 
     if (!e) {                                          // the fight is over
       pre.innerHTML = ""; doneAt = Date.now();
-      const wl = []; for (const l of lines) for (const w of wrapText(l, COLS)) wl.push([w, lineClass(l)]);
       // The fallen enemy's last words sit on the line right under the art (only when this screen is a win).
       const won = lines.some(l => /falls\.  \+|burns out\.  \+/.test(l));
+      const wl = []; for (const l of lines) { if (won && !/falls\.  \+|burns out\.  \+/.test(l)) continue; for (const w of wrapText(l, COLS)) wl.push([w, lineClass(l)]); }   // a win shows only the fall line
       const last = won && save.lastLine ? wrapText(save.lastLine, COLS) : [];
       const dArt = Math.min(5, ROWS - 4 - wl.length - 1 - (last.length ? last.length + 1 : 0));      // title, blank, text, blank, [ OK ], and the quote with a blank under it
       if (dArt >= 3) {
@@ -1217,10 +1241,9 @@
     if (e.target.closest(".submitrow")) return;                      // typing a name must not close the log
     if (e.target.closest("[data-download]")) return downloadLog();
     if (e.target.closest("[data-copy]")) return copyLog(e.target.closest("[data-copy]"));
-    toggleLog(false);
-    if (e.target.closest("[data-codex]")) { codexSel = -1; showCodex(true); }
+    if (e.target.closest("[data-close]")) toggleLog(false);          // only [C]LOSE (or C, L, Esc): never a click anywhere
   });
-  document.getElementById("board").addEventListener("click", () => { if (!(save && save.freeSteps)) toggleBoard(false); });
+  document.getElementById("board").addEventListener("click", e => { if (e.target.closest("[data-close]")) toggleBoard(false); });
   document.getElementById("found").addEventListener("click", e => {
     if (document.getElementById("found").dataset.mode === "name") { if (e.target.closest("[data-namego]")) confirmName(); return; }
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
@@ -1232,15 +1255,15 @@
     if (mode === "pass") return;                 // clicking a field to paste must not close the box
     const c = e.target.closest("[data-cact]");
     if (c) return answerConfirm(c.dataset.cact === "yes");
-    if (document.getElementById("found").dataset.mode === "confirm") return answerConfirm(false);
+    if (mode === "confirm") return;                  // only its YES / NO buttons (or the keys): a stray click is not an answer
     const b = e.target.closest("[data-fact]");
     if (b) act(b.dataset.fact);
     else if (mode === "found" || mode === "done") { if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
     else if (mode === "altar" && save.altar && save.altar.script && !save.altar.result && save.altar.page < save.altar.script.length - 1) act("altar-next");   // a click brings the terminal's next line
     else if (mode === "altar" || mode === "encounter") return;                   // their own buttons only
-    else closeFound();
+    else if (e.target.closest(".btn")) closeFound();   // any other box: only its [ OK ]
   });
-  // Clicking an item chooses it; clicking the chosen one again uses it. Clicking elsewhere closes.
+  // Clicking an item chooses it; clicking the chosen one again uses it. Only [C]LOSE, I or Esc closes it.
   document.getElementById("inv").addEventListener("click", e => {
     if (e.target.closest("[data-use]")) return useInv(invSel);
     if (e.target.closest("[data-close]")) { showInv(false); if (save && save.encounter) encounterBox(); return; }
@@ -1255,7 +1278,7 @@
     const tab = e.target.closest("[data-tab]"), line = e.target.closest("[data-i]");
     if (tab) { codexTab = tab.dataset.tab; codexSel = -1; showCodex(true); }
     else if (line) { codexSel = Number(line.dataset.i); showCodex(true); }
-    else showCodex(false);
+    else if (e.target.closest("[data-close]")) showCodex(false);     // only [C]LOSE (or C, Esc)
   });
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1337,7 +1360,7 @@
     }
     if (!document.getElementById("log").hidden) {
       if (key === "l" || key === "c" || key === "escape") { e.preventDefault(); toggleLog(false); }
-      else if (key === "enter") { e.preventDefault(); submitScore(); }
+      else if (key === "enter" || key === "p") { e.preventDefault(); submitScore(); }
       else if (key === "o") { e.preventDefault(); copyLog(document.querySelector("#log [data-copy]")); }
       else if (key === "d") { e.preventDefault(); downloadLog(); }
       return;

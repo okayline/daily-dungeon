@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.55 - Oct 8 2026, 04:14 HST
+
+![v0.55](screenshots/v0.55.png)
+
+Tidier screens.
+
+- **Popups:** they now close only with their own button or key, never by clicking anywhere.
+- **Victory:** just the fallen enemy's last words, then the way is clear.
+- **Names:** always shown in capitals; the end screen's post line is easier to read.
+
 ## v0.54 - Oct 8 2026, 04:01 HST
 
 ![v0.54](screenshots/v0.54.png)

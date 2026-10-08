@@ -1460,7 +1460,7 @@
   const LAST_BEAST = ["CU SITH lies down and doesn't get up.", "CU SITH sighs, once, like a bellows."];
   function lastWords(e) {
     if (beast(e)) return pick(LAST_BEAST);
-    return `${THE(e.name)}: "${pick([...(LAST_WORDS[e.family] || LAST_WORDS.folklore), ...LAST_ANY])}"`;
+    return `"${pick([...(LAST_WORDS[e.family] || LAST_WORDS.folklore), ...LAST_ANY])}"`;
   }
   function win(st, lines, burned) {
     const e = st.encounter;
@@ -2594,7 +2594,7 @@
   function setName(st, name) {                             // the player's name, asked at the start of every run
     name = String(name || "").trim().replace(/\s+/g, " ");
     if (!NAME_OK.test(name)) return st;
-    st = copy(st); st.playerName = name; delete st.needName;
+    st = copy(st); st.playerName = name.toUpperCase(); delete st.needName;
     return st;
   }
   const score = st => ({ run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: (st.stats || {}).beaten || 0, turns: st.steps || 0 });
