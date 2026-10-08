@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.35 - Oct 7 2026, 18:03 HST
+
+![v0.35](screenshots/v0.35.png)
+
+- **Under the hood: each room keeps its own record.** Everything the game remembers about a room (visited, what's been found, heat, linger, the daily marks for the room kinds and the Altar, its wall contents) now lives in one place per room, instead of five lists that all assumed three rooms. Nothing about how the game plays changes. It's the groundwork for a bigger, branching map. Runs saved the old way convert themselves the first time they load, with every value kept.
+
 ## v0.34 - Oct 7 2026, 17:53 HST
 
 ![v0.34](screenshots/v0.34.png)

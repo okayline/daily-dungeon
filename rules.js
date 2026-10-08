@@ -142,7 +142,7 @@
   function pickDemon(st) {
     if (Math.random() < 0.03) return "ATOM SLASHER";
     const d = st.dungeon, w = { ...LADDER[Math.min(floorNum(st), 4) - 1] }, om = omen(clock(st)).fx;
-    const wall = wallLoop(st), linger = d && d.linger ? d.linger[d.at] || 0 : 0;
+    const wall = wallLoop(st), linger = d ? RS(d).linger : 0;
     if (wall >= 4) { w.data += 3; w.hardware += 2; }
     if (linger >= LINGER_AT) { w.folklore += 3; w.hybrid += 2; }
     w.data *= om.data; w.hardware *= om.data; w.folklore *= om.folk; w.hybrid *= om.folk;
@@ -185,7 +185,7 @@
   const heatTier = h => (h >= 18 ? 3 : h >= 12 ? 2 : h >= 6 ? 1 : 0);
   const MOON_PULL = [0.8, 0.9, 1, 1.1, 1.25, 1.1, 1, 0.9];       // the moon still stirs things a little
   function encounterChance(st) {
-    const d = st.dungeon, h = (d.heat || [])[d.at] || 0;
+    const d = st.dungeon, h = RS(d).heat;
     if (d.floor.rooms[d.at].kind === "bay") return 0;      // a Recharge Bay is safe
     return (1 / 24 + (1 / 4 - 1 / 24) * Math.min(1, h / HEAT_MAX)) * MOON_PULL[moon()];
   }
@@ -196,20 +196,19 @@
   };
   function heatUp(st, amount) {
     const d = st.dungeon;
-    d.heat = d.heat || [0, 0, 0];
-    const before = heatTier(d.heat[d.at] || 0);
-    d.heat[d.at] = Math.min(HEAT_MAX + 4, (d.heat[d.at] || 0) + amount * omen(clock(st)).fx.heat);
-    const after = heatTier(d.heat[d.at]);
-    st.stats = st.stats || {}; st.stats.maxHeat = Math.max(st.stats.maxHeat || 0, d.heat[d.at]);
+    const rs = RS(d), before = heatTier(rs.heat);
+    rs.heat = Math.min(HEAT_MAX + 4, rs.heat + amount * omen(clock(st)).fx.heat);
+    const after = heatTier(rs.heat);
+    st.stats = st.stats || {}; st.stats.maxHeat = Math.max(st.stats.maxHeat || 0, rs.heat);
     if (after > before) {
-      const linger = (d.linger || [])[d.at] || 0;
+      const linger = rs.linger;
       const kind = wallLoop(st) >= 4 ? "data" : linger >= LINGER_AT ? "folk" : "plain";
       st.tell = HEAT_TELL[after][kind];
     }
     if (after !== before) { st.statusIn = 0; st.statusKind = "air"; }   // the conditions report updates right away
   }
   // A stub of black candle calms the room it's lit in.
-  function calm(st) { const d = st.dungeon; if (d && d.heat) d.heat[d.at] = Math.max(0, (d.heat[d.at] || 0) - 8); }
+  function calm(st) { const d = st.dungeon; if (d) RS(d).heat = Math.max(0, RS(d).heat - 8); }
 
   const floorNum = st => parseInt(String(st.floor).replace(/\D/g, ""), 10) || 1;
   // Log lines only name a direction when stating a character's action ("KURA goes WEST"), never for hints or doors.
@@ -220,6 +219,20 @@
   // so a new action clears it; the page's once-a-minute catch-up (tick) keeps it.
   const clone = st => JSON.parse(JSON.stringify(st));
   const copy = st => { const c = clone(st); delete c.pull; return c; };
+  // ROOM STATE. Everything the game remembers about a room lives in one object per room: d.state[i] =
+  // { visited, found: [what's been uncovered], heat, linger, kindDay, altarDay, walls }. Rooms are
+  // added as the floor grows, so nothing assumes how many there are. Runs saved with the old parallel
+  // arrays (visited, found, heat, linger...) are converted the first time a room is asked for.
+  function upgradeDungeon(d) {
+    const at = (arr, i) => (arr || [])[i];
+    d.state = d.floor.rooms.map((_, i) => ({ visited: !!at(d.visited, i), found: at(d.found, i) || [], heat: at(d.heat, i) || 0,
+      linger: at(d.linger, i) || 0, kindDay: at(d.kindDay, i), altarDay: at(d.altarDay, i), walls: at(d.walls, i) }));
+    for (const k of ["visited", "found", "heat", "linger", "kindDay", "altarDay", "walls"]) delete d[k];
+  }
+  const RS = (d, i = d.at) => {
+    if (!d.state) upgradeDungeon(d);
+    return d.state[i] || (d.state[i] = { visited: false, found: [], heat: 0, linger: 0 });
+  };
   // Run stats for the end-of-run summary: counts kept in st.stats (steps, searches, demons, finds...).
   const tally = (st, k, n = 1) => { st.stats = st.stats || {}; st.stats[k] = (st.stats[k] || 0) + n; };
 
@@ -286,13 +299,13 @@
   function atmosphere(st) {
     const d = st.dungeon;
     if (!d || Math.random() < 0.5) return flavor(st);
-    const here = d.found[d.at], room = d.floor.rooms[d.at];
+    const here = RS(d).found, room = d.floor.rooms[d.at];
     const ahead = room.doors[st.facing];
     const clues = [];
     if (d.floor.stairs === d.at && !here.includes("stairs")) clues.push(...CLUE.stairsHere);
-    if (ahead !== undefined && d.floor.stairs === ahead && !d.found[ahead].includes("stairs")) clues.push(...CLUE.stairsBeyond);
+    if (ahead !== undefined && d.floor.stairs === ahead && !RS(d, ahead).found.includes("stairs")) clues.push(...CLUE.stairsBeyond);
     if (d.floor.lure === d.at && !here.includes("lure")) clues.push(...CLUE.lureHere);
-    if (ahead !== undefined && d.floor.lure === ahead && !d.found[ahead].includes("lure")) clues.push(...CLUE.lureBeyond);
+    if (ahead !== undefined && d.floor.lure === ahead && !RS(d, ahead).found.includes("lure")) clues.push(...CLUE.lureBeyond);
     return clues.length ? pick(clues) : flavor(st);
   }
 
@@ -305,7 +318,7 @@
   // Ways out of KURA's room: its doors, plus the stairs once they've been found.
   function exits(d) {
     const out = Object.keys(d.floor.rooms[d.at].doors);
-    if (d.found[d.at].includes("stairs")) out.push(stairsDir(d.floor, d.at));
+    if (RS(d).found.includes("stairs")) out.push(stairsDir(d.floor, d.at));
     return CW.filter(x => out.includes(x));
   }
 
@@ -354,7 +367,8 @@
     status(st);                                         // line 1
     st.extraUrgent = false;                             // the page holds line 3 for a moment, unless this is a warning
     if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; st.extraUrgent = true; } // a heat tell takes line 3 right away (not over a question)
-    st.map = FLOOR.minimap(d.floor, { ...d, facing: st.facing });
+    RS(d);                                              // (converts an old save's room arrays)
+    st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.facing, visited: d.state.map(s => s.visited), found: d.state.map(s => s.found) });
     const door = dir => dir in room.doors;
     if (st.dead) {
       // Game over: the view goes dark and the third line points to RST.
@@ -362,7 +376,7 @@
       st.extra = "> GAME OVER. Press [R]ESET to begin a new run.";
       return st;
     }
-    const stairsAhead = d.found[d.at].includes("stairs") && st.facing === stairsDir(d.floor, d.at);
+    const stairsAhead = RS(d).found.includes("stairs") && st.facing === stairsDir(d.floor, d.at);
     st.view = {
       left: [!door(LEFT[st.facing]), true], right: [!door(RIGHT[st.facing]), true],
       end: stairsAhead ? "stairs" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : "wall",
@@ -392,7 +406,8 @@
     const a = FLOOR.arrive(floor);
     st.floor = `B${num}F`;
     st.facing = a.facing;
-    st.dungeon = { seed: floor.seed, floor, at: a.at, visited: a.visited, found: a.found, deadline, arrived: clock(st) };
+    st.dungeon = { seed: floor.seed, floor, at: a.at, deadline, arrived: clock(st),
+      state: floor.rooms.map((_, i) => ({ visited: !!a.visited[i], found: a.found[i] || [], heat: 0, linger: 0 })) };
     st.statusIn = 0;                                   // a fresh floor gets a fresh report
     return floor;
   }
@@ -435,12 +450,11 @@
     st.statusIn = 0; st.statusKind = "news";
     // Overnight every room's heat halves. It never quite resets.
     let settled = false;
-    if (st.dungeon && st.dungeon.heat) {
-      const at = st.dungeon.at, was = heatTier(st.dungeon.heat[at] || 0);
-      st.dungeon.heat = st.dungeon.heat.map(h => Math.floor((h || 0) / 2));
-      settled = was > 0 && heatTier(st.dungeon.heat[at]) < was;
+    if (st.dungeon) {
+      const here = RS(st.dungeon), was = heatTier(here.heat);
+      for (const rs of st.dungeon.state) { rs.heat = Math.floor(rs.heat / 2); rs.linger = 0; }
+      settled = was > 0 && heatTier(here.heat) < was;
     }
-    if (st.dungeon) st.dungeon.linger = [0, 0, 0];
     // Sleep ends a trip, and taint fades a point.
     if (tripping(st)) comeDown(st);
     if (st.taint) st.taint = Math.max(0, st.taint - 1);
@@ -450,7 +464,7 @@
     if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
     if (held) {   // standby: another fifth back, patience restored, the room cools again and the loop clears
       st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + (p.hp > 0 ? Math.ceil(p.hpmax / 5) : 0)), ...(p.patience === undefined ? {} : { patience: PATIENCE }) }));
-      if (st.dungeon && st.dungeon.heat) st.dungeon.heat = st.dungeon.heat.map(h => Math.floor((h || 0) / 2));
+      if (st.dungeon) for (const rs of st.dungeon.state) rs.heat = Math.floor(rs.heat / 2);
       st.loop = { key: "", n: 0 };
       tally(st, "standby");
     }
@@ -503,7 +517,7 @@
     st.unsaved = true;
     if (st.altar) st.altar = null;           // walking off closes the terminal
     bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
-    if (st.dungeon) { const d = st.dungeon; d.linger = d.linger || [0, 0, 0]; d.linger[d.at] = (d.linger[d.at] || 0) + 1; }
+    if (st.dungeon) RS(st.dungeon).linger++;
     st.dreadCheck = true;                  // show() looks at the loop once the action has finished
     st.statusIn = (st.statusIn ?? 0) - 1;  // line 1 (the status report) changes every 5-10 actions
     if (st.question) { st.question = null; }  // a question KURA walks away from just lapses
@@ -531,12 +545,12 @@
     const closes = left <= 0 ? "The way down closes tonight" : left === 1 ? "The way down closes tomorrow"
       : pick([`${left} days until the way down closes`, `The way down closes ${fmt(d.deadline)}`]);
     if (kind === "air" || (kind !== "news" && Math.random() < 0.3)) {
-      const tier = heatTier((d.heat || [])[d.at] || 0);
+      const tier = heatTier(RS(d).heat);
       // A fight or a break leaves a smell in the room for a while; otherwise each room has its own.
       const smell = d.scent && d.scent.room === d.at && Math.random() < 0.5 ? d.scent.text : SMELL[(d.seed + d.at * 7) % SMELL.length];
       return `> Conditions: ${pick(AIR[tier])}. ${smell}.` + (Math.random() < 0.6 ? ` ${pick(DETAIL)}.` : "");
     }
-    const seen = d.visited.filter(Boolean).length, stairs = d.found.some(f => f.includes("stairs"));
+    const seen = (RS(d), d.state.filter(s => s.visited).length), stairs = d.state.some(s => s.found.includes("stairs"));
     const hurt = st.party.filter(p => p.hp > 0 && p.hp < p.hpmax / 2).length, down = st.party.filter(p => p.hp <= 0).length;
     const party = down ? `${down} down` : hurt ? "Party wounded" : "Conditions holding";
     const news = [
@@ -584,8 +598,8 @@
   // Each room hides its things behind its walls (never behind a door). The stairs are always behind
   // the wall they will open in; everything else is spread over the other walls, fixed by the floor's seed.
   function walls(d, i) {
-    d.walls = d.walls || [];
-    if (d.walls[i]) return d.walls[i];
+    const rs = RS(d, i);
+    if (rs.walls) return rs.walls;
     const room = d.floor.rooms[i];
     const free = CW.filter(x => !(x in room.doors));
     const w = { taken: {} };
@@ -599,7 +613,7 @@
     // About one room in three hides something deep in one wall: findable, but only 1 in 35 per search,
     // and that wall may look empty for a very long time.
     if (k % 3 === 0) w.deep = { dir: free[(k >>> 4) % free.length], item: names("MYTHIC")[(k >>> 8) % CATALOG.MYTHIC.length], found: false };
-    return (d.walls[i] = w);
+    return (rs.walls = w);
   }
 
   // SEARCH the wall KURA faces, NetHack style: unlimited, but each search has only a small chance
@@ -609,7 +623,7 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
-    const d = st.dungeon, room = d.floor.rooms[d.at], found = d.found[d.at], dir = st.facing;
+    const d = st.dungeon, room = d.floor.rooms[d.at], found = RS(d).found, dir = st.facing;
     // A door can't be searched: a few ways of saying so, never the same twice in a row. Costs nothing.
     if (dir in room.doors) {
       const DOOR = ["Only a door here. Nothing to search.", "KURA runs a hand along the door frame. Just a door.",
@@ -636,7 +650,7 @@
     // Heat: the loop and linger counts (see act) decide what kind of noise KURA is making.
     const chance = encounterChance(st);
     tally(st, "searches");
-    lean(st, heatTier((d.heat || [])[d.at] || 0) >= 2 ? "hot" : "search");
+    lean(st, heatTier(RS(d).heat) >= 2 ? "hot" : "search");
     heatUp(st, 1);
     const fx = omen(clock(st)).fx;
     const where = `KURA searches the ${NAME[dir]} wall.`;
@@ -692,7 +706,7 @@
       if (st.encounter) st.round = [`A wall to the ${NAME[dir]}. No way out there.`];
       return show(st);
     }
-    const toStairs = d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at);
+    const toStairs = RS(d).found.includes("stairs") && dir === stairsDir(d.floor, d.at);
     if (today(st).stepped && !st.freeSteps && !(toStairs && !st.encounter)) {
       st.facing = dir; st.log = "> KURA has already moved today. Rest until tomorrow.";
       if (st.encounter) st.round = ["Today's step is spent. No running now."];
@@ -720,7 +734,7 @@
       st.round = [`KURA runs ${NAME[dir]} and leaves ${the(e.name)} behind.`, ...lines];
       tally(st, "fled");
     } else act(st, "go");
-    const descending = d.found[d.at].includes("stairs") && dir === stairsDir(d.floor, d.at);
+    const descending = RS(d).found.includes("stairs") && dir === stairsDir(d.floor, d.at);
     // Taking the stairs down doesn't use the day's step; walking to another room does.
     if (!descending) { st.today.stepped = true; tally(st, "steps"); }
     else tally(st, "floors");
@@ -734,8 +748,8 @@
       return show(st);
     } else {
       const i = d.floor.rooms[d.at].doors[dir];
-      const isNew = !d.visited[i];
-      d.at = i; d.visited[i] = true;
+      const isNew = !RS(d, i).visited;
+      d.at = i; RS(d, i).visited = true;
       st.log = `> Day ${st.day}. KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
       enterKind(st, i, isNew);
     }
@@ -753,11 +767,10 @@
     const d = st.dungeon, rm = d.floor.rooms[i], k = rm.kind;
     if (!k) return;
     if (!isNew && !["den", "bay", "forge", "altar"].includes(k)) return;
-    d.kindDay = d.kindDay || [];
-    if (d.kindDay[i] === st.day) return;
-    d.kindDay[i] = st.day;
+    if (RS(d, i).kindDay === st.day) return;
+    RS(d, i).kindDay = st.day;
     if (k === "den") {                       // hot from the start: demons come easily, and so does the rest
-      d.heat = d.heat || [0, 0, 0]; d.heat[i] = Math.max(d.heat[i] || 0, Math.round(HEAT_MAX * 0.6));
+      RS(d, i).heat = Math.max(RS(d, i).heat, Math.round(HEAT_MAX * 0.6));
       st.tell = "> Warm air. Loose parts and old gear lie in the dark.";
     } else if (k === "bay") {                // safe (no demons hide here): the party mends a little
       const hurt = st.party.some(p => p.hp < p.hpmax);
@@ -807,7 +820,7 @@
     return free.length ? free[(fl.seed + i * 17) % free.length] : null;
   }
   const facingAltar = st => !!(st.dungeon && altarDir(st.dungeon.floor, st.dungeon.at) === st.facing);
-  function altarUsed(st) { const d = st.dungeon; return !!(d && d.altarDay && d.altarDay[d.at] === st.day); }
+  function altarUsed(st) { const d = st.dungeon; return !!(d && RS(d).altarDay === st.day); }
   function altarGifts(st) {
     const n = 20 * floorNum(st), out = [{ silver: n, ok: (st.silver ?? 0) >= n, label: `${n} SILVER` }];
     for (const it of inventory(st).slice(0, 5)) out.push({ item: it.name, ok: true, label: it.name });
@@ -837,7 +850,7 @@
     amt = a === "LAW" ? -size : a === "CHAOS" ? size : -Math.sign(st.alignScore || 0) * 0.5;
     amt *= { bad: 0.5, ok: 1, good: 1.25 }[mood];
     LEAN.altarTmp = amt; lean(st, "altarTmp");
-    d.altarDay = d.altarDay || []; d.altarDay[d.at] = st.day;
+    RS(d).altarDay = st.day;
     tally(st, "offerings");
     st.log = `> Day ${st.day}. KURA makes an offering.`;
     st.altar = { open: true, used: true, result: { mood, face: ALTAR_FACE[mood], say: pick(ALTAR_SAYS[mood]), lines: ALTAR_FLAVOR[mood] } };
@@ -885,12 +898,12 @@
     const d = st.dungeon;
     if (!d) return "";
     const rm = d.floor.rooms[d.at], kind = rm.kind ? ROOM[rm.kind] : d.at === 0 ? "START" : "PLAIN";
-    const left = Math.max(0, rm.hidden.length - (d.found[d.at] || []).length);
+    const left = Math.max(0, rm.hidden.length - RS(d).found.length);
     const wall = altarDir(d.floor, d.at);
     const enc = Math.round(encounterChance(st) * 100);
-    return [`ROOM ${d.at + 1}/3 ${kind}`, `STAIRS R${d.floor.stairs + 1}${d.found[d.floor.stairs].includes("stairs") ? " (found)" : ""}`,
-      `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null, `HEAT ${(d.heat || [])[d.at] || 0}/${HEAT_MAX}`, `ENC ${enc}%`,
-      `LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${(d.linger || [])[d.at] || 0}/${LINGER_AT}`,
+    return [`ROOM ${d.at + 1}/3 ${kind}`, `STAIRS R${d.floor.stairs + 1}${RS(d, d.floor.stairs).found.includes("stairs") ? " (found)" : ""}`,
+      `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null, `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`,
+      `LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`,
       `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`].filter(Boolean).join("  ");
   }
 
@@ -1397,7 +1410,7 @@
     }
     const p = pick(friends);
     st.log = `> Day ${st.day}. KURA talks to ${p.name}.`;
-    const tier = heatTier((st.dungeon.heat || [])[st.dungeon.at] || 0), fam = p.family || "folklore";
+    const tier = heatTier(RS(st.dungeon).heat), fam = p.family || "folklore";
     // Out of patience and still being talked to: half the time they snap. CHAOS members lash out at
     // KURA (it never kills her); LAW and NEUTRAL ones leave the party for good.
     if (snap(st, p)) return show(st);
@@ -1969,7 +1982,7 @@
 
   // The end-of-run summary: label/value pairs for the log screen.
   function summary(st) {
-    const k = st.stats || {}, d = st.dungeon, heat = d && d.heat ? d.heat[d.at] || 0 : 0;
+    const k = st.stats || {}, d = st.dungeon, heat = d ? RS(d).heat : 0;
     const TIER = ["calm", "uneasy", "nervous", "wrong"];
     const fixed = n => (n > 0 ? "+" : "") + (Math.round((n || 0) * 10) / 10);
     return [
