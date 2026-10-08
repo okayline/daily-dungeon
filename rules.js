@@ -890,7 +890,11 @@
     }
     if (fals) {                                              // only paint: nothing happens and the key is kept
       st.facing = dir; st.log = "> " + pick(FALSE_GO.filter(l => "> " + l !== st.log));
-      if (st.encounter) st.round = ["Paint over stone. No way out there."];
+      if (st.encounter) { st.round = ["Paint over stone. No way out there."]; return show(st); }
+      const who = (st.party || []).filter((p, i) => i > 0 && p.hp > 0), p = who.length && pick(who);   // a remark replaces whatever line 3 still held
+      const FALSE_SAY = { ELF: ['ELF: "Paint. Someone had a sense of humor."', 'ELF: "Don\'t lean on it."'],
+        PIXIE: ['PIXIE: "It\'s not a room, it\'s not a door, it\'s not anything!"'], "CU SITH": ["CU SITH sniffs the paint and sneezes.", "CU SITH sits down in front of the paint and waits."] };
+      if (p && FALSE_SAY[p.name]) st.extra = "> " + pick(FALSE_SAY[p.name]); else delete st.extra;
       return show(st);
     }
     // With a demon in the way, stepping through a door is running: a locked door still takes the key either way,
@@ -943,7 +947,9 @@
     const isNew = !RS(d, i).visited;
     d.at = i; RS(d, i).visited = true;
     st.log = locked ? `> The ${NAME[dir]} door cycles open. KURA steps into a new room.`
-      : `> KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
+      : (i === d.floor.lure && !(RS(d, i).found || []).includes("lure"))      // the ? room: something is still tucked away in it
+        ? `> KURA goes ${NAME[dir]}. ` + pick(["The room feels like it is holding its breath.", "The air here is keeping something back.", "The walls seem to know a little more than KURA."])
+        : `> KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
     enterKind(st, i, locked || isNew);
     st.extra = atmosphere(st);
     partyEnter(st);
@@ -1940,7 +1946,9 @@
   // A party member with no patience left, pushed again: half the time they snap. CHAOS members lash
   // out at KURA (never fatally); LAW and NEUTRAL ones leave the party for good. True if they snapped.
   function snap(st, p) {
-    if (p.patience !== 0 || Math.random() >= 0.5) return false;
+    if (p.patience !== 0) { delete p.warned; return false; }
+    if (!p.warned) { p.warned = true; return false; }          // the first push at zero only gets a warning (their tired line); the next can snap
+    if (Math.random() >= 0.5) return false;
     if (p.align === "CHAOS") {
       const kura = st.party[0], dmg = Math.min(kura.hp - 1, R(2, Math.ceil(kura.hpmax / 5)));
       st.party = st.party.map((q, i) => i === 0 ? { ...q, hp: q.hp - Math.max(0, dmg) } : q);

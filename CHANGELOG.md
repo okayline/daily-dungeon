@@ -2,6 +2,18 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.52 - Oct 8 2026, 02:58 HST
+
+![v0.52](screenshots/v0.52.png)
+
+Quieter edges and kinder endings.
+
+- **Doors:** the painted ones are gone for now.
+- **Party:** a tired member warns you before leaving, and the party has a word about odd walls.
+- **Victory screen:** it waits for [ OK ] and can't be skipped by a stray click.
+- **Map:** the outline grid is a little brighter, and one room feels stranger to walk into.
+- **Run end:** [R]ESET moves to the bottom of the log.
+
 ## v0.51 - Oct 8 2026, 02:34 HST
 
 ![v0.51](screenshots/v0.51.png)

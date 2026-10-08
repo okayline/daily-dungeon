@@ -54,7 +54,7 @@
   .door { color: var(--trail); }
   .door.focus { color: #ffffff; text-shadow: none; }   /* the locked door KURA faces: flat white, no glow */
   .door .g { position: relative; left: -0.1em; }   /* the fallback font draws || a touch right of its cell */
-  .wall { color: var(--dim); opacity: 0.4; }
+  .wall { color: var(--dim); opacity: 0.6; }
   .btn { cursor: pointer; color: var(--bright); }
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
@@ -349,13 +349,13 @@
       const end = save && save.dead ? `THE RUN IS OVER.  ${save.floor}, day ${save.day}, turn ${save.steps || 0}.\n` +
         `${(save.log || "").replace(/^> (Day \d+\. )?/, "")}\n\n` +
         RULES.summary(save).map(([k, v]) => "  " + (k + " ").padEnd(15, ".") + " " + v).join("\n") +
-        "\n\n[R]ESET begins a new run.\n\n" : "";
+        "\n\n" : "";
       // The CODEX opens from here: a button at the top of the log.
       const pre = box.querySelector("pre");
       logText = "DAILY DIGITAL DEMON DUNGEON " + SMT.VERSION + "  -  " + hstDate() + "\n\n" + end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
         // Newest first, but each action keeps its follow-up lines underneath it.
         (h.length ? h.reduce((g, l) => (/^ /.test(l) && g.length ? g[g.length - 1].push(l) : g.push([l]), g), [])
-          .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.");
+          .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.") + (save && save.dead ? "\n\n[R]ESET begins a new run." : "");
       const shown = logText.slice(logText.indexOf("\n\n") + 2), hAt = shown.indexOf("ADVENTURE LOG"), hEnd = shown.indexOf("\n\n", hAt);
       pre.textContent = "";
       pre.append(shown.slice(0, hEnd + 1) + "\n");
@@ -726,7 +726,9 @@
     box.dataset.mode = "found";
   }
   let queuedNotice = null;
+  let doneAt = 0;
   function closeFound() {
+    if (document.getElementById("found").dataset.mode === "done" && Date.now() - doneAt < 900) return;   // the victory screen can't be dismissed by the click that brought it up
     document.getElementById("found").hidden = true;
     if (blockedRun) { blockedRun = false; encounterBox(true); return; }
     if (afterBreak) { afterBreak = false; if (save && save.encounter) { encounterBox(); return; } showInv(true); return; }
@@ -842,7 +844,7 @@
     const artSlot = n => { for (let i = 0; i < n; i++) add(i === 0 ? "." + " ".repeat(COLS - 2) + "." : i === n - 1 ? "'" + " ".repeat(COLS - 2) + "'" : " ".repeat(COLS), "artframe"); add(" "); };
 
     if (!e) {                                          // the fight is over
-      pre.innerHTML = "";
+      pre.innerHTML = ""; doneAt = Date.now();
       const wl = []; for (const l of lines) for (const w of wrapText(l, COLS)) wl.push([w, lineClass(l)]);
       const dArt = Math.min(5, ROWS - 4 - wl.length - 1);      // title, blank, text, blank, [ OK ]
       if (dArt >= 3) artSlot(dArt);
@@ -1090,7 +1092,7 @@
     if (document.getElementById("found").dataset.mode === "confirm") return answerConfirm(false);
     const b = e.target.closest("[data-fact]");
     if (b) act(b.dataset.fact);
-    else if (mode === "found") { if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
+    else if (mode === "found" || mode === "done") { if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
     else if (mode === "altar" || mode === "encounter") return;                   // their own buttons only
     else closeFound();
   });
@@ -1142,7 +1144,7 @@
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
         else k = { f: "fight", t: "talk", g: "offer", i: "invoke", r: "run" }[key];
         if (k) act(k);
-      } else if (fbox.dataset.mode === "found") { if (key === "enter") closeFound(); }   // a find only closes on its [ OK ] (Enter or a click), never by a stray key
+      } else if (fbox.dataset.mode === "found" || fbox.dataset.mode === "done") { if (key === "enter") closeFound(); }   // a find only closes on its [ OK ] (Enter or a click), never by a stray key
       else if (key === "enter" || key === " " || key === "escape") closeFound();
       return;
     }

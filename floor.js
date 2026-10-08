@@ -12,6 +12,7 @@
 // Everything is rolled from the floor's seed, so a floor can be rolled again from it.
 // Shared by the web page and node, like screen.js.
 (function (root) {
+  const PAINTED_DOORS = false;   // false doors (painted, no room behind) are parked for now
   const DIRS = { N: [-1, 0], E: [0, 1], S: [1, 0], W: [0, -1] };
   const KINDS = ["den", "bay", "relay", "vault", "forge", "altar"];
   const BONUS_KIND = "archive";                  // the seventh type: only on bonus weeks, behind the wildcard door
@@ -105,7 +106,8 @@
         plan.exits.push({ host: exitHosts[i], d: e.d, p: e.p });
       }
       // Sometimes a false door: one more door on a wall that has none (never the 4th door of a space).
-      if (rand() < 0.4) {
+      // OFF for now (painted doors are parked until their mechanic is settled): flip PAINTED_DOORS to bring them back.
+      if (PAINTED_DOORS && rand() < 0.4) {
         const spaces = Object.keys(pos).filter(s => used[s].size < 3);
         if (spaces.length) {
           const sp = spaces[R(spaces.length)], walls = Object.keys(DIRS).filter(d => !used[sp].has(d));
