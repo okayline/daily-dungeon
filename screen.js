@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.41";
+  const VERSION = "v0.42";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -168,22 +168,6 @@
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 18, `[<]  ${st.facing || "?"}  [>]`);
     overlay(VH - 2, 20, "[  ^  ]");          // the day's step: forward, the way KURA faces
-    // The day's omen, centered across the top of the 3D view, like writing on the ceiling.
-    const omenT = (st.omenText || "").replace(/^> /, "");
-    // A long one wraps onto a second row (split at the space nearest the middle), so the walls always show.
-    if (omenT) {
-      const fits = (t, y) => t.length + 4 <= 39 - 2 * y;  // room between the slanted walls on row y (with the carets)
-      let rows = [omenT];
-      if (!fits(omenT, 0)) {
-        const spaces = [...omenT.matchAll(/ /g)].map(m => m.index), mid = omenT.length / 2;
-        const at = spaces.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0];
-        rows = [omenT.slice(0, at), omenT.slice(at + 1)];
-      }
-      // Each row gets carets pointing in: > "..." <
-      // A wrapped omen keeps both carets on the first row; the second row is plain.
-      // (The second row leans a column right, under the first row's text rather than its opening caret.)
-      rows.map((t, y) => y === 0 ? `> ${t} <` : t).forEach((t, y) => overlay(y, Math.max(1, (y ? Math.ceil : Math.floor)((VW - t.length) / 2) + y), t.slice(0, VW - 2)));
-    }
     const moons = ["(     )", "(    ))", "(  ))))", "())))))", "(((O)))", "((((())", "((((  )", "((    )"];
     const names = ["NEW", "CRESC", "HALF", "GIBB", "FULL", "GIBB", "HALF", "CRESC"];
     const long = ["NEW", "WAX CRESC", "1ST QTR", "WAX GIBB", "FULL", "WANE GIBB", "LAST QTR", "WANE CRESC"];
@@ -204,7 +188,15 @@
     // placed on whichever side of the row the ^^^ marker isn't, so the two never touch.
     const marks = bar(moons.map((_, i) => center(i === idx ? "^^^" : "", 8)).join(""));
     // The marker row holds only the ^^^ (the moon's day and phase are a line 1 status report).
-    S.push("|" + box[3] + marks + "|");
+    // The day's omen, in quotes and left-justified: at the left edge when it clears the ^^^, otherwise just after it.
+    const omenT = st.omenText ? '"' + st.omenText.replace(/^> "?/, "").replace(/"$/, "").slice(0, 30) + '"' : "";
+    let row = marks.split("");
+    if (omenT) {
+      const at = marks.indexOf("^^^");
+      const start = 1 + omenT.length <= at - 2 ? 1 : at + 5;
+      row.splice(start, omenT.length, ...omenT);
+    }
+    S.push("|" + box[3] + row.join("") + "|");
     S.push("+" + "=".repeat(78) + "+");
     // Right panel is 29 characters wide: a leading space plus 28.
     const PW = 29, rule = " " + "-".repeat(PW - 1);
@@ -269,7 +261,7 @@
     // (nothing else can be done until it's answered anyway), so the log lines above keep their full width.
     const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = st.question ? " ".repeat(18) + "[Y]ES   [N]O " : " ".repeat(21) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " [?] [C]ODEX [P]ASS [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
+    const sys = " [?] [P]ASS [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");

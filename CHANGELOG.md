@@ -2,6 +2,19 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.42 - Oct 7 2026, 21:23 HST
+
+![v0.42](screenshots/v0.42.png)
+
+Searching, running, and a tidier top box.
+
+- **Searching takes work.** Each wall thing needs 2 to 5 searches, with progress per search. Finds are worth more on a full moon, with a good omen, when rested, and early in the day's tiers. A noise hint ("KURA hears something") replaces the warm-wall line.
+- **Item quality is hidden** from the player everywhere.
+- **Running is one attempt per fight.** After it fails, `[R]UN` dims.
+- **The omen moved into the moon box**, in quotes, left-justified on the bottom line, next to the `^^^`. Omen lines were shortened to fit.
+- **The log page** has the heading on top and the buttons right-aligned below it. `[C]ODEX` is gone from the bottom bar.
+- `[  ^  ]` never greys out, the `^` is centered, and STA[N]DBY sits a touch lower.
+
 ## v0.41 - Oct 7 2026, 20:59 HST
 
 ![v0.41](screenshots/v0.41.png)

@@ -159,19 +159,19 @@
   // About half the days are ordinary. Every omen is true: its effect is real all day.
   const OMENS = [
     // Ordinary days still read like omens: ambiguous, and they promise nothing that won't happen.
-    { key: "none", fx: {}, lines: ["What you carry will be counted.", "The deep remembers a name. Yours...soon.",
-      "Someone walked this way before you.", "Count the doors. Then count them again.", "The ninth bell has not rung.",
-      "What is below was once above.", "Somewhere a light is left on for you.", "The stone dreams of the sea.",
-      "Not every silence is empty.", "A promise kept, a long way down."] },
+    { key: "none", fx: {}, lines: ["Your load will be counted.", "The deep learns your name.",
+      "Someone walked here before.", "Count the doors. Count again.", "The ninth bell has not rung.",
+      "What is below was once above.", "A light is left on for you.", "The stone dreams of the sea.",
+      "Not every silence is empty.", "A promise kept, far below."] },
     { key: "data", fx: { data: 2 }, lines: ["The wires remember.", "Something is counting down.", "A dial tone, far away."] },
     { key: "folk", fx: { folk: 2 }, lines: ["Old things walk early.", "Salt on the wind.", "The old ones stir."] },
     { key: "heat", fx: { heat: 2 }, lines: ["Do not linger.", "The room is listening today.", "Short stays. Quiet feet."] },
     { key: "hard", fx: { find: 0.5 }, lines: ["The walls keep their secrets.", "Every seam is sealed today.", "The stone stays shut."] },
-    { key: "easy", fx: { find: 1.6 }, lines: ["A door is open somewhere.", "Something is loose in the stone.", "The seams are soft today."] },
+    { key: "easy", fx: { find: 1.6 }, lines: ["A door is open somewhere.", "Something is loose in stone.", "The seams are soft today."] },
     { key: "talk", fx: { talk: 1.6 }, lines: ["Strangers listen.", "Today, they will hear you out.", "Speak first. They are lonely."] },
     // Good days, plainly good.
     { key: "calm", fx: { heat: 0.5 }, lines: ["The halls are sleeping.", "Soft steps go unheard.", "Even the walls are tired."] },
-    { key: "loot", fx: { loot: 3 }, lines: ["The deep is generous today.", "Something precious is near the surface.", "Fortune favors the patient."] },
+    { key: "loot", fx: { loot: 3 }, lines: ["The deep is generous today.", "Something precious is near.", "Fortune favors the patient."] },
   ];
   const hash = n => { let x = (n * 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return x >>> 0; };
   function omen(t) {
@@ -493,7 +493,7 @@
     }
     st.log = `> KURA wakes on ${st.floor}.`;
     st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight."
-      : held ? pick(STANDBY_LINES) : settled ? "> The room settles." : atmosphere(st);
+      : held ? (st.restedDay = t, pick(STANDBY_LINES)) : settled ? "> The room settles." : atmosphere(st);
     return st;
   }
 
@@ -607,11 +607,13 @@
     return false;
   }
 
-  // SEARCH, NetHack style: unlimited, but each search only has a small chance to turn up the
-  // room's next hidden thing. An empty room never answers, and the player can't tell it apart
-  // from an unlucky one. Every search passes a little time, and a demon may wander in;
+  // SEARCH, NetHack style: unlimited. Each hidden thing needs 2 to 5 points of searching on its wall (never found on
+  // a first look); a search is worth about one point, more on an easy day, in a calm room or after a STANDBY day,
+  // less on a hard day or in a hot room, and a fuller moon adds a little. An empty wall never answers, and the player can't tell it apart
+  // from one that needs more searches. Every search passes a little time, and a demon may wander in;
   // that happens more under a bright moon.
-  const FIND = 1 / 5, DEEP_FIND = 1 / 35;
+  const NOISES = ["KURA hears something. Then nothing.", "A faint scrape, and then quiet.", "Something ticks, very softly.",
+    "A low sound. KURA holds her breath.", "A small sound, there and gone.", "KURA hears a soft knock. Or her own pulse."];
   const MISSES = ["Nothing.", "Nothing yet.", "Only stone.", "Nothing but dust.", "The wall gives nothing away.",
     "Cold stone, cold hands.", "Mortar, mostly. Some is older.", "Fingers come away gray.", "A crack. It goes nowhere.",
     "Damp. The smell of old pipes.", "Someone has looked here before.", "A dead cable runs in and stops.",
@@ -636,9 +638,13 @@
       if (thing === "stairs") w[sd].push(thing);
       else if (free.length) w[free[next() % free.length]].push(thing);
     }
+    // Nothing turns up on a first look. Each thing needs 2 to 5 points of searching (rolled now, hidden from the
+    // player); every search of its wall adds a point or so (see SEARCH). prog is what each wall has had so far.
+    w.need = {}; w.prog = {};
+    for (const x of free) { w.need[x] = w[x].map(() => 2 + next() % 4); w.prog[x] = 0; }
     // About one room in three hides something deep in one wall: findable, but only 1 in 35 per search,
     // and that wall may look empty for a very long time.
-    if (free.length && next() % 3 === 0) w.deep = { dir: free[next() % free.length], item: names("MYTHIC")[next() % CATALOG.MYTHIC.length], found: false };
+    if (free.length && next() % 3 === 0) w.deep = { dir: free[next() % free.length], item: names("MYTHIC")[next() % CATALOG.MYTHIC.length], found: false, need: 20 + next() % 31, prog: 0 };
     return (rs.walls = w);
   }
 
@@ -675,9 +681,16 @@
     // Heat: the loop and linger counts (see act) decide what kind of noise KURA is making.
     const chance = encounterChance(st);
     tally(st, "searches");
-    lean(st, heatTier(RS(d).heat) >= 2 ? "hot" : "search");
+    const tier = heatTier(RS(d).heat);                  // the room's noise as KURA starts this search
+    lean(st, tier >= 2 ? "hot" : "search");
     heatUp(st, 1);
     const fx = omen(clock(st)).fx;
+    // How much a search is worth. The day's omen sets the luck of the day (hard 0.5, easy 1.6). A calm room means
+    // steady hands (x1.25) and a hot one hurried ones (x0.75). After a STANDBY day KURA is rested (x1.25).
+    // The moon's fullness helps too: up to x1.35 at the full moon, nothing at the new moon. Capped under 2 points, so a
+    // thing that needs 2 can never turn up on a first look.
+    const fullness = (1 - Math.cos(moon() / 8 * 2 * Math.PI)) / 2;
+    const worth = Math.min(1.9, fx.find * (tier === 0 ? 1.25 : tier >= 2 ? 0.75 : 1) * (st.restedDay === clock(st) ? 1.25 : 1) * (1 + 0.35 * fullness));
     const where = `KURA searches the ${NAME[dir]} wall.`;
     const say = text => {
       const long = `> ${where} ${text}`;
@@ -691,26 +704,38 @@
       return show(st);
     }
     const w = walls(d, d.at), pile = w[dir] || [];
-    if (w.taken[dir] < pile.length && Math.random() < FIND * fx.find) {
-      const thing = pile[w.taken[dir]++];
-      found.push(thing);
-      st.log = say(reveal(st, thing));
-      // The first find in a room also takes stock of its doors.
-      if (found.length === 1 && st.log.length + doorList(room).length < 77) st.log += " " + doorList(room);
-      drift(st);
-      if (st.clue) { st.extra = st.clue; delete st.clue; delete st.tell; }   // the scrap's words take line 3 (over a heat tell)
-      return show(st);
+    if (w.taken[dir] < pile.length) {
+      // Searching wears the wall down: points add up until this thing's number is reached (it never shows on a first look).
+      w.prog = w.prog || {}; w.need = w.need || {};
+      w.prog[dir] = (w.prog[dir] || 0) + worth;
+      const need = (w.need[dir] && w.need[dir][w.taken[dir]]) || 3;
+      if (w.prog[dir] >= need) {
+        w.prog[dir] = 0;
+        const thing = pile[w.taken[dir]++];
+        found.push(thing);
+        st.log = say(reveal(st, thing));
+        // The first find in a room also takes stock of its doors.
+        if (found.length === 1 && st.log.length + doorList(room).length < 77) st.log += " " + doorList(room);
+        drift(st);
+        if (st.clue) { st.extra = st.clue; delete st.clue; delete st.tell; }   // the scrap's words take line 3 (over a heat tell)
+        return show(st);
+      }
     }
-    if (w.deep && w.deep.dir === dir && !w.deep.found && Math.random() < DEEP_FIND * fx.find * (tripping(st) ? 3 : 1)) {
-      w.deep.found = true;
-      gain(st, w.deep.item);
-      st.log = say("Deep in the stone, something gives.");
-      st.extra = `> KURA pulls out ${w.deep.item}.`;
-      return show(st);
+    if (w.deep && w.deep.dir === dir && !w.deep.found) {
+      // Something deep in the stone: a much longer slog (about 35 searches), three times faster while tripping.
+      w.deep.prog = (w.deep.prog || 0) + worth * (tripping(st) ? 3 : 1);
+      if (w.deep.prog >= (w.deep.need || 35)) {
+        w.deep.found = true;
+        gain(st, w.deep.item);
+        st.log = say("Deep in the stone, something gives.");
+        st.extra = `> KURA pulls out ${w.deep.item}.`;
+        return show(st);
+      }
     }
     // A near-miss line only when it's true: this wall still hides something.
-    const warm = w.taken[dir] < pile.length && Math.random() < 0.12;
-    st.log = say(warm ? "The wall is warmer than the others." : pick(MISSES));
+    // (it starts after a couple of searches: a hint to keep going; it never says where the sound comes from)
+    const noise = w.taken[dir] < pile.length && (w.prog[dir] || 0) >= 2 && Math.random() < 0.25;
+    st.log = say(noise ? pick(NOISES) : pick(MISSES));
     if (!nag(st)) drift(st);
     return show(st);
   }
@@ -753,12 +778,14 @@
     // and half the time the demon blocks it and strikes.
     if (st.encounter) {
       const e = st.encounter, lines = [];
+      if (e.ranTried) { st.facing = dir; st.round = ["KURA already tried to run. There is no running now."]; return show(st); }
       act(st, "run");
       if (locked) today(st).stepped = true;
       lean(st, "run", lines);
       st.facing = dir;
       st.roundOver = false;
       if (Math.random() < 0.5) {
+        e.ranTried = true;
         lines.push(`KURA runs ${NAME[dir]}. ${THE(e.name)} blocks the door.`);
         st.log = `> KURA tries to run ${NAME[dir]}. ${THE(e.name)} blocks it.`;
         demonTurn(st, lines);
@@ -994,7 +1021,7 @@
     if (st.clockOffset) { delete st.clockOffset; delete st.lastSeen; delete st.rewindNoted; }
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
-      "fidgetLine", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText"]) delete st[k];
+      "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     const t = clock(st);
@@ -1991,7 +2018,9 @@
         : `${al}: friendlier to a ${al} KURA, hostile to a ${al === "LAW" ? "CHAOS" : "LAW"} one.`);
       return { name, known, tag: `${UNIQUE[name] ? "unique" : fam}   ${al}`, lines, count: `Met ${seen.met || 0}   Recruited ${seen.joined || 0}` };
     }) }));
-    const items = TIERS.slice().reverse().map(t => ({ group: t, entries: names(t).map(name => {
+    // One plain list (A to Z): nothing here says how rare an item is.
+    const all = TIERS.flatMap(t => names(t)).sort((x, y) => x.localeCompare(y));
+    const items = [{ group: "items", entries: all.map(name => {
       const seen = c.items[name] || {};
       if (!seen.found) return { name, known: false };
       const a = itemAlign(name), info = ITEM_INFO[name] || {}, nat = natureOf(name);
@@ -2000,8 +2029,8 @@
         `${a} demons prize it. ${a === "LAW" ? "CHAOS" : "LAW"} demons think less of it.`);
       else if (a) lines.push("NEUTRAL: no pull either way.");
       if (info.use) lines.push("Can be used from INVOKE.");
-      return { name, known: true, tag: `${t}${a ? "   " + a : ""}`, lines, count: `Found ${seen.found}` + (seen.broken ? `   Broken ${seen.broken}` : "") };
-    }) }));
+      return { name, known: true, tag: a || "", lines, count: `Found ${seen.found}` + (seen.broken ? `   Broken ${seen.broken}` : "") };
+    }) }];
     return { demons, items };
   }
 

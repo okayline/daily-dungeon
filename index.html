@@ -89,15 +89,14 @@
   @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
   .mframe { color: var(--trail); }
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
-  .caret { display: inline-block; width: calc(1ch / 1.5); font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
+  .caret { display: inline-block; position: relative; left: calc(-1ch / 6); width: calc(1ch / 1.5); font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
+  .btn[data-act=hold], .btn.ask { position: relative; top: -0.1em; }   /* STANDBY (and YES/NO in its place) sit a touch higher in the bar */
   .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* a nudge when keys are pressed while a question waits */
   /* The build number, small, under the screen's lower right corner. */
   .ver { white-space: pre-line; text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
   .ask { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .t-ICHOR { color: var(--demon); }
-  .t-COMMON { color: var(--fg); } .t-UNCOMMON { color: #7bd88f; } .t-RARE { color: #6aa9ff; }
-  .t-MYTHIC { color: var(--gold); text-shadow: 0 0 6px var(--gold); } .t-MOON { color: #dfe9ff; text-shadow: 0 0 8px #9fc4ff; }
   .foundbox .demon { color: var(--demon); }
   .facing { color: var(--bright); }
   .saved { color: var(--fg); }
@@ -150,7 +149,7 @@
           .replace("[&gt;]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="right">[&gt;]</span>`)
           // [^] takes the day's step forward; dim when that way is a wall or the step is spent, and in a fight
           // (running is a button in the fight box).
-          .replace("[  ^  ]", `<span class="btn${save && !save.encounter && RULES.available(save)[save.facing] ? "" : " off"}" data-act="forward">[  <span class="caret">^</span>  ]</span>`)
+          .replace("[  ^  ]", `<span class="btn" data-act="forward">[  <span class="caret">^</span>  ]</span>`)
           .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
         const tail = esc(line.slice(48)).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
@@ -191,7 +190,6 @@
         // SAVED / NOT SAVED shows for a few seconds after each action, then fades back into the border.
         .replace(/ (NOT SAVED|SAVED \d{4}-\d\d-\d\d) /, (m, t) => Date.now() < statusUntil
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
-        .replace("[C]ODEX", '<span class="btn" data-act="codex">[C]ODEX</span>')
         .replace("[P]ASS", '<span class="btn" data-act="backup">[P]ASS</span>')
         .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
@@ -347,13 +345,15 @@
         // Newest first, but each action keeps its follow-up lines underneath it.
         (h.length ? h.reduce((g, l) => (/^ /.test(l) && g.length ? g[g.length - 1].push(l) : g.push([l]), g), [])
           .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.");
-      pre.textContent = logText.slice(logText.indexOf("\n\n") + 2);
-      // Buttons at the top right: ways to keep the log (a text file, or the clipboard).
+      const shown = logText.slice(logText.indexOf("\n\n") + 2), hAt = shown.indexOf("ADVENTURE LOG"), hEnd = shown.indexOf("\n\n", hAt);
+      pre.textContent = "";
+      pre.append(shown.slice(0, hEnd + 1));
+      // Buttons just under the heading, on the right: ways to keep the log (a text file, or the clipboard).
       const button = (label, key) => { const b = document.createElement("span"); b.className = "btn"; b.dataset[key] = "1"; b.textContent = label; return b; };
       const top = document.createElement("div");
       top.style.textAlign = "right";
       top.append(button("[D]OWNLOAD", "download"), "   ", button("[C]OPY", "copy"), "   [L] or Esc closes");
-      pre.prepend(top, "\n");
+      pre.append(top, shown.slice(hEnd));
     }
   }
 
@@ -449,15 +449,15 @@
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
       `${i === invSel ? ">" : " "} ${i < 9 ? i + 1 : " "}  ${it.ichor ? `ICHOR  (${save.ichor})` : it.name + (it.count > 1 ? " x" + it.count : "")}`.replace(/^(.{42}).{4,}$/, "$1..."),
-      "t-" + it.tier + " btn", i));
+      "btn", i));
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
     const it = invList[invSel];
     if (it) {
       add(" ");
-      const tag = it.ichor ? `${save.ichor} in hand` : it.tier;
+      const tag = it.ichor ? `${save.ichor} in hand` : "";
       const lines = it.ichor ? [it.text, "Enter feeds the wounded. [D]RINK: KURA."]
         : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
-      textBox(it.name, tag, lines, 41).forEach(l => add(l, "t-" + it.tier));
+      textBox(it.name, tag, lines, 41).forEach(l => add(l, ""));
     }
     add(" ");
     // What happened on the last try to use something (cleared when another item is chosen).
@@ -541,7 +541,7 @@
       `          ${codexTab === "demons" ? "DEMONS MET" : "ITEMS FOUND"} ${known} / ${flat.length}`);
     add(" ");
     const e = flat[codexSel];
-    const cls = codexTab === "items" && e.known ? "t-" + e.group : "";
+    const cls = "";
     (e.known ? textBox(e.name, e.tag, [...e.lines, "", e.count]) : textBox("???", "", ["Not found yet."])).forEach(l => add(l, cls));
     add(" ");
     let last = null;
@@ -650,7 +650,7 @@
     add(" ");
     for (const l of lines) {
       if (typeof l === "string") add(l, "gold");
-      else { add(l.text, "t-" + l.tier); add(l.tier, "t-" + l.tier); }
+      else add(l.text, "");
     }
     const notes = newItems.map(n => (RULES.inventory({ items: [n] })[0] || {}).text).filter(Boolean);
     if (notes.length) { add(" "); notes.forEach(n => add(n)); }
@@ -674,8 +674,7 @@
       const got = save.items[save.items.length - 1];
       add(" ");
       add("Something was inside:");
-      add(got, "t-" + RULES.tierOf(got));
-      add(RULES.tierOf(got), "t-" + RULES.tierOf(got));
+      add(got);
     }
     add(" ");
     add("[ OK ]", "btn");
@@ -892,7 +891,7 @@
         else if (e.stage === "swap") {
           save.party.forEach((p, i) => { if (i > 0) left.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
           left.append(opt("[N]O", "swap-none"));
-        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[G]IVE", "offer"), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
+        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[G]IVE", "offer"), "   ", (() => { const r = opt("[R]UN", "run"); if (save.encounter.ranTried || !["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
       }
       row.append(left);
       pre.appendChild(row);
@@ -935,6 +934,7 @@
       document.querySelectorAll(".btn.ask").forEach(el => { el.classList.remove("nudge"); void el.offsetWidth; el.classList.add("nudge"); });
       return;
     }
+    if (name === "run" && save && save.encounter && save.encounter.ranTried) { save.log = "> KURA already tried to run. FIGHT, TALK, or GIVE."; persist(); draw(); encounterBox(); return; }
     if (name === "run" && save && save.encounter) {
       // Running takes any way out, whichever way KURA faces: an open door first, a locked one (it takes the key) if that's all there is.
       const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]), free = out.filter(d => !can.locked[d]);
