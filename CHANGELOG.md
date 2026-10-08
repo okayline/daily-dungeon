@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.40 - Oct 7 2026, 19:57 HST
+
+![v0.40](screenshots/v0.40.png)
+
+- **The minimap outlines the rooms you've been in** with dim `+ - |` walls (neighbors share a wall). The wall is opened at every door, so a doorway reads `+ ‖ +` and the corners next to it turn into `-` or `|`. Open doors are `=` `‖`, locked or false ones `+`, sealed ones `x`.
+- **A new demon says so first.** The fight box opens on `NAME APPEARS` with an `[ OK ]` (ignored for the first moment), so a run of key presses can't charge into the fight unseen.
+- **`[   ^   ]`** is a little narrower again, with a bigger `^` (no glow).
+
 ## v0.39 - Oct 7 2026, 19:48 HST
 
 ![v0.39](screenshots/v0.39.png)

@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.39";
+  const VERSION = "v0.40";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const pad = (s, n) => (s + " ".repeat(n)).slice(0, Math.max(n, s.length));
@@ -168,7 +168,7 @@
     // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 18, `[<]  ${st.facing || "?"}  [>]`);
-    overlay(VH - 2, 18, "[    ^    ]");          // the day's step: forward, the way KURA faces
+    overlay(VH - 2, 19, "[   ^   ]");          // the day's step: forward, the way KURA faces
     // The day's omen, centered across the top of the 3D view, like writing on the ceiling.
     const omenT = (st.omenText || "").replace(/^> /, "");
     // A long one wraps onto a second row (split at the space nearest the middle), so the walls always show.

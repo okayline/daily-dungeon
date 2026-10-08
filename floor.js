@@ -189,17 +189,33 @@
       if (r >= 0 && r < H && c + k >= 0 && c + k < W) rows[r][c + k] = ch;
     });
     const here = floor.rooms[state.at];
+    // Every room KURA has been in is outlined in + - | walls (neighbors share a wall), opened wherever there is a door
+    // (open, locked, false or sealed), so a corner next to a door turns into - or |.
+    const seen = [];
     floor.rooms.forEach((room, i) => {
-      if (!room) return;                        // (a saved floor has null where a room isn't built yet)
-      const row = 2 + (room.r - here.r) * 2, col = 13 + (room.c - here.c) * 4;
+      if (room && state.visited[i]) seen.push({ i, room, row: 2 + (room.r - here.r) * 2, col: 13 + (room.c - here.c) * 4 });
+    });
+    const wall = Array.from({ length: H }, () => Array(W).fill(false));
+    const mark = (r, c, v) => { if (r >= 0 && r < H && c >= 0 && c < W) wall[r][c] = v; };
+    for (const { row, col } of seen)
+      for (let r = row - 1; r <= row + 1; r++) for (let c = col - 1; c <= col + 3; c++) if (r !== row || c === col - 1 || c === col + 3) mark(r, c, true);
+    const open = (row, col, d) => {
+      if (d === "E") mark(row, col + 3, false); if (d === "W") mark(row, col - 1, false);
+      if (d === "S") for (let k = 0; k < 3; k++) mark(row + 1, col + k, false);
+      if (d === "N") for (let k = 0; k < 3; k++) mark(row - 1, col + k, false);
+    };
+    for (const { room, row, col } of seen) { for (const d of Object.keys(room.doors)) open(row, col, d); for (const d of room.falseDoors || []) open(row, col, d); }
+    for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) if (wall[r][c]) {
+      const n = r > 0 && wall[r - 1][c], s = r < H - 1 && wall[r + 1][c], w = c > 0 && wall[r][c - 1], e = c < W - 1 && wall[r][c + 1];
+      rows[r][c] = (n || s) && (w || e) ? "+" : n || s ? "|" : "-";
+    }
+    seen.forEach(({ i, room, row, col }) => {
       const found = state.found[i] || [];
       const lureHere = i === floor.lure && !found.includes("lure");
-      if (!state.visited[i]) return;
       const mark = state.at === i ? "@" : i === floor.start ? "^"
         : found.includes("stairs") ? "v" : lureHere ? "?" : room.hall ? ":" : " ";   // : is a passage
       put(row, col, "[" + mark + "]");
-      // Door stubs out of a visited room, so the next room shows it exists.
-      // (a locked door, whose room isn't built yet, and a false door both show as +)
+      // Door marks sit in the opened gaps: = and ‖ for open doors, + for a locked or false one, x for a sealed one.
       const stub = (d, locked) => {
         if (d === "E") put(row, col + 3, locked ? "+" : "=");
         if (d === "W") put(row, col - 1, locked ? "+" : "=");

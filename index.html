@@ -53,6 +53,7 @@
   .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
   .door { color: var(--trail); }
+  .wall { color: var(--dim); }
   .btn { cursor: pointer; color: var(--bright); }
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
@@ -89,6 +90,7 @@
   @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
   .mframe { color: var(--trail); }
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
+  .caret { display: inline-block; width: 1ch; font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
   .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* a nudge when keys are pressed while a question waits */
   /* The build number, small, under the screen's lower right corner. */
   .ver { white-space: pre-line; text-align: right; font-size: 12px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
@@ -124,7 +126,13 @@
       if (i >= 15 && i <= 19) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
         // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
-        const map = right.replace(/\[[\^v]\]|[@^v<>&$?□=‖]/g, m => {
+        const map = right.replace(/\[[\^v]\]|[@^v<>&$?□=‖+\-|]/g, (m, at) => {
+          // The outline walls (+ - |) are dim; a + with no wall beside it is a locked door and stays bright. The panel's own edges are left alone.
+          if (/[+\-|]/.test(m)) {
+            if (at === 0 || at === right.length - 1) return m;
+            const l = right[at - 1], r = right[at + 1], gap = c => c === " " || c === "[" || c === "]";
+            return m === "+" && gap(l) && gap(r) ? `<span class="door">+</span>` : `<span class="wall">${m}</span>`;
+          }
           if (m.length === 3) return "[" + `<span class="cell stairs">${m[1]}</span>` + "]";
           const ch = m;
           const cls = { "@": "you", "^": "you", "v": "you", "<": "you", ">": "you",
@@ -143,7 +151,7 @@
           .replace("[&gt;]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="right">[&gt;]</span>`)
           // [^] takes the day's step forward; dim when that way is a wall or the step is spent, and in a fight
           // (running is a button in the fight box).
-          .replace("[    ^    ]", `<span class="btn${save && !save.encounter && RULES.available(save)[save.facing] ? "" : " off"}" data-act="forward">[    ^    ]</span>`)
+          .replace("[   ^   ]", `<span class="btn${save && !save.encounter && RULES.available(save)[save.facing] ? "" : " off"}" data-act="forward">[   <span class="caret">^</span>   ]</span>`)
           .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
         const tail = esc(line.slice(48)).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
@@ -751,6 +759,12 @@
     return true;
   }
 
+  let introAt = 0;
+  function introOK() {
+    if (Date.now() - introAt < 700 || !save || !save.encounter) return;      // a quick tap or a held key can't dismiss it
+    save.encounter.seen = true; persist();
+    encounterBox(false);
+  }
   function encounterBox(animate) {
     if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
     const e = save && save.encounter, lines = (save && save.round) || [];
@@ -774,6 +788,19 @@
       for (const l of lines) for (const w of wrapText(l, COLS)) add(w, lineClass(l));
       add(" ");
       add("[ OK ]", "btn");
+      return true;
+    }
+    // A new demon: say so first, and wait for [ OK ], so a run of key presses can't charge into the fight unseen.
+    if (!e.seen) {
+      pre.innerHTML = "";
+      box.dataset.mode = "intro";
+      introAt = Date.now();
+      add(`${e.name} APPEARS`, "demon");
+      add(" ");
+      const said = [save.extra && save.extra.includes(e.name) ? save.extra : null, ...lines].filter(Boolean).map(l => String(l).replace(/^> /, ""));
+      for (const l of said) { for (const w of wrapText(l, COLS)) add(w); add(" "); }
+      const row = document.createElement("div"), ok = document.createElement("span");
+      ok.textContent = "[ OK ]"; ok.className = "btn"; ok.dataset.intro = "1"; row.append(ok); pre.appendChild(row);
       return true;
     }
     const barFor = hp => { const f = Math.round(10 * hp / e.hpmax); return `[${"#".repeat(f)}${"-".repeat(10 - f)}]`; };
@@ -949,6 +976,8 @@
   });
   document.getElementById("found").addEventListener("click", e => {
     if (replayTimer) return finishReplay();     // a click skips the round's playback
+    if (e.target.closest("[data-intro]")) return introOK();
+    if (document.getElementById("found").dataset.mode === "intro") return;
     const pa = e.target.closest("[data-pact]");
     if (pa && passAct) return passAct(pa.dataset.pact);
     const c = e.target.closest("[data-cact]");
@@ -979,6 +1008,7 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
     const fbox = document.getElementById("found");
+    if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (key === "enter") introOK(); return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
     if (!fbox.hidden) {
       e.preventDefault();
