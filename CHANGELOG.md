@@ -8,12 +8,11 @@ Changes to the game itself, newest first, with the time each went live (Honolulu
 
 Rooms that want something from you, and a party that talks back.
 
-- **Rooms:** walking into a room no longer hands you its benefit. Each room has something in it to find and use.
+- **Rooms:** Each room has something in it to find and use.
 - **Party:** every time you walk into a room, someone in the party has something to say about it.
 - **Minimap:** a locked door you are facing shows up white.
 - **Looking around:** an open doorway is described as an opening, not a shut door. The turn buttons read `[ < ]` and `[ > ]`.
 - **Room name:** TURN and DAY stay put whatever the room's name.
-- **Demons:** they ask a couple of questions before they ever ask you for anything, and the questions themselves are gentler.
 
 ## v0.49 - Oct 8 2026, 01:10 HST
 
@@ -21,12 +20,9 @@ Rooms that want something from you, and a party that talks back.
 
 Doors that wait for you, slower searching, and a health bar for KURA.
 
-- **Doors:** unlocking a door only opens it. KURA stays where she is and walks in when you choose.
-- **Searching:** finds take more work, and a wall gets stingier after it gives something up.
+- **Doors:** unlocking a door only opens it. KURA walks in when you choose.
 - **Minimap:** open doorways are plain gaps, and a locked door's `#` is never covered by the facing arrow.
 - **Fight popup:** KURA has a health bar like the enemy's. The text keeps to two lines and rolls up. `[D]ISCHARGE` is gone from fights for now.
-- **Demons:** a little more patient with silence.
-- **Cheat menu:** `X` shows three left-aligned lines, and the build number sits right under the screen.
 - **Changelog:** older entries are vaguer.
 
 ## v0.48.1 - Oct 8 2026, 00:24 HST
@@ -36,7 +32,6 @@ Doors that wait for you, slower searching, and a health bar for KURA.
 A new name, and gentler demons.
 
 - **Name:** the game is now called Daily Digital Demon Dungeon.
-- **Talking:** demons are a little more patient with silence.
 
 ## v0.48 - Oct 8 2026, 00:14 HST
 
@@ -44,7 +39,7 @@ A new name, and gentler demons.
 
 Room names, and some tidying.
 
-- **Room names:** the bottom row of the side panel now shows the name of the room you are in, before TURN and DAY. The first room is STAIRS UP; names are flavor only.
+- **Room names:** the bottom row of the side panel now shows the name of the room you are in, before TURN and DAY. The first room is STAIRS UP.
 - **Cell:** the cell indicator is two slots, `CELL [#][ ]`, so an empty cell is visible.
 - **Party talk:** a party member's reply on log line 3 clears when you take your next action.
 
@@ -54,8 +49,8 @@ Room names, and some tidying.
 
 Talking, programs, corrupted demons, and rooms that describe themselves.
 
-- **Demon talk:** a demon asks for a gift only some of the time; otherwise the talk ends peacefully or it offers to join. Questions have a third answer, `[S]ILENT`. Every demon has a personality that shapes how it reacts. Answers about order or mischief pull toward LAW or CHAOS, and recruits are kept as pacts (listed in the run summary).
-- **Party talk:** party questions have `[S]ILENT` too, with the three buttons on log line 3. Members share the personalities. One almost out of patience asks "Anything else you want to say?" A member at ease sometimes confides something, once each, in order.
+- **Demon talk:** a demon asks for a gift only some of the time; otherwise the talk ends peacefully or it offers to join. Questions have a third answer, `[S]ILENT`. Every demon has a personality that shapes how it reacts.
+- **Party talk:** party questions have `[S]ILENT` too, with the three buttons on log line 3. Members share the personalities.
 - **Friendly programs:** a few pieces of software in the dungeon's system can be recruited, each with a small job. They are listed in the Codex.
 - **Corrupted demons:** some demons turn up corrupted, with a glitched name. Talking can restore them.
 - **Rooms:** entering a room shows flavor only. Searching a locked door says it is one, and searching an arch says what the room beyond is like.
@@ -113,7 +108,6 @@ Minimap and door tiles, plus a few fixes.
 - **Minimap:** the grid outline is dimmer. Locked doors are `#`, a sealed door is plain wall, a passage is `] [`, and the `[:]` mark is gone. The facing arrow stays.
 - **Open doors in the 3D view** show the empty frame with the dark beyond, instead of a knob.
 - **A blocked run opens a popup** ("PING blocked your way.") that waits for `[ OK ]`.
-- **A new run rerolls the omens.** The invoke result line is plain white, not gold, and STA[N]DBY sits a touch lower.
 
 ## v0.42 - Oct 7 2026, 21:23 HST
 
