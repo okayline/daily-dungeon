@@ -2,6 +2,15 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.46.1 - Oct 7 2026, 23:21 HST
+
+![v0.46.1](screenshots/v0.46.1.png)
+
+Alignment between SILVER and ICHOR, and questions answered beside the question.
+
+- **Alignment tag:** `[NEU]` now sits between SILVER and ICHOR (`< [LAW]` or `[CHA] >` when the last action pulled that way). It tightens to `<[LAW]` when the amounts are big and drops out when there is no room. The bottom row keeps just TURN and DAY.
+- **Questions:** `[Y]ES   [N]O` sit at the right end of log line 3, beside the question, instead of in the bottom bar. STA[N]DBY stays put.
+
 ## v0.46 - Oct 7 2026, 23:19 HST
 
 ![v0.46](screenshots/v0.46.png)

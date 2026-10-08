@@ -167,7 +167,11 @@
       // straight even if a glyph in the font (an apostrophe, say) isn't exactly one cell wide.
       // Line 2 glows gold right after using an item.
       if (i >= lines.length - 6 && i <= lines.length - 4) {
-        const inner = esc(line.slice(1, -1)), gold = false;
+        let inner = esc(line.slice(1, -1)); const gold = false;
+        // A party member's question: [Y]ES and [N]O sit at the right end of line 3 and answer it.
+        if (i === lines.length - 4) inner = inner
+          .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')
+          .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>');
         return `|<span class="logline${gold ? " gold" : ""}">${inner}</span>|`;
       }
       if (i === lines.length - 2) {
@@ -180,9 +184,6 @@
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace("[S]EARCH", b("[S]EARCH", "search", can.search))
           .replace("STA[N]DBY", b("STA[N]DBY", "hold", can.hold))
-          .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')       // a party member's question: answered down here
-          .replace("[N]O ", '<span class="btn ask" data-act="qno">[N]O</span> ')
-
           .replace(/\[([NSEW])\](ORTH|OUTH|AST|EST)/g, (m, x) =>
             b(m, "go-" + x, can[x]).replace('class="btn', 'class="btn' + (armed === x ? " armed" : save && save.encounter && can[x] ? " flee" : "")));
       }
@@ -196,8 +197,8 @@
       return esc(line);
     }).join("\n")
       // The ALIGN arrow (which way the last action pulled KURA) glows white.
-      .replace(/ALIGN (&lt;|\[)(LAW|NEU|CHA)(&gt;|\])/, (m, l, t, r) => "ALIGN " +
-        (l === "&lt;" ? '<span class="pull">&lt;</span>' : l) + t + (r === "&gt;" ? '<span class="pull">&gt;</span>' : r));
+      .replace(/&lt;( ?\[(?:LAW|NEU|CHA)\])/, '<span class="pull">&lt;</span>$1')
+      .replace(/(\[(?:LAW|NEU|CHA)\] ?)&gt;/, '$1<span class="pull">&gt;</span>');
   }
 
   // Line 3 (voices, flavor, clues) stays put for at least 2 actions and 2 seconds before the next one replaces it,

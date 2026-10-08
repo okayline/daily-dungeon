@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.46";
+  const VERSION = "v0.46.1";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -231,22 +231,25 @@
     const mapPad = mapRows === 5 ? 0
       : Math.max(1, Math.floor((PW - Math.max(...mp.map(m => m.length))) / 2));
     const magStr = `ICHOR ${(st.ichor ?? st.mag ?? 0).toLocaleString("en-US")}`;
-    const money = ljust(` SILVER ${(st.silver ?? st.macca ?? 0).toLocaleString("en-US")}`, PW - magStr.length) + magStr;
+    const silverStr = ` SILVER ${(st.silver ?? st.macca ?? 0).toLocaleString("en-US")}`;
+    // The ALIGN tag sits between SILVER and ICHOR: < on the LAW side or > on the CHAOS side only when the last
+    // action pulled that way. Spaced out when there is room (< [NEU] >), tight when the amounts are big.
+    const pull = st.pull || 0, aTag = String(st.align).slice(0, 3).toUpperCase();
+    const gapN = PW - silverStr.length - magStr.length;
+    const lA = pull < 0 ? "<" : " ", rA = pull > 0 ? ">" : " ";
+    const tag = gapN >= 11 ? `${lA} [${aTag}] ${rA}` : gapN >= 9 ? `${lA}[${aTag}]${rA}` : "";
+    const tagPad = Math.floor((gapN - tag.length) / 2);
+    const money = silverStr + " ".repeat(tagPad) + tag + " ".repeat(gapN - tagPad - tag.length) + magStr;
     const WEEK = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
     // Each floor is a real week: the header shows today's weekday (Honolulu), MON to SUN.
     const today = localDay(now, st.tz) + (st.clockOffset || 0);
     const wk = st.dungeon ? WEEK[(today + 3) % 7] : "";
     const title = ` MAP  ${st.floor}${wk ? "  " + wk : ""} `, dash = PW - 1 - title.length;
     const mapHead = " " + "-".repeat(Math.floor(dash / 2)) + title + "-".repeat(Math.ceil(dash / 2));
-    // The ALIGN tag shows which way the last action pulled KURA: a bracket turns into an arrow,
-    // <NEU] toward LAW, [NEU> toward CHAOS, so the width never changes.
-    const pull = st.pull || 0;
-    const align = `ALIGN ${pull < 0 ? "<" : "["}${String(st.align).slice(0, 3).toUpperCase()}${pull > 0 ? ">" : "]"}`;
     // TURN counts every action KURA has taken (stepping, searching, turning); facing shows in the turn controls.
     // While KURA is tripping, the TURN counter shows what she thinks it is (st.turnShown).
     const face = `TURN ${String(Math.max(0, st.turnShown ?? st.steps ?? 0)).padStart(4, "0")}`, dayStr = `DAY ${String(st.day).padStart(2, "0")}`;
-    const gap = PW - 1 - align.length - face.length - dayStr.length;
-    const bottom = " " + align + " ".repeat(Math.floor(gap / 2)) + face + " ".repeat(Math.ceil(gap / 2)) + dayStr;
+    const bottom = " " + face + " ".repeat(PW - 1 - face.length - dayStr.length) + dayStr;
     // The moon strip: the eight phases as 3-column blocks (lit on the right while waxing), a . above today's.
     const PHASE = ["   ", "  ▓", " ▓█", "▓██", "███", "██▓", "█▓ ", "▓  "];
     // The dot sits over the middle of the lit part of today's cell (a half column right of the printed spot for the two quarters, which the page shifts).
@@ -266,14 +269,16 @@
     // Line 1 is the day's omen when the rules provide one; otherwise the moon line.
     // Line 1 is the status report when the rules provide one; otherwise the moon line.
     const moonLine = st.status || "> " + lines[realDay % lines.length];
-    for (const m of [moonLine, st.log || "", extra]) S.push(r(" " + m));
+    // A question's [Y]ES [N]O sit at the right end of line 3, beside the question.
+    const line3 = st.question ? ljust(" " + extra.slice(0, 64), 65) + "[Y]ES   [N]O " : " " + extra;
+    for (const m of [" " + moonLine, " " + (st.log || ""), line3]) S.push(r(m));
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step on the right.
     // The day's step is the [^] button in the 3D view now; the right side waits for answers ([Y]ES [N]O, later).
     // While a party member's question is open, [Y]ES and [N]O take STA[N]DBY's place at the right end of this bar
     // (nothing else can be done until it's answered anyway), so the log lines above keep their full width.
     const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", cell = `CELL [${(st.today || {}).stepped && !st.freeSteps ? "  " : "##"}]${st.spare > 0 ? "[+]" : ""}`,   // today's charge, and a stored spare
-      daily = st.question ? " ".repeat(18) + "[Y]ES   [N]O " : cell.padEnd(15) + "STA[N]DBY ";
+      daily = cell.padEnd(15) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
