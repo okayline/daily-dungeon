@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.46.1";
+  const VERSION = "v0.47";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -270,7 +270,8 @@
     // Line 1 is the status report when the rules provide one; otherwise the moon line.
     const moonLine = st.status || "> " + lines[realDay % lines.length];
     // A question's [Y]ES [N]O sit at the right end of line 3, beside the question.
-    const line3 = st.question ? ljust(" " + extra.slice(0, 64), 65) + "[Y]ES   [N]O " : " " + extra;
+    const answers = "[Y]ES  [N]O  [S]ILENT";
+    const line3 = st.question ? ljust(" " + extra.slice(0, 77 - answers.length - 1), 77 - answers.length) + answers + " " : " " + extra;
     for (const m of [" " + moonLine, " " + (st.log || ""), line3]) S.push(r(m));
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step on the right.

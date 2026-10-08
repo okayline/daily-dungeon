@@ -157,7 +157,12 @@
       if ((n === "X" || (n === "K" && !names.includes("X"))) && clueKind) pile.push("clue");          // the dead end's big clue (it doesn't count toward the pile's size)
       for (let j = pile.length - 1; j > 0; j--) { const m = RR(j + 1); [pile[j], pile[m]] = [pile[m], pile[j]]; }
       // A Recharge Bay is safe: its demons turn into items.
-      const hidden = kind === "bay" ? pile.map(h => h === "demon" ? "item" : h) : pile;
+      let hidden = kind === "bay" ? pile.map(h => h === "demon" ? "item" : h) : pile;
+      // The bonus room still has to be searched for, but its walls hold better things: a locker, items and coin, no demons.
+      if (n === bonusN) {
+        hidden = hidden.filter(h => !["demon", "item", "silver"].includes(h)).concat(["lure", "item", "item", "silver"]);
+        for (let j = hidden.length - 1; j > 0; j--) { const m = RR(j + 1); [hidden[j], hidden[m]] = [hidden[m], hidden[j]]; }
+      }
       const room = { r: floor.pos[i].r, c: floor.pos[i].c, doors: doors[n], hidden, wing: stage };
       if (kind) room.kind = kind;
       if (n === bonusN) room.kind = BONUS_KIND;

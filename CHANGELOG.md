@@ -2,6 +2,18 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.47 - Oct 7 2026, 23:51 HST
+
+![v0.47](screenshots/v0.47.png)
+
+Talking, programs, corrupted demons, and rooms that describe themselves.
+
+- **Demon talk:** a demon asks for a gift only some of the time (programs almost never); otherwise the talk ends peacefully or it offers to join. Questions have a third answer, `[S]ILENT`. Every demon has a personality (GRUFF, HAUGHTY, SLY, PRIM, DREAMY) that shapes how it takes silence, how often it asks, and whether it will join. Answers about order or mischief pull toward LAW or CHAOS, and recruits are kept as pacts (listed in the run summary).
+- **Party talk:** party questions have `[S]ILENT` too, with the three buttons on log line 3. Members share the personalities. One almost out of patience asks "Anything else you want to say?" (YES mends it, NO and they leave in their own way, silence wears them down). A member at ease sometimes confides something, once each, in order.
+- **Programs:** WATCHDOG, PATCH, CACHE, SCAN and COMPILER are friendly LAW software that can be recruited, each with a small job. They are listed in the Codex.
+- **Corrupted demons:** in the second half of the week some demons turn up corrupted (data ones most), CHAOS with a glitched name. Talking can restore them.
+- **Rooms:** entering a room shows flavor only. The bonus room always has a program waiting, and its walls hold better loot (still searched for). Searching a locked door says it is one, and searching an arch says what the room beyond is like.
+
 ## v0.46.1 - Oct 7 2026, 23:21 HST
 
 ![v0.46.1](screenshots/v0.46.1.png)

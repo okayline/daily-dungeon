@@ -171,7 +171,8 @@
         // A party member's question: [Y]ES and [N]O sit at the right end of line 3 and answer it.
         if (i === lines.length - 4) inner = inner
           .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')
-          .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>');
+          .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>')
+          .replace("[S]ILENT", '<span class="btn ask" data-act="qsilent">[S]ILENT</span>');
         return `|<span class="logline${gold ? " gold" : ""}">${inner}</span>|`;
       }
       if (i === lines.length - 2) {
@@ -504,6 +505,7 @@
       "  [D]ISCHARGE ........ in a fight: spend the day's charge on one blow that ends most fights",
       "                       (a spare cell is stored for each day nobody played, one at most)",
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
+      "  [S]ILENT ........... a third answer: say nothing",
       "  1-8 ................ pick a gift when a demon asks for one",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
       "  [C]ODEX ............ every demon and item found, over all runs (press C on the main screen)",
@@ -903,7 +905,8 @@
       const row = document.createElement("div"); row.className = "brow";
       const left = document.createElement("span");
       if (final) {
-        if (e.stage === "ask" || e.stage === "join" || e.stage === "chat") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
+        if (e.stage === "chat") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"), "   ", opt("[S]ILENT", "silent"));   // a third answer: say nothing
+        else if (e.stage === "ask" || e.stage === "join") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
         else if (e.stage === "swap") {
           save.party.forEach((p, i) => { if (i > 0) left.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
           left.append(opt("[N]O", "swap-none"));
@@ -942,11 +945,13 @@
       name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
     }
     if (save && save.encounter && (name === "left" || name === "right")) return;      // no turning around mid-fight
-    if ((name === "qyes" || name === "qno") && save) {
-      const log = save.log;
-      save = RULES.reply(save, name === "qyes");
+    if ((name === "qyes" || name === "qno" || name === "qsilent") && save) {
+      const log = save.log, partyBefore = (save.party || []).map(p => p.name);
+      save = RULES.reply(save, name === "qsilent" ? "silent" : name === "qyes");
       heldExtra = null;                    // the answer's line goes up at once, not behind the old question
       remember(log); persist(); draw();
+      const gone = partyBefore.filter(n => !(save.party || []).some(p => p.name === n));
+      if (gone.length) noticeBox([`${gone.join(" and ")} leaves the party.`, save.extra.replace(/^> /, "")]);      // someone left over the answer
       return;
     }
     // A party member's question waits for [Y]ES or [N]O: nothing else moves the game on until it's answered
@@ -994,7 +999,7 @@
     }
     const log = save.log, steps = save.steps, exBefore = save.extra, ranBefore = !!(save.encounter && save.encounter.ranTried), partyBefore = (save.party || []).map(p => p.name);
     const before = { items: (save.items || []).slice(), silver: save.silver };
-    save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
+    save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false) : name === "silent" ? RULES.answer(save, "silent")
       : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
       : name.startsWith("offer-") ? RULES.offerGive(save, name === "offer-none" ? null : Number(name.slice(6)))
       : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
@@ -1104,7 +1109,8 @@
         let k;
         if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", escape: "give-none" }[key];
         else if (st2 === "offer") k = /^[1-8]$/.test(key) ? "offer-" + (Number(key) - 1) : { b: "offer-none", n: "offer-none", escape: "offer-none" }[key];
-        else if (st2 === "ask" || st2 === "join" || st2 === "chat") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
+        else if (st2 === "chat") k = { y: "yes", enter: "yes", n: "no", s: "silent", escape: "no" }[key];
+        else if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
         else k = { f: "fight", t: "talk", g: "offer", i: "invoke", r: "run", d: "discharge" }[key];
         if (k) act(k);
@@ -1141,7 +1147,7 @@
       return;
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
-    if (save && save.question && (key === "y" || key === "n")) { e.preventDefault(); return act(key === "y" ? "qyes" : "qno"); }
+    if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", p: "backup", r: "reset",
       s: "search", n: "hold", g: "altar", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day

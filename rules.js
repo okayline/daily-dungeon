@@ -118,6 +118,21 @@
     folklore: ["REDCAP", "GAKI", "BANSHEE", "BARGHEST", "TROLL", "GHOUL", "ONI", "KAPPA", "LAMIA", "WRAITH", "IMP",
       "PIXIE", "ELF", "CU SITH"],
   };
+  // PROGRAMS: friendly software that lives in the dungeon's system. They are LAW, speak as data does, and
+  // can be recruited. Each does one small job for the party (see PROGRAM JOBS).
+  const PROGRAMS = ["WATCHDOG", "PATCH", "CACHE", "SCAN", "COMPILER"];
+  const isProgram = n => PROGRAMS.includes(n);
+  const has = (st, n) => (st.party || []).some(p => p.name === n && p.hp > 0);
+  // CORRUPTION. Late in the week the system is damaged: some demons turn up corrupted (CHAOS, a glitched name),
+  // data ones most of all. Talking can restore them. Nothing is corrupted in the first half of the week.
+  function corruptOdds(st, fam) {
+    const d = st.dungeon; if (!d || !d.floor) return 0;
+    const span = Math.max(1, (d.floor.days || 7) - 1), prog = Math.max(0, Math.min(1, (clock(st) - (d.arrived ?? clock(st))) / span));
+    if (prog < 0.5) return 0;
+    return (0.1 + 0.3 * (prog - 0.5) / 0.5) * (fam === "data" ? 1 : 0.5);
+  }
+  const GLITCH = { A: "@", E: "3", I: "!", O: "0", U: "#" };
+  const glitch = n => n.replace(/[AEIOU]/, c => GLITCH[c]);
   const LADDER = [                                      // family weights by floor (B1F, B2F, B3F, B4F and deeper)
     { data: 7, hardware: 3, hybrid: 0, folklore: 0 },
     { data: 4, hardware: 5, hybrid: 1, folklore: 0 },
@@ -144,6 +159,7 @@
   }
   function pickDemon1(st) {
     if (Math.random() < 0.03) return "ATOM SLASHER";
+    if (Math.random() < 0.07) { const free = PROGRAMS.filter(n => !(st.party || []).some(p => p.name === n)); if (free.length) return pick(free); }
     const d = st.dungeon, w = { ...LADDER[Math.min(floorNum(st), 4) - 1] }, om = omen(clock(st) + (st.omenSalt || 0)).fx;
     const wall = wallLoop(st), linger = d ? RS(d).linger : 0;
     if (wall >= 4) { w.data += 3; w.hardware += 2; }
@@ -302,11 +318,24 @@
   const KIND_CLUE = {
     den: ["> Scratched into the wall: IT'S ALWAYS WARM BACK THERE.", "> A torn tag: LOOSE GEAR, HOT AIR. TAKE WHAT YOU CAN CARRY."],
     bay: ["> A note taped to the wall: SAFE TO REST. NOTHING GETS IN.", "> Chalked low on the stone: A PLACE TO LIE DOWN. ONE DOOR."],
-    relay: ["> Scrawled in marker: THE DISHES TURN. LISTEN, IT KNOWS THE WAY.", "> A cable, tied in a knot, tagged: SIGNAL ROOM."],
+    relay: ["> Scrawled in marker: THE DISHES TURN. LISTEN, IT KNOWS THE WAY.", "> A cable, tied in a knot, tagged: FOLLOW THE CARRIER."],
     vault: ["> Chalked on the stone: COIN. RACKS OF IT. DON'T LINGER.", "> A tally of numbers, and under it: SILVER, BEHIND THE COLD DOOR."],
     forge: ["> A scorched tag: BENCH AND TOOLS. BRING THE TAINT TO BURN OUT.", "> Scratched deep: IT MENDS THE BAD OUT OF YOU."],
     altar: ["> A scrap of print: IT ASKS. GIVE, AND IT ANSWERS.", "> Written small, over and over: FEED THE SCREEN."],
     archive: ["> A label, half peeled: EVERYTHING EVER SAVED. TAKE ONE.", "> Stamped on a drive: ONE STILL SPINS."],
+  };
+  // What the room beyond an open arch is like (finishes "a room that ..."). Senses only; it never names the room.
+  const ARCH_DESC = {
+    den: ["runs warm, and smells of hot dust", "breathes warm air, and old plastic"],
+    bay: ["is quiet and clean, and hums like something asleep", "feels kind, and very still"],
+    relay: ["carries a thin tone, almost a voice", "ticks and hisses, faintly"],
+    vault: ["is cold and dry, and holds its breath", "is cold, with a hush of metal"],
+    forge: ["smells of solder and ash", "ticks like cooling metal"],
+    altar: ["glows faintly at one wall", "seems to be listening"],
+    archive: ["blinks with rows of tiny lights", "whirs, dry and low"],
+    hall: ["is only a narrow way through, bare and echoing", "stretches on, narrow and bare"],
+    dead: ["closes in, with nowhere further to go", "is small and shut, at the end of the way"],
+    plain: ["is bare and quiet", "is plain and still"],
   };
   const FALSE_SEARCH = ["Paint. A door painted on bare stone.", "The door is flat. Brush strokes, and nothing under them.", "KURA knocks. Solid wall, dressed up as a door."];
   const FALSE_GO = ["The door is only paint. The cell keeps its charge.", "KURA pushes. It is a wall with a door painted on it. No charge spent.", "A painted door. The cell was never needed."];
@@ -486,6 +515,7 @@
     if (held) {   // standby is a camp: everyone standing is whole again, patience is full, taint is gone, the room cools right down
       st.party = st.party.map(p => p.hp > 0 ? { ...p, hp: p.hpmax, mp: p.mpmax ?? p.mp, ...(p.patience === undefined ? {} : { patience: PATIENCE }) } : { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) });
       st.taint = 0;
+      campJobs(st);
       if (st.dungeon) { for (const rs of allRooms(st.dungeon)) rs.heat = Math.floor(rs.heat / 2); RS(st.dungeon).heat = 0; }
       st.loop = { key: "", n: 0 };
       tally(st, "standby");
@@ -498,13 +528,26 @@
       st.log = `> The week ended. The dark closed over KURA.`;
       return st;
     }
-    st.log = `> KURA wakes on ${st.floor}.`;
+    st.log = `> KURA wakes on ${st.floor}.` + (st.campNote ? " " + st.campNote : "");
+    delete st.campNote;
     st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight."
       : earned ? "> The cell kept its charge while KURA was away. A spare is stored."
       : held ? (st.restedDay = t, `> In the dark, a voice: "${omen(t + 1 + (st.omenSalt || 0)).text.replace(/^> "|"$/g, "")}"`) : settled ? "> The room settles." : atmosphere(st);
     return st;
   }
 
+  // PROGRAM JOBS at camp: COMPILER merges two COMMON items into an UNCOMMON one; CACHE keeps a copy of one COMMON.
+  function campJobs(st) {
+    const commons = () => (st.items || []).filter(n => TIER[n] === "COMMON");
+    if (has(st, "COMPILER") && commons().length >= 2) {
+      const a = commons()[0]; st.items.splice(st.items.indexOf(a), 1);
+      const b = commons()[0]; st.items.splice(st.items.indexOf(b), 1);
+      const it = pick(names("UNCOMMON")); gain(st, it); st.campNote = `COMPILER makes ${it}.`;
+    } else if (has(st, "CACHE") && commons().length) {
+      const it = pick(commons()); gain(st, it); st.campNote = `CACHE keeps a copy of ${it}.`;
+    }
+  }
+  const inArchive = st => { const d = st.dungeon; return !!(d && d.floor.rooms[d.at] && d.floor.rooms[d.at].kind === "archive"); };
   // What a search turns up. Placeholder effects: random damage, SILVER and ICHOR.
   function reveal(st, thing) {
     const silver = st.silver ?? st.macca ?? 0, ichor = st.ichor ?? st.mag ?? 0;
@@ -521,16 +564,20 @@
         if (w && w.clueKind) st.clue = pick(KIND_CLUE[w.clueKind]);
         return "A scrap of writing, pinned to the wall.";
       }
-      case "silver": { const n = R(20, 150); st.silver = silver + n; tally(st, "silverFound", n); return `Coins in the rubble. ${n} SILVER.`; }
-      case "item": { const it = rollItem(st); gain(st, it); return `KURA finds ${it}.`; }
+      case "silver": { const n = R(20, 150) * (inArchive(st) ? 2 : 1); st.silver = silver + n; tally(st, "silverFound", n); return `Coins in the rubble. ${n} SILVER.`; }
+      case "item": { const it = inArchive(st) ? pick(names(Math.random() < 0.35 ? "RARE" : "UNCOMMON")) : rollItem(st); gain(st, it); return `KURA finds ${it}.`; }
       case "demon": {
         // A demon appears and stays until it's fought, talked down, or escaped (see the ENCOUNTER section).
-        const name = pickDemon(st);
-        const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * (UNIQUE[name] ? UNIQUE[name].hp : 1));
-        st.encounter = { name, family: familyOf(name), align: alignOf(name), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
+        const base = pickDemon(st);
+        const corrupt = !isProgram(base) && !UNIQUE[base] && Math.random() < corruptOdds(st, familyOf(base));
+        const name = corrupt ? glitch(base) : base;
+        const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * (UNIQUE[base] ? UNIQUE[base].hp : 1) * (corrupt ? 1.15 : 1));
+        st.encounter = { name, base, corrupt, family: familyOf(base), align: corrupt ? "CHAOS" : alignOf(base), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
         st.question = null;                             // a waiting question lapses when a demon steps in
-        st.round = [`${A(name)} blocks the way.`, STANCE_LINE[stance(st, st.encounter)](name)];
-        note(st, "demons", name, "met"); tally(st, "met");
+        st.round = corrupt ? [`${A(name)} blocks the way.`, "Its edges flicker. The data is damaged."]
+          : isProgram(base) ? [`${A(name)} is running here.`, "It does not seem to mind KURA."]
+          : [`${A(name)} blocks the way.`, STANCE_LINE[stance(st, st.encounter)](name)];
+        note(st, "demons", base, "met"); tally(st, "met");
         return `${A(name)} appears!`;
       }
     }
@@ -673,7 +720,14 @@
       let pool = DOOR;
       if (isFalse(d, dir)) pool = FALSE_SEARCH;
       else if (isSealed(d, dir)) pool = SEALED;
-      else if (isLocked(d, dir) && Math.random() < 0.55) pool = KIND_HINT[FLOOR.kindBehind(d.floor, d.at, dir)] || DOOR;
+      else if (isLocked(d, dir)) {                          // a locked door says so, and sometimes lets a hint slip
+        const hint = Math.random() < 0.55 ? KIND_HINT[FLOOR.kindBehind(d.floor, d.at, dir)] : null;
+        pool = hint ? hint.map(h => "A locked door. " + h) : ["A locked door. Nothing to search here.", "A locked door. KURA runs a hand along the frame.", "A locked door. It gives nothing away."];
+      } else {                                              // an open arch: what the room beyond is like
+        const to = d.floor.rooms[room.doors[dir]], k = (to && to.kind) || FLOOR.kindBehind(d.floor, d.at, dir);
+        const desc = pick(ARCH_DESC[k] || (to && to.hall ? ARCH_DESC.hall : to && to.dead ? ARCH_DESC.dead : ARCH_DESC.plain));
+        pool = [`It's an opening to a room that ${desc}.`];
+      }
       st.log = "> " + pick(pool.filter(l => "> " + l !== st.log));
       act(st, "door"); nag(st);
       return show(st);
@@ -725,6 +779,10 @@
         // The first find in a room also takes stock of its doors.
         if (found.length === 1 && st.log.length + doorList(room).length < 77) st.log += " " + doorList(room);
         drift(st);
+        if (has(st, "SCAN") && !st.clue && Math.random() < 0.3) {          // SCAN reads what is behind a door
+          const wing = st.dungeon.floor.wings[room.wing];
+          if (wing && wing.clueKind) st.clue = pick(KIND_CLUE[wing.clueKind]);
+        }
         if (st.clue) { st.extra = st.clue; delete st.clue; delete st.tell; }   // the scrap's words take line 3 (over a heat tell)
         return show(st);
       }
@@ -845,27 +903,35 @@
     const f = isNew ? 1 : 0.5;               // a return visit does half as much
     if (k === "den") {                       // hot from the start: demons come easily, and so does the rest
       RS(d, i).heat = Math.max(RS(d, i).heat, Math.round(HEAT_MAX * 0.6 * f));
-      st.tell = "> Warm air. Loose parts and old gear lie in the dark.";
+      st.tell = "> Warm, close air. Loose parts and old gear lie scattered in the dark.";
     } else if (k === "bay") {                // safe (no demons hide here): the party mends a little
       const hurt = st.party.some(p => p.hp < p.hpmax);
       if (hurt) heal(st, 1 / 3 * f, false);
-      st.tell = hurt ? "> A soft hum. The party's wounds close a little." : "> A soft hum. The air feels kind.";
+      st.tell = "> A soft hum, and clean, still air. Nothing here wants anything of KURA.";
     } else if (k === "relay") {              // a dish turns to the wing's door the dead end's scrap doesn't cover
       const fl = d.floor, w = fl.wings[rm.wing], other = w && w.exits.map(j => fl.kinds[j]).find(x => x !== w.clueKind);
-      st.tell = other ? pick(KIND_CLUE[other]) : "> A dish turns, then holds still. The signal is strong in here.";
+      st.tell = other ? pick(KIND_CLUE[other]) : "> A dish turns, then holds still. Something carries in here.";
     } else if (k === "vault") {              // coin (no keys or checks yet)
       const n = R(40, 110) * floorNum(st);
       st.silver = (st.silver ?? 0) + n; tally(st, "silverFound", n);
-      st.tell = `> A rack of old coin. KURA takes ${n} SILVER.`;
+      st.tell = "> Cold racks line the walls, heavy with small, hard things.";
     } else if (k === "forge") {              // purify: clears the ichor taint (no repairs yet). A return visit only halves it.
       if ((st.taint || 0) > 0 || tripping(st)) {
         if (isNew) { st.taint = 0; const kura = st.party[0]; delete kura.status; st.tripLeft = 0; delete st.turnShown; }
         else st.taint = Math.floor((st.taint || 0) / 2);
-        st.tell = "> Something warm hums over KURA. The edges of things sharpen.";
-      } else st.tell = "> A bench, cold tools, a smell of solder. Nothing to mend yet.";
+        st.tell = "> A bench, cold tools, a smell of solder. The air hums, warm.";
+      } else st.tell = "> A bench, cold tools, a smell of solder. The air hums, warm.";
     } else if (k === "archive") {            // the bonus room: one rare thing, still spinning
-      const it = pick(names("RARE"));
-      gain(st, it); st.tell = `> Racks of old drives. One still spins. KURA takes ${it}.`;
+      st.tell = "> Racks of old drives, most of them still warm.";
+      // A program is always waiting among the racks (one KURA doesn't already have), ready to talk.
+      const free = PROGRAMS.filter(n => !st.party.some(p => p.name === n));
+      if (free.length && !st.encounter) {
+        const name = pick(free), hpmax = Math.round(16 + 9 * floorNum(st) + R(0, 8));
+        st.encounter = { name, base: name, corrupt: false, family: "data", align: "LAW", hp: hpmax, hpmax, round: 0, angered: false, stage: null };
+        st.question = null;
+        st.round = [`${A(name)} is running here.`, "It does not seem to mind KURA."];
+        note(st, "demons", name, "met"); tally(st, "met");
+      }
     } else if (k === "altar") {              // a terminal in the wall: face it and SEARCH
       st.tell = "> Something in the wall glows, very faintly.";
     }
@@ -1185,7 +1251,7 @@
     const e = st.encounter, up = st.party.filter(p => p.hp > 0);
     if (!up.length) return;
     const target = Math.random() < 0.4 ? st.party[0].hp > 0 ? st.party[0] : pick(up) : pick(up);
-    const dmg = Math.min(target.hp, Math.max(1, Math.round(R(2, Math.ceil(target.hpmax / 3)) * RAGE[moon()] * (UNIQUE[e.name] ? UNIQUE[e.name].hit : 1))));
+    const dmg = Math.min(target.hp, Math.max(1, Math.round(R(2, Math.ceil(target.hpmax / 3)) * RAGE[moon()] * (UNIQUE[e.name] ? UNIQUE[e.name].hit : 1) * (has(st, "WATCHDOG") ? 0.67 : 1))));
     st.party = st.party.map(p => p === target ? { ...p, hp: p.hp - dmg } : p);
     lines.push(`${THE(e.name)} strikes ${target.name}. -${dmg} HP` + (target.hp - dmg <= 0 ? ". FALLS" : ""));
     if (st.party[0].hp <= 0) {
@@ -1219,6 +1285,10 @@
       const it = pick(MOON_DROPS);
       lines.push(`It leaves ${it}.`);
       gain(st, it, lines);
+    }
+    if (has(st, "PATCH")) {                            // PATCH mends the party after a fight
+      st.party = st.party.map(p => p.hp > 0 ? { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 8)) } : p);
+      lines.push("PATCH mends the party a little.");
     }
     st.log = `> ${THE(e.name)} falls. ${n} ICHOR.`;
     st.dungeon.scent = { room: st.dungeon.at, text: "Copper in the air" };
@@ -1299,6 +1369,7 @@
   // toward whatever she recruits, and her other choices nudge her too (see lean below).
   const ALIGN_OUTLIERS = { "WORM": "CHAOS", "VENDOR": "LAW", "PAGER GHOUL": "NEUTRAL", "KITSUNE.EXE": "CHAOS", "PIXIE": "NEUTRAL" };
   function alignOf(name) {
+    if (isProgram(name)) return "LAW";
     if (ALIGN_OUTLIERS[name]) return ALIGN_OUTLIERS[name];
     const f = familyOf(name);
     return f === "data" ? "LAW" : f === "folklore" ? "CHAOS" : "NEUTRAL";
@@ -1325,7 +1396,7 @@
   //   finding a LAW / CHAOS relic (RARE and up): -0.3 / +0.3; offering one pulls toward it (+-0.4, NEUTRAL: none)
   const LEAN = { LAW: -1, CHAOS: 1, NEUTRAL: 0, search: -0.03, hot: 0.2, talk: -0.15, fight: 0.3, kill: 0.6,
     pay: -0.4, task: -0.4, offer: 0.4, run: 0.15, findLAW: -0.3, findCHAOS: 0.3, offerLAW: -0.4, drink: 0.8,
-    break: 0.15, breakLAW: 0.6, breakCHAOS: -0.4 };
+    break: 0.15, breakLAW: 0.6, breakCHAOS: -0.4, talkLAW: -0.25, talkCHAOS: 0.25, restore: -0.5 };
   function lean(st, why, lines) {
     const base = LEAN[why] || 0;
     if (!base) return;
@@ -1353,6 +1424,7 @@
     if (lines) lines.push(say); else st.tell = "> " + say;
   }
   function familyOf(name) {
+    if (isProgram(name)) return "data";
     for (const f of Object.keys(FAMILY)) if (FAMILY[f].includes(name)) return f;
     return "folklore";
   }
@@ -1412,11 +1484,11 @@
     if (e.angered || (UNIQUE[e.name] && !UNIQUE[e.name].talks)) {
       lines.push(`${THE(e.name)} won't listen.`);
       demonTurn(st, lines);
-    } else if (Math.random() < Math.min(0.95, LISTEN[moon()] * omen(clock(st) + (st.omenSalt || 0)).fx.talk * STANCE_TALK[stance(st, e)])) {
+    } else if (isProgram(e.name) || Math.random() < Math.min(0.95, LISTEN[moon()] * (e.corrupt ? 0.7 : 1) * omen(clock(st) + (st.omenSalt || 0)).fx.talk * STANCE_TALK[stance(st, e)])) {
       lines.push(`${e.name}: "${say2(e, "open")}"`);
       // First it sizes KURA up: one or two questions, answered YES or NO (see DEMON TALK below).
       // Then it asks for a gift: anything. What it gets decides how it reacts (see GIFTS below).
-      e.got = 0; e.asks = 1; e.mood = 0;
+      e.got = 0; e.asks = 1; e.mood = isProgram(e.name) || (e.corrupt && has(st, "PATCH")) ? 1 : 0;      // programs like KURA; PATCH steadies a corrupted one
       e.want = 2 + floorNum(st);
       e.silver = Math.round((20 + 10 * floorNum(st) + R(0, 20)) * { same: 0.7, neutral: 1, opposite: 1.5 }[stance(st, e)]);
       e.left = R(1, 2); e.asked = [];
@@ -1441,6 +1513,11 @@
     "CU SITH": ["CU SITH thumps its tail twice.", "CU SITH presses its head under KURA's hand.",
       "CU SITH answers with a low, happy rumble.", "CU SITH tilts its head, ears up."],
   };
+  PARTY_TALK.WATCHDOG = ['WATCHDOG: "PERIMETER CLEAR."', 'WATCHDOG: "NOTHING ENTERS UNLOGGED."', "WATCHDOG circles once, then sits."];
+  PARTY_TALK.PATCH = ['PATCH: "MINOR FAULTS ONLY. FOR NOW."', 'PATCH: "HOLD STILL. THIS WON\'T HURT."', "PATCH runs a quiet check on everyone."];
+  PARTY_TALK.CACHE = ['CACHE: "I KEPT A COPY OF THAT."', 'CACHE: "NOTHING IS TRULY LOST."', "CACHE rattles softly, full of small things."];
+  PARTY_TALK.SCAN = ['SCAN: "SWEEPING..."', 'SCAN: "THE WALLS ARE THINNER HERE."', "SCAN's light passes slowly over the stone."];
+  PARTY_TALK.COMPILER = ['COMPILER: "WORKING."', 'COMPILER: "GIVE ME TWO SMALL THINGS. I WILL GIVE YOU ONE."', "COMPILER hums, building something out of nothing."];
   const FAMILY_TALK = {
     data: ['{n}: "QUERY NOT UNDERSTOOD. RETRY?"', '{n}: "ALL SYSTEMS NOMINAL. FOR NOW."',
       '{n}: "CONVERSATION LOGGED."', '{n}: "USER HEART RATE ELEVATED."', '{n}: "01101000 01101001"',
@@ -1538,10 +1615,14 @@
     if (snap(st, p)) return show(st);
     // In a calm room, a member with patience to spare sometimes asks KURA something instead (1 in 4).
     if (tier < 2 && (p.patience ?? PATIENCE) >= 3 && Math.random() < 0.25) { ask(st, p); return show(st); }
+    // A member wearing thin (but not gone) sometimes asks whether things are all right: a chance to mend it.
+    if (tier < 2 && (p.patience ?? PATIENCE) <= 2 && p.patience > 0 && Math.random() < 0.4) { ask(st, p, true); return show(st); }
+    // One at ease sometimes opens up instead.
+    if (tier < 2 && (p.patience ?? PATIENCE) >= 4 && Math.random() < ({ HAUGHTY: 0.08, DREAMY: 0.25 }[personaOf(p)] || 0.15) && confide(st, p)) return show(st);
     // Plain chatter is easy on them: only after about 7 talks each in a day (around 30 for the party)
     // does talking start to wear their patience down.
     p.chats = (p.chats || 0) + 1;
-    if (p.chats > 6) p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
+    if (p.chats > ({ HAUGHTY: 5, DREAMY: 8 }[personaOf(p)] || 6)) p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
     // A dangerous room (nervous or worse) outranks being annoyed; otherwise a tired member says so.
     const lines = tier >= 2 ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier]
       : p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[fam])[p.patience]
@@ -1578,18 +1659,69 @@
       ['{n}: "can I hum? I like humming"', ["{n} hums happily at mains frequency.", 1], ['{n}: "ok. quiet mode"', -1]],
     ],
     hybrid: [
-      ['{n}: "Do you ever wish you were more than flesh?"', ['{n}: "We could arrange that."', 1, "offer"], ['{n}: "Pity."', 0, "pay"]],
+      ['{n}: "Do you wish to be more than flesh?"', ['{n}: "We could arrange that."', 1, "offer"], ['{n}: "Pity."', 0, "pay"]],
       ['{n}: "Shall I listen to the walls for you?"', ['{n} listens. "...They\'re listening back."', 1], ['{n}: "Your choice, traveler."', 0]],
     ],
     folklore: [
-      ['{n}: "Will you remember my name when this is over?"', ['{n}: "We will see."', 2], ['{n}: "Then I will remember yours."', -2]],
+      ['{n}: "Will they tell of us, after?"', ['{n}: "Let them."', 2], ['{n}: "Then we tell it ourselves."', -2]],
+      ['{n}: "Will you remember my name, after?"', ['{n}: "We will see."', 2], ['{n}: "Then I will remember yours."', -2], ["HAUGHTY"]],
       ['{n}: "Do you fear the moon?"', ['{n}: "Wise."', 0, "pay"], ['{n}: "Good. Neither do I."', 0, "offer"]],
     ],
   };
-  function ask(st, p) {
-    const pool = ASK[p.name] || ASK[p.family || "folklore"];
-    const k = R(0, pool.length - 1);
-    st.question = { who: p.name, pool: ASK[p.name] ? p.name : (p.family || "folklore"), k };
+  // LAST CHANCE: a member almost out of patience asks KURA if she has anything else to say. YES mends it. NO,
+  // and they take their leave (how, and whether, depends on their nature). Silence only wears them down further.
+  ASK.mend = [['{n}: "Anything else you want to say?"', ['{n} nods slowly. "Good. That is all I wanted."', 3, "talk"], ["", 0]]];
+  const LEAVE_NO = {
+    HAUGHTY: ['{n}: "Well, then!" {n} turns and is gone.', 1], PRIM: ['{n}: "Very well. Farewell." {n} leaves, back straight.', 1],
+    SLY: ['{n}: "Suit yourself." {n} slips away, smiling.', 1], DREAMY: ['{n}: "...oh. Okay." {n} drifts off into the dark.', 0.8],
+    GRUFF: ["{n} snorts and walks off. It looks back once, then goes.", 0.4],
+  };
+  function lastChance(st, p, yes) {
+    if (yes === true) { p.patience = Math.min(PATIENCE + 2, (p.patience ?? 0) + 3); lean(st, "talk"); st.extra = "> " + ASK.mend[0][1][0].replace(/\{n\}/g, p.name); return; }
+    if (yes === "silent") {                              // saying nothing wears them down further
+      p.patience = Math.max(0, (p.patience ?? 0) - (personaOf(p) === "GRUFF" ? 1 : 2));
+      st.extra = "> " + `${p.name} waits. Then looks away.`; return;
+    }
+    const [say, odds] = LEAVE_NO[personaOf(p)] || LEAVE_NO.PRIM;
+    if (Math.random() < odds) {
+      st.party = st.party.filter(q => q !== p); endPact(st, p.name);
+      st.log = `> ${p.name} leaves the party.`;
+      st.extra = "> " + (p.name === "PIXIE" ? QUIT.PIXIE : say).replace(/\{n\}/g, p.name);
+    } else {
+      p.patience = 0;
+      st.extra = `> ${p.name} says nothing more. It is not over.`;
+    }
+  }
+  // How a silent answer lands with a party member (patience change, and what they do).
+  const SILENT_PARTY = {
+    GRUFF: [1, "{n} grunts. Silence suits it."], DREAMY: [1, "{n} drifts closer. The quiet is nice."],
+    PRIM: [0, "{n} waits, then lets it pass."], SLY: [() => Math.random() < 0.5 ? 1 : 0, "{n} smiles. It reads silence its own way."],
+    HAUGHTY: [-1, "{n} frowns at the silence."],
+  };
+  // CONFIDING: a member at ease, now and then, tells KURA something about themselves (each told once, in order).
+  const CONFIDE = {
+    ELF: ['ELF: "I left a garden once. I still count its trees."', 'ELF: "I spent a hundred years in a tower. The quiet was easier."', 'ELF: "You remind me of someone. I will not say who."'],
+    PIXIE: ['PIXIE: "I\'m scared of the dark. Don\'t tell anyone."', 'PIXIE: "I had a name before. It was longer. I forgot it."', 'PIXIE: "You\'re the first one who ever kept up."'],
+    "CU SITH": ["CU SITH rests its head on KURA's knee. It trusts her.", "CU SITH shows KURA an old scar, then looks away.", "CU SITH leads KURA to a corner and shows her a buried bone. A gift."],
+    data: ['{n}: "I DELETED A FILE ONCE. I STILL REMEMBER IT."', '{n}: "I WAS BUILT TO WATCH. NOW I WATCH OVER YOU."'],
+    hardware: ['{n}: "I used to live in a kitchen. I miss the radio."', '{n}: "the last person to hold me left the light on"'],
+    hybrid: ['{n}: "Half of me remembers rain. The other half, why."', '{n}: "I do not know which of me is the real one."'],
+    folklore: ['{n}: "I was feared once. It was lonely."', '{n}: "Mountains forget. I try not to."'],
+  };
+  function confide(st, p) {
+    const pool = CONFIDE[p.name] || CONFIDE[p.family || "folklore"], n = p.told || 0;
+    if (n >= pool.length) return false;
+    p.told = n + 1;
+    p.patience = Math.min(PATIENCE + 2, (p.patience ?? PATIENCE) + 1);
+    st.extra = "> " + pool[n].replace(/\{n\}/g, p.name);
+    tally(st, "confided");
+    return true;
+  }
+  function ask(st, p, mend) {
+    const pool = mend ? ASK.mend : ASK[p.name] || ASK[p.family || "folklore"];
+    const fits = pool.map((_, i) => i).filter(i => !pool[i][3] || pool[i][3].includes(personaOf(p)));
+    const k = fits[R(0, fits.length - 1)];
+    st.question = { who: p.name, pool: mend ? "mend" : ASK[p.name] ? p.name : (p.family || "folklore"), k };
     st.extra = "> " + pool[k][0].replace(/\{n\}/g, p.name);
   }
   // KURA answers the question: YES (true) or NO (false). Free, like turning.
@@ -1600,11 +1732,19 @@
     const p = (st.party || []).find(m => m.name === q.who);
     st.question = null;
     if (!p) return show(st);
-    const [line, dp, why] = ASK[q.pool][q.k][yes ? 1 : 2];
+    if (q.pool === "mend") {
+      st.log = `> KURA answers ${p.name}: ${yes === "silent" ? "silence" : yes ? "yes" : "no"}.`;
+      lastChance(st, p, yes); tally(st, "answers");
+      return show(st);
+    }
+    const quiet = yes === "silent";
+    let line, dp, why;
+    if (quiet) { const [d, say] = SILENT_PARTY[personaOf(p)] || SILENT_PARTY.PRIM; dp = typeof d === "function" ? d() : d; line = say; }
+    else [line, dp, why] = ASK[q.pool][q.k][yes ? 1 : 2];
     p.patience = Math.max(0, Math.min(PATIENCE + 2, (p.patience ?? PATIENCE) + dp));
     if (why) lean(st, why);
     tally(st, "answers");
-    st.log = `> KURA answers ${p.name}: ${yes ? "yes" : "no"}.`;
+    st.log = `> KURA answers ${p.name}: ${quiet ? "silence" : yes ? "yes" : "no"}.`;
     st.extra = "> " + line.replace(/\{n\}/g, p.name);
     return show(st);
   }
@@ -1619,7 +1759,7 @@
       st.log = `> ${p.name} has had enough.`;
       st.extra = "> " + (SNAP[p.name] || `${p.name} strikes KURA.`) + (dmg > 0 ? ` -${dmg} HP` : "");
     } else {
-      st.party = st.party.filter(q => q !== p);
+      st.party = st.party.filter(q => q !== p); endPact(st, p.name);
       st.log = `> ${p.name} leaves the party.`;
       st.extra = "> " + (QUIT[p.name] || QUIT[p.family || "folklore"]).replace(/\{n\}/g, p.name);
     }
@@ -1652,7 +1792,7 @@
     ELF: [['ELF: "Shall I try? Elves have a way with walls."', ["ELF touches the wall. Nothing. She looks offended.", 1], ['ELF: "Suit yourself."', 0]]],
     PIXIE: [['PIXIE: "Can we PLEASE do something else?"', ['PIXIE: "YES. Thank you."', 2], ["PIXIE groans into KURA's hair.", -1]],
       ['PIXIE: "Do you want me to search it FOR you?"', ['PIXIE pats the wall once. "There. Searched."', 1], ['PIXIE: "Fine. FINE."', 0]]],
-    "CU SITH": [["CU SITH brings KURA a pebble. Is this what she's looking for?", ["CU SITH is very proud of itself.", 2], ["CU SITH puts the pebble back exactly where it was.", -1]]],
+    "CU SITH": [["CU SITH brings KURA a pebble. Is this it?", ["CU SITH is very proud of itself.", 2], ["CU SITH puts the pebble back exactly where it was.", -1]]],
     data: [['{n}: "SUGGEST NEW TASK? Y / N"', ['{n}: "ACKNOWLEDGED. THANK YOU."', 2], ['{n}: "CONTINUING. RELUCTANTLY."', -1]]],
     hardware: [['{n}: "can I hold it? whatever it is?"', ['{n} holds it very carefully. "ok. ok."', 2], ['{n}: "ok. just asking"', -1]]],
     hybrid: [['{n}: "Shall I listen to it for you?"', ['{n} listens. "It says no."', 1], ['{n}: "Your loss."', 0]]],
@@ -1819,14 +1959,41 @@
     e.asked.push(k); e.q = k; e.stage = "chat";
     lines.push(`${e.name}: "${pool[k][0]}"`);
   }
+  // PERSONALITY. Every demon has one, fixed by its name (each family leans toward a few). It decides how a
+  // silent answer lands, how readily it asks for something, and whether it will ever join without being won over.
+  const PERSONA_OF = { data: ["PRIM", "SLY"], hardware: ["GRUFF", "DREAMY"], hybrid: ["SLY", "HAUGHTY", "GRUFF"], folklore: ["HAUGHTY", "GRUFF", "SLY"] };
+  const PARTY_PERSONA = { ELF: "PRIM", PIXIE: "DREAMY", "CU SITH": "GRUFF" };
+  function personaOf(e) {
+    if (PARTY_PERSONA[e.name]) return PARTY_PERSONA[e.name];
+    const list = PERSONA_OF[e.family || "folklore"] || PERSONA_OF.folklore;
+    return list[[...String(e.name)].reduce((n, c) => n + c.charCodeAt(0), 0) % list.length];
+  }
+  const ASK_MOD = { HAUGHTY: 1.4, PRIM: 0.6, DREAMY: 0.5 };
+  // How a silent answer lands: the line, and the mood it moves (+1 pleased, -1 offended).
+  const SILENCE = {
+    GRUFF: [n => `${THE(n)} grunts. It seems to approve.`, () => 1],
+    HAUGHTY: [n => `${THE(n)} sniffs. Being ignored is not what it wanted.`, () => -1],
+    SLY: [n => `${THE(n)} smiles. It reads silence its own way.`, () => Math.random() < 0.5 ? 1 : 0],
+    PRIM: [n => `${THE(n)} waits, then quietly takes note.`, () => 0],
+    DREAMY: [n => `${THE(n)} drifts closer. It likes the quiet.`, () => 1],
+  };
   function demonHears(st, e, yes, lines) {
     const [, likes, good, bad] = DEMON_ASK[e.family || "folklore"][e.q];
-    if (tripping(st) && Math.random() < 0.3) { yes = !yes; lines.push("KURA meant to say the other thing."); }
-    const wanted = likes === true ? true : likes === "LAW" ? e.align === "LAW" || e.align === "NEUTRAL" && Math.random() < 0.5
-      : e.align === "CHAOS" || e.align === "NEUTRAL" && Math.random() < 0.5;
-    const liked = likes === true ? yes : yes === wanted;
-    lines.push(`KURA: ${yes ? "\"Yes.\"" : "\"No.\""}`, `${e.name}: "${liked ? good : bad}"`);
-    e.mood += liked ? 1 : -1;
+    const quiet = yes === "silent";
+    if (quiet) {                                      // a third answer: say nothing, and let its nature decide
+      const [say, feel] = SILENCE[personaOf(e)] || SILENCE.PRIM, d = feel();
+      lines.push("KURA says nothing.", say(e.name));
+      e.mood += d;
+    } else {
+      if (tripping(st) && Math.random() < 0.3) { yes = !yes; lines.push("KURA meant to say the other thing."); }
+      const wanted = likes === true ? true : likes === "LAW" ? e.align === "LAW" || e.align === "NEUTRAL" && Math.random() < 0.5
+        : e.align === "CHAOS" || e.align === "NEUTRAL" && Math.random() < 0.5;
+      const liked = likes === true ? yes : yes === wanted;
+      lines.push(`KURA: ${yes ? "\"Yes.\"" : "\"No.\""}`, `${e.name}: "${liked ? good : bad}"`);
+      e.mood += liked ? 1 : -1;
+      // Answers to a question about order or mischief pull KURA that way.
+      if (likes === "LAW" || likes === "CHAOS") lean(st, yes ? (likes === "LAW" ? "talkLAW" : "talkCHAOS") : (likes === "LAW" ? "talkCHAOS" : "talkLAW"));
+    }
     tally(st, "demonAnswers");
     if (e.mood <= -2) {                               // two sour answers: it loses its temper
       lines.push(`${THE(e.name)} has heard enough.`);
@@ -1834,8 +2001,40 @@
       return;
     }
     if (--e.left > 0) return demonAsks(st, e, lines);
-    e.stage = "gift";                                  // sized up: now it wants something
-    lines.push(`${e.name}: "${say2(e, "ask")}"`);
+    sizeUp(st, e, lines);
+  }
+  // The questions are over. Only some demons then ask for something (programs hardly ever); the rest
+  // simply end the talk: a pleased LAW-leaning one may offer to join, the others go their way.
+  const ASK_ODDS = { data: 0.1, hardware: 0.3, hybrid: 0.4, folklore: 0.45 };
+  function sizeUp(st, e, lines) {
+    if (e.corrupt) {                                   // the damage lifts, or it doesn't
+      if (e.mood >= 1) {
+        e.corrupt = false; e.name = e.base; e.align = alignOf(e.base);
+        tally(st, "restored"); lean(st, "restore");
+        lines.push(`The noise drains out of ${e.name}. It is whole again.`);
+        if (Math.random() < 0.6) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
+        else { lines.push(`${e.name}: "${say2(e, "leave")}"`); leaves(st, e); }
+      } else {
+        lines.push("The noise swallows it again.");
+        e.stage = null; e.angered = true; demonTurn(st, lines);
+      }
+      return;
+    }
+    if (isProgram(e.name)) {                           // a program never asks for anything: it just decides whether to link
+      if (Math.random() < (e.mood >= 1 ? 0.9 : e.mood === 0 ? 0.4 : 0)) { e.stage = "join"; lines.push(`${THE(e.name)} offers to link with the party.`); }
+      else { lines.push(`${e.name}: "${say2(e, "leave")}"`); leaves(st, e); }
+      return;
+    }
+    if (Math.random() < Math.min(0.9, (ASK_ODDS[e.family || "folklore"] ?? 0.4) * (ASK_MOD[personaOf(e)] || 1))) {
+      e.stage = "gift";                                // sized up: now it wants something
+      lines.push(`${e.name}: "${say2(e, "ask")}"`);
+      return;
+    }
+    const proud = personaOf(e) === "HAUGHTY" && e.mood < 2;          // a haughty one has to be won over twice
+    const joins = e.mood >= 1 && e.align !== "CHAOS" && !proud ? Math.min(0.5, 0.2 + 0.1 * (e.mood - 1)) : 0;
+    if (Math.random() < joins) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); return; }
+    lines.push(e.mood >= 1 ? `${THE(e.name)} is content. ${say2(e, "leave")}` : `${THE(e.name)} loses interest. ${say2(e, "leave")}`);
+    leaves(st, e);
   }
 
   // KURA's answer to a demon's price or offer.
@@ -1844,6 +2043,7 @@
     const e = st.encounter;
     if (!e || !e.stage) return show(st);
     const lines = [];
+    if (yes === "silent" && e.stage !== "chat") yes = false;      // silence only means something to a demon's question
     if (e.stage === "gift") return give(st, yes ? 0 : null);
     if (e.stage === "chat") { demonHears(st, e, yes, lines); st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st); }
     if (e.stage === "join") {
@@ -2047,16 +2247,21 @@
     hybrid: "Loves things half machine, half spirit (most RARE finds). Takes coin.",
     folklore: "Wants old spirit things. Hates tech. Shrugs at SILVER.",
   };
+  const PROGRAM_JOB = {
+    WATCHDOG: "Guards the party: blows land softer.", PATCH: "Mends the party after a fight. Steadies corrupted data.",
+    CACHE: "At camp, keeps a copy of a COMMON item.", SCAN: "Reads the walls: now and then a search shows what a door hides.",
+    COMPILER: "At camp, merges two COMMON items into an UNCOMMON one.",
+  };
   function codex(st) {
     const c = st.codex || { demons: {}, items: {} };
-    const demons = Object.keys(FAMILY).map(f => ({ group: f, entries: FAMILY[f].concat(f === "folklore" ? Object.keys(UNIQUE) : []).map(name => {
+    const demons = Object.keys({ ...FAMILY, programs: 0 }).map(f => ({ group: f, entries: (f === "programs" ? PROGRAMS : FAMILY[f]).concat(f === "folklore" ? Object.keys(UNIQUE) : []).map(name => {
       const seen = c.demons[name] || {}, fam = familyOf(name), al = alignOf(name);
       const known = !!(seen.met || seen.joined || (st.party || []).some(p => p.name === name));
       if (!known) return { name, known };
       const lines = [];
       if (UNIQUE[name]) lines.push("It does not talk. It does not stop.");
       else {
-        lines.push(`"${VOICE[fam].open[0]}"`, WANTS[fam]);
+        lines.push(`"${VOICE[fam].open[0]}"`, isProgram(name) ? PROGRAM_JOB[name] : WANTS[fam]);
         if (al === "CHAOS") lines.push("Trickster: takes gifts, rarely joins.");
       }
       lines.push(al === "NEUTRAL" ? "NEUTRAL: neither friend nor foe to anyone."
@@ -2086,18 +2291,21 @@
     if (!e || e.stage !== "swap") return show(st);
     const lines = [];
     if (i === null || !st.party[i] || i === 0) { lines.push(`KURA keeps the party. ${say2(e, "leave")}`); leaves(st, e); }
-    else { const gone = st.party.splice(i, 1)[0]; lines.push(`${gone.name} leaves the party.`); recruit(st, e, lines); }
+    else { const gone = st.party.splice(i, 1)[0]; endPact(st, gone.name); lines.push(`${gone.name} leaves the party.`); recruit(st, e, lines); }
     st.round = lines;
     st.roundOver = true;
     return show(st);
   }
   function leaves(st, e) { st.log = `> ${THE(e.name)} leaves.`; st.encounter = null; }
+  // A pact ends when the demon leaves the party.
+  function endPact(st, name) { const p = (st.pacts || []).find(q => q.name === name && q.on); if (p) p.on = false; }
   function recruit(st, e, lines) {
     const lv = Math.max(1, 2 * floorNum(st) + R(-1, 2));
     const hpmax = 12 + lv * 5, mpmax = lv * 2 + R(0, 4);
-    st.party.push({ name: e.name, lv, hp: hpmax, hpmax, mp: mpmax, mpmax, family: e.family, align: e.align, demon: true });
+    st.party.push({ name: e.base || e.name, lv, hp: hpmax, hpmax, mp: mpmax, mpmax, family: e.family, align: e.align, demon: true });
     lines.push(`${e.name}: "${say2(e, "join")}"`, `${e.name} joins the party.`);
     note(st, "demons", e.name, "joined"); tally(st, "recruited");
+    (st.pacts = st.pacts || []).push({ name: e.name, floor: st.floor, day: st.day, on: true });      // the pact is kept on record
     lean(st, e.align, lines);
     st.log = `> ${e.name} joins the party.`;
     st.encounter = null;
@@ -2114,7 +2322,8 @@
       ["Alignment", `${st.align}  (lean ${fixed(st.alignScore)}, LAW - / CHAOS +)`],
       ["Heat here", `${Math.round(heat)}  (${TIER[heatTier(heat)]})`], ["Hottest room", Math.round(k.maxHeat || 0)],
       ["Demons met", k.met || 0], ["Beaten", k.beaten || 0], ["Talked to", k.demonTalks || 0],
-      ["Gifts given", k.gifts || 0], ["Recruited", k.recruited || 0], ["Escaped", k.fled || 0],
+      ["Gifts given", k.gifts || 0], ["Recruited", k.recruited || 0],
+      ["Restored", k.restored || 0], ["Pacts", (st.pacts || []).map(q => q.name + (q.on ? "" : " (ended)")).join(", ") || "none"], ["Escaped", k.fled || 0],
       ["Party talks", k.partyTalks || 0], ["Items found", k.items || 0],
       ["ICHOR fed", k.ichorFed || 0], ["ICHOR drunk", `${k.ichorDrunk || 0} times  (${k.trips || 0} trips)`],
       ["Items broken", `${k.broken || 0}  (${k.insides || 0} had something inside)`],
