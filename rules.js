@@ -402,6 +402,33 @@
       st.extra = pick(DREAD_LINES.filter(l => l !== st.extra));
     }
   }
+  // ROOM NAMES: so a backtracking player can tell rooms apart. The start room is "Stairs up", the room holding the
+  // stairs down (once found) is "Stairs down", and every other room is named the first time KURA walks in. The name is a
+  // flavor word for what the room is like (11 characters at most, the same senses as the arch lines), never the room's
+  // actual name. It sticks to the room, and no two rooms on a floor share one.
+  const NAMES_BY_KIND = {
+    den: ["Snug room", "Burrow room", "Musty room"], bay: ["Quiet room", "Soft room", "Still room"],
+    relay: ["Tone room", "Static room", "Dish room"], vault: ["Heavy room", "Sealed room", "Hushed room"],
+    forge: ["Ash room", "Solder room", "Soot room"], altar: ["The altar"],
+    archive: ["Drive room", "Rack room", "Spin room"], hall: ["Passageway", "Conduit", "Crawlway", "Corridor", "Walkway", "Service way"], dead: ["Dead end", "Sealed end"],
+    plain: ["Dusty room", "Damp room", "Grey room", "Tiled room", "Mossy room", "Sooty room", "Round room", "Echo room", "Salt room",
+      "Rusty room", "Hollow room", "Side room", "Back room", "Big room", "Small room", "Odd room", "Wet room", "Dry room", "Low room",
+      "High room", "Lamp room", "Bent room", "Split room", "Dim room", "Old room", "Plain room", "Faded room", "Chalky room", "Bleak room",
+      "Dark room", "Pale room", "Wide room"],
+  };
+  function roomName(d, i) {
+    if (i === 0) return "Stairs up";
+    if (allRooms(d)[i] && allRooms(d)[i].found.includes("stairs")) return "Stairs down";
+    const rs = RS(d, i);
+    if (rs.name) return rs.name;
+    const rm = d.floor.rooms[i], used = new Set(allRooms(d).map(x => x.name).filter(Boolean));
+    const lists = [NAMES_BY_KIND[rm.kind || (rm.hall ? "hall" : rm.dead ? "dead" : "plain")] || NAMES_BY_KIND.plain, NAMES_BY_KIND.plain];
+    const h = Math.abs(Math.imul((d.floor.seed | 0) ^ Math.imul(i + 1, 0x9e3779b1), 0x85ebca6b) >>> 7);
+    for (const list of lists) {
+      for (let t = 0; t < list.length; t++) { const n = list[(h + t) % list.length]; if (!used.has(n)) return (rs.name = n); }
+    }
+    return (rs.name = NAMES_BY_KIND.plain[h % NAMES_BY_KIND.plain.length]);
+  }
   function show(st) {
     if (!st.dungeon) return st;
     if (st.dreadCheck) dread(st);
@@ -413,6 +440,7 @@
     st.extraUrgent = false;                             // the page holds line 3 for a moment, unless this is a warning
     if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; st.extraUrgent = true; } // a heat tell takes line 3 right away (not over a question)
     RS(d);                                              // (converts an old save's room arrays)
+    st.roomName = roomName(d, d.at);
     st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.facing, visited: allRooms(d).map(s => s.visited), found: allRooms(d).map(s => s.found) });
     const door = dir => doorWall(room, dir);
     if (st.dead) {
@@ -592,6 +620,7 @@
   function act(st, key) {                  // every action counts a STEP and marks the game unsaved
     st.steps = (st.steps || 0) + 1;
     st.unsaved = true;
+    if (st.talkLine) { if (st.extra === st.talkLine) st.extra = ""; delete st.talkLine; }   // a party member's reply doesn't outstay the next action
     if (st.altar) st.altar = null;           // walking off closes the terminal
     bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
     if (st.dungeon) RS(st.dungeon).linger++;
@@ -726,7 +755,7 @@
       } else {                                              // an open arch: what the room beyond is like
         const to = d.floor.rooms[room.doors[dir]], k = (to && to.kind) || FLOOR.kindBehind(d.floor, d.at, dir);
         const desc = pick(ARCH_DESC[k] || (to && to.hall ? ARCH_DESC.hall : to && to.dead ? ARCH_DESC.dead : ARCH_DESC.plain));
-        pool = [`It's an opening to a room that ${desc}.`];
+        pool = [`An arch to another room. It ${desc}.`];
       }
       st.log = "> " + pick(pool.filter(l => "> " + l !== st.log));
       act(st, "door"); nag(st);
@@ -1734,7 +1763,7 @@
     if (!p) return show(st);
     if (q.pool === "mend") {
       st.log = `> KURA answers ${p.name}: ${yes === "silent" ? "silence" : yes ? "yes" : "no"}.`;
-      lastChance(st, p, yes); tally(st, "answers");
+      lastChance(st, p, yes); tally(st, "answers"); st.talkLine = st.extra;
       return show(st);
     }
     const quiet = yes === "silent";
@@ -1745,7 +1774,7 @@
     if (why) lean(st, why);
     tally(st, "answers");
     st.log = `> KURA answers ${p.name}: ${quiet ? "silence" : yes ? "yes" : "no"}.`;
-    st.extra = "> " + line.replace(/\{n\}/g, p.name);
+    st.extra = st.talkLine = "> " + line.replace(/\{n\}/g, p.name);
     return show(st);
   }
 
