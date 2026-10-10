@@ -33,6 +33,22 @@
   }
   function shuffleWith(a, rand) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
+  // The minimap privacy transform: one of the 8 ways to rotate/mirror a square grid (the dihedral
+  // group), picked once per floor from the private seed and held fixed for as long as she's on it --
+  // it never spins as she turns or moves. Two players on the same shared wing see the same rooms in
+  // the same true layout, just possibly rotated or mirrored relative to each other, so neither's
+  // minimap or door callouts give away the other's. `sym` 0-3 are the four rotations, 4-7 the same
+  // four mirrored first. Undefined (an in-progress floor from before this existed) means identity --
+  // no change to any wing already built, and any new wing on that same floor stays unrotated too.
+  function symTransform(sym) {
+    const mir = (sym || 0) >= 4, k = (sym || 0) % 4;
+    const IDX = { N: 0, E: 1, S: 2, W: 3 }, LBL = ["N", "E", "S", "W"];
+    return {
+      dir(d) { let i = IDX[d]; if (mir) i = (4 - i) % 4; i = (i + k) % 4; return LBL[i]; },
+      pos(r, c) { let dr = r, dc = c; if (mir) dc = -dc; for (let t = 0; t < k; t++) { const nr = dc, nc = -dr; dr = nr; dc = nc; } return { r: dr, c: dc }; }
+    };
+  }
+
   // The week's deck: the six types dealt twice into pairs (never the same type twice in a pair), one pair for each of
   // days 1 to (days-1). The last day is a wildcard: one door of a random type (on a bonus week, the seventh type).
   // opts.days is how many days this floor lasts (up to 7).
@@ -56,6 +72,7 @@
     const floor = { v: 7, seed, pseed, days, pairs, rooms: [], start: 0, stairs: -1, lure: -1, kinds: [],
       offers,                                                                  // the kinds offered, wing by wing (shared)
       lureStage: prand() < 0.6 ? 1 + Math.floor(prand() * pairs) : -1,         // which wing hides the locker (?), if any (private)
+      sym: Math.floor(prand() * 8),                                // minimap rotate/mirror, stamped once (private, see symTransform)
       streak: opts.streak || null,                                 // "LAW", "CHAOS", or null -- stamped once, at arrival (see rules.js)
       wings: [], exits: {}, count: 0, pos: [], cells: {}, parent: [], depth: [] };
     buildWing(floor, book(floor, -1, 0, 0), null);
@@ -78,7 +95,10 @@
     const prand = rng((floor.pseed ^ Math.imul(stage + 7, 0x9e3779b1)) >>> 0);   // private: this wing's own content stream
     const R = n => Math.floor(rand() * n), PR = n => Math.floor(prand() * n);
     const exitsWanted = stage < floor.pairs ? 2 : stage === floor.pairs ? 1 : 0;     // the stairs wing has one exit: the wildcard door
-    const back = from ? OPP[from.dir] : null;
+    // The wall k was entered by, in the floor's own (raw, shared) terms -- not from.dir, which by the time
+    // this runs may already be a player's rotated/mirrored label. floor.exits[k] is booked in raw terms
+    // by the parent wing below, so it's the one true source for "which wall did we just come in through."
+    const back = from ? OPP[floor.exits[k].dir] : null;
     const at = (p, d) => ({ r: p.r + DIRS[d][0], c: p.c + DIRS[d][1] });
     const key = p => p.r + "," + p.c;
 
@@ -170,6 +190,13 @@
     // stamped once, at arrival, so a floor is never both a LAW streak and a CHAOS streak).
     const antiN = !bonusN && !floor.antiRolled && stage > 0 && bonusSlot && floor.pendingAnti ? bonusSlot : null;
     if (antiN) { floor.antiRolled = true; floor.pendingAnti = false; }
+    // Everything above stays in the floor's own raw, shared terms. From here down, each room is
+    // finalized for display -- its doors relabeled and its position rotated/mirrored by the floor's
+    // one fixed symmetry (see symTransform) -- so what's actually stored and read everywhere else
+    // (minimap, door lookups, facing) is already private to this account. floor.pos/.cells (raw) are
+    // untouched, so the generation above and any later wing on this floor keep working off real geometry.
+    const T = symTransform(floor.sym);
+    const remapDoors = raw => { const out = {}; for (const d in raw) out[T.dir(d)] = raw[d]; return out; };
     for (const n of names) {
       const i = idx[n], rr = rng((floor.pseed ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0);
       const RR = m => Math.floor(rr() * m), pickR = a => a[RR(a.length)];
@@ -191,13 +218,14 @@
         hidden = hidden.filter(h => !["item", "silver"].includes(h)).concat(["demon", "demon"]);
         for (let j = hidden.length - 1; j > 0; j--) { const m = RR(j + 1); [hidden[j], hidden[m]] = [hidden[m], hidden[j]]; }
       }
-      const room = { r: floor.pos[i].r, c: floor.pos[i].c, doors: doors[n], hidden, wing: stage };
+      const p = T.pos(floor.pos[i].r, floor.pos[i].c);
+      const room = { r: p.r, c: p.c, doors: remapDoors(doors[n]), hidden, wing: stage };
       if (kind) room.kind = kind;
       if (n === bonusN) room.kind = BONUS_KIND;
       if (n === antiN) room.kind = ANTI_KIND;
       if (n === "P") room.hall = true;                       // a passage
       if (n === "X") room.dead = true;                       // a dead end
-      if (plan.falseDoors[n].length) room.falseDoors = plan.falseDoors[n];
+      if (plan.falseDoors[n].length) room.falseDoors = plan.falseDoors[n].map(d => T.dir(d));
       floor.rooms[i] = room;
     }
     return k;
@@ -301,7 +329,7 @@
     return { at: 0, visited: [true], found: [[]], facing: facing || firstDoor };
   }
 
-  const api = { generate, grow, minimap, arrive, rng, kindBehind, isSealed, DAYS, BONUS_KIND, ANTI_KIND };
+  const api = { generate, grow, minimap, arrive, rng, kindBehind, isSealed, symTransform, DAYS, BONUS_KIND, ANTI_KIND };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.FLOOR = api;
 })(this);

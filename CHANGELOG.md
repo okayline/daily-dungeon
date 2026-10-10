@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.57 - Oct 10 2026, 03:00 HST
+
+![v0.57](screenshots/v0.57.png)
+
+The last gap in shared floors: two players on the same floor now see different maps.
+
+- **Minimaps are private.** The floor's actual shape is still identical for everyone sharing it, but each account sees its own rooms and doors rotated or mirrored, fixed for as long as you're on that floor. Nothing about moving, turning or the map's own stability changes — only how it's labeled.
+- **The omen-streak bonus/void room is a guarantee, not a boost.** The day a 3-day LAW or CHAOS streak freshly completes, that day's bonus or void room is certain, same as before — it's just no longer folded into the ordinary roll's odds. The ordinary daily roll (capped at 2 a month, never two days running) is untouched by a streak either way.
+- **The ordinary bonus-room roll now tracks real moon brightness** — a little likelier around the full moon, a little rarer near the new moon — instead of a flat rate.
+
 ## v0.56.1 - Oct 10 2026, 02:00 HST
 
 ![v0.56.1](screenshots/v0.56.1.png)
