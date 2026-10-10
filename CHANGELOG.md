@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.57.3 - Oct 10 2026, 03:25 HST
+
+![v0.57.3](screenshots/v0.57.3.png)
+
+- **HOLD moved into INVOKE, as Hold Omen and Release Omen.** STA[N]DBY is gone from the border — open the bag and pick Hold Omen to go on standby (same confirmation as before), or Release Omen (was THE HELD DAY) once one's banked, to spend it in place of today's own.
+
 ## v0.57.2 - Oct 10 2026, 03:20 HST
 
 ![v0.57.2](screenshots/v0.57.2.png)

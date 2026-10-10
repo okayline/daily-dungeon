@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.57.2";
+  const VERSION = "v0.57.3";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -290,12 +290,10 @@
     const line3 = st.question ? ljust(" " + extra.slice(0, 77 - answers.length - 1), 77 - answers.length) + answers + " " : " " + extra;
     for (const m of [" " + moonLine, " " + (st.log || ""), line3]) S.push(r(m));
     S.push("+" + "-".repeat(78) + "+");
-    // Free actions on the left (unlimited, searching included); the day's one step on the right.
-    // The day's step is the [^] button in the 3D view now; the right side waits for answers ([Y]ES [N]O, later).
-    // While a party member's question is open, [Y]ES and [N]O take STA[N]DBY's place at the right end of this bar
-    // (nothing else can be done until it's answered anyway), so the log lines above keep their full width.
-    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", daily = "STA[N]DBY ";
-    S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
+    // Free actions on the left (unlimited, searching included); the day's one step is the [^] button in
+    // the 3D view, and HOLD/RELEASE now live in INVOKE with everything else that isn't always available.
+    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH";
+    S.push("|" + free + " ".repeat(78 - free.length) + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";

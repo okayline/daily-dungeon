@@ -97,7 +97,6 @@
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
   .wait { animation: blink 1s steps(1) infinite; }   /* the _ that waits for a click */
   .caret { display: inline-block; position: relative; left: calc(-1ch / 6); width: calc(1ch / 1.5); font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
-  .btn[data-act=hold] { position: relative; top: 0.02em; }   /* STANDBY sits a touch lower to line up with the bar */
   .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* two flashes when keys are pressed while a question waits */
   /* The build number, small, under the screen's lower right corner. */
   .ver { white-space: pre-line; text-align: right; font-size: 12px; line-height: 14px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
@@ -198,7 +197,6 @@
           .replace("[T]ALK", '<span class="btn" data-act="talk">[T]ALK</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace("[S]EARCH", b("[S]EARCH", "search", can.search))
-          .replace("STA[N]DBY", b("STA[N]DBY", "hold", can.hold))
           .replace(/\[([NSEW])\](ORTH|OUTH|AST|EST)/g, (m, x) =>
             b(m, "go-" + x, can[x]).replace('class="btn', 'class="btn' + (armed === x ? " armed" : save && save.encounter && can[x] ? " flee" : "")));
       }
@@ -591,8 +589,11 @@
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
     if (save && (save.ichor || 0) > 0) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
       text: "Demon blood and old light. Heals demons. Not meant for KURA." });
-    // THE HELD DAY: a banked omen, only ever present after a STANDBY day. Enter spends it in place of today's own.
-    if (save && save.bankedOmen !== undefined && !save.useBanked) invList.unshift({ name: "THE HELD DAY", omen: true, count: 1, tier: "OMEN",
+    // Hold Omen: STANDBY, moved into the bag. Enter asks to confirm (it spends the day), same as it always has.
+    if (save && RULES.available(save).hold) invList.unshift({ name: "Hold Omen", holdOmen: true, count: 1, tier: "OMEN",
+      text: "Stay put today and bank tonight's omen, to spend in place of a later day's own." });
+    // Release Omen (was THE HELD DAY): a banked omen, only ever present after a held day. Enter spends it in place of today's own.
+    if (save && save.bankedOmen !== undefined && !save.useBanked) invList.unshift({ name: "Release Omen", omen: true, count: 1, tier: "OMEN",
       text: "A day kept back, on standby. Spend it in place of today's own." });
     invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
@@ -621,6 +622,7 @@
       add(" ");
       const tag = it.ichor ? `${save.ichor} in hand` : "";
       const lines = it.ichor ? [it.text, "Enter: choose who gets it."]
+        : it.holdOmen ? [it.text, "[ENTER] asks to confirm."]
         : it.omen ? [it.text, "[ENTER] calls it back."]
         : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
       textBox(it.name, tag, lines, 41).forEach(l => add(l, ""));
@@ -662,7 +664,6 @@
       "  x .................. a door sealed for good (its pair was opened)",
       "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
       "  [G]IVE ............. facing a terminal in the wall: make an offering (SEARCH it works too)",
-      "  STA[N]DBY .......... make camp (uses the day's charge; restores the party; tonight's rest runs deeper)",
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
       "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
       "  [R]UN in a fight ... run through any open door (a locked one uses the charge; it may block you)",
@@ -670,6 +671,8 @@
       "  [S]ILENT ........... a third answer: say nothing",
       "  1-8 ................ pick a gift when a demon asks for one",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
+      "    Hold Omen ......... make camp (uses the day's charge; restores the party; tonight's rest runs deeper)",
+      "    Release Omen ...... only once a held day is banked: spend it in place of today's own",
       "  [C]ODEX ............ every demon and item found, over all runs (press C on the main screen)",
       "  [L]OG .............. the adventure log",
       ...(LEADERBOARD_URL ? ["  {{BOARD}} ........... the leaderboard (post your score when a run ends)"] : []),
@@ -726,6 +729,8 @@
   function useInv(i, drink) {
     const it = invList[i];
     if (!it || !save) return;
+    // Hold Omen still asks to confirm first, same as STANDBY always did -- just reached from the bag now.
+    if (it.holdOmen) { showInv(false); holdBox(); return; }
     const log = save.log;
     if (it.ichor && !drink) { ichorPick = 0; return showInv(true); }
     save = it.ichor ? RULES.giveIchor(save, Number(drink) || 0) : it.omen ? RULES.useBankedOmen(save) : RULES.useItem(save, it.name);
@@ -1363,7 +1368,7 @@
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
-      s: "search", n: "hold", g: "altar", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
+      s: "search", g: "altar", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
     if (k) { e.preventDefault(); act(k); }
   });
