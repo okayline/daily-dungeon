@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.57.1 - Oct 10 2026, 03:15 HST
+
+![v0.57.1](screenshots/v0.57.1.png)
+
+Simpler cell.
+
+- **DISCHARGE is gone.** It wasn't reachable from the UI anyway.
+- **The spare-charge catch-up is gone.** Missing a real day no longer banks an extra door-open for later — it's a flat one locked door a day, every day, same as STA[N]DBY.
+- **CELL in the bottom border is a single slot now**, not two.
+
 ## v0.57 - Oct 10 2026, 03:00 HST
 
 ![v0.57](screenshots/v0.57.png)

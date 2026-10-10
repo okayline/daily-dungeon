@@ -586,10 +586,6 @@
     if (!newDay || st.dead) return st;
     // A day KURA chose to HOLD (see hold) is STANDBY: a deeper rest tonight.
     const held = !!st.today.held && st.today.date === t - 1 && !!st.dungeon && !st.dead;
-    // A day nobody played leaves the cell charged: one spare is banked (never more than one).
-    const away = t - st.today.date - 1 > 0 && !!st.dungeon;
-    const earned = away && !(st.spare > 0);
-    if (away) st.spare = 1;
     st.today = { date: t, stepped: false };
     st.unsaved = true;
     // STANDBY banks that day's omen (good or bad) for later -- one slot, the newest held day wins.
@@ -659,7 +655,6 @@
     st.log = `> KURA wakes on ${st.floor}.` + (st.campNote ? " " + st.campNote : "");
     delete st.campNote;
     st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight."
-      : earned ? "> The cell kept its charge while KURA was away. A spare is stored."
       : held ? (st.restedDay = t, `> In the dark, a voice: "${omen(st.omenDay + 1).text.replace(/^> "|"$/g, "")}"`) : settled ? "> The room settles." : atmosphere(st);
     return st;
   }
@@ -773,7 +768,7 @@
       `Day ${onFloor} on this floor. ${closes}.`,
       `${name}. ${seen} room${seen === 1 ? "" : "s"} surveyed. Stairs ${stairs ? "confirmed" : "unconfirmed"}.`,
       `Day ${onFloor}. ${party}.`,
-      `${name}. ${party}. Today's charge ${(st.today || {}).stepped ? "spent" : "full"}.${st.spare ? " A spare cell is stored." : ""}`,
+      `${name}. ${party}. Today's charge ${(st.today || {}).stepped ? "spent" : "full"}.`,
       TIME.moonNote(TIME.now()).replace(/\.$/, "") + ".",          // "The moon is day 26, waning crescent."
     ];
     return "> " + (left <= 1 ? news[pick([0, 1])] : pick(news));
@@ -961,7 +956,7 @@
   }
 
   // GO: through the door toward dir (N/E/S/W; default: the way she faces). Doors that are already open are free.
-  // A LOCKED door (its room not built yet) takes the day's one charge; with it spent (and no spare cell) she can't open another.
+  // A LOCKED door (its room not built yet) takes the day's one charge; with it spent, she can't open another until dawn.
   // A wall stops her with a message and costs nothing.
   function go(st, dir) {
     st = copy(st);
@@ -979,9 +974,7 @@
     }
     const toStairs = !fals && RS(d).found.includes("stairs") && dir === stairsDir(d.floor, d.at);
     const locked = !toStairs && !fals && isLocked(d, dir);
-    // With today's charge gone, a banked spare cell can open one more door (a painted one never takes it).
-    const spareUse = locked && !!today(st).stepped && !st.freeSteps && (st.spare || 0) > 0;
-    if ((locked || fals) && today(st).stepped && !st.freeSteps && !spareUse) {
+    if ((locked || fals) && today(st).stepped && !st.freeSteps) {
       st.facing = dir; st.log = "> The door won't cycle. The cell is empty until dawn.";
       if (st.encounter) st.round = ["The cell is empty. No running through a sealed door."];
       return show(st);
@@ -1006,7 +999,7 @@
       const e = st.encounter, lines = [];
       if (e.ranTried) { st.facing = dir; st.round = ["KURA already tried to run. There is no running now."]; return show(st); }
       act(st, "run");
-      if (locked) { if (spareUse) st.spare--; else today(st).stepped = true; }
+      if (locked) today(st).stepped = true;
       lean(st, "run", lines);
       st.facing = dir;
       st.roundOver = false;
@@ -1027,7 +1020,7 @@
       // Unlocking only opens the door: the room behind it is built, the other offer seals, and KURA stays where she is.
       // Walking through an open door is free, so she goes in when the player chooses.
       act(st, "unlock");
-      if (spareUse) st.spare--; else st.today.stepped = true;
+      st.today.stepped = true;
       FLOOR.grow(d.floor, d.at, dir);
       st.facing = dir;
       st.log = `> The ${NAME[dir]} door cycles open. The way is clear.`;
@@ -1363,7 +1356,7 @@
     const stairs = fl.stairs < 0 ? "STAIRS unplaced" : `STAIRS R${fl.stairs + 1}${RS(d, fl.stairs).found.includes("stairs") ? " (found)" : ""}`;
     const exs = w && w.exits.length ? "EXITS " + w.exits.map(j => fl.kinds[j] + (fl.rooms[j] ? "*" : fl.sealed && fl.sealed[j] ? "x" : "")).join("/") + " CLUE " + w.clueKind : null;
     const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/${fl.pairs + 2}`, stairs, exs];
-    const row2 = [`CELL ${(st.today || {}).stepped ? "spent" : "ready"}${st.spare ? " +SPARE" : ""}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
+    const row2 = [`CELL ${(st.today || {}).stepped ? "spent" : "ready"}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
       `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`];
     const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`,
       `OMEN ${omen(effectiveOmenDay(st)).key}${st.useBanked ? "(banked)" : ""}${st.bankedOmen !== undefined ? " +BANK" : ""}`,
@@ -1397,7 +1390,7 @@
     // SEARCH works on the wall KURA faces; a door (or found stairs) can't be searched.
     const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps),
       useBankedOmen: !st.dead && st.bankedOmen !== undefined && !st.useBanked };   // a door can be searched too (it just says so)
-    const spent = !!t.stepped && !st.freeSteps && !(st.spare > 0);           // a locked door needs the day's key; open doors are always free
+    const spent = !!t.stepped && !st.freeSteps;           // a locked door needs the day's key; open doors are always free
     res.locked = {}; res.door = {};
     for (const x of CW) {
       const shut = !!d && out.includes(x) && looksLocked(d, x);
@@ -1418,7 +1411,7 @@
     if (st.clockOffset) { delete st.clockOffset; delete st.lastSeen; delete st.rewindNoted; }
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
-      "fidgetLine", "spare", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
+      "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
       "omenDay", "bankedOmen", "useBanked", "bonusEpoch", "bonusCount", "lastBonusDay"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
@@ -1602,19 +1595,19 @@
     if (beast(e)) return pick(LAST_BEAST);
     return `"${pick([...(LAST_WORDS[e.family] || LAST_WORDS.folklore), ...LAST_ANY])}"`;
   }
-  function win(st, lines, burned) {
+  function win(st, lines) {
     const e = st.encounter;
     const n = R(5, 30) + 3 * floorNum(st);
     st.ichor = (st.ichor ?? st.mag ?? 0) + n;
     tally(st, "beaten"); tally(st, "ichorWon", n);
-    lines.push(`${THE(e.name)} ${burned ? "burns out" : "falls"}.  +${n} ICHOR`);
+    lines.push(`${THE(e.name)} falls.  +${n} ICHOR`);
     st.lastLine = lastWords(e);                         // shown on the end-of-fight screen, right under the art
-    // What a fallen demon leaves: coin often, a thing now and then. One burned out by a discharge leaves more of both.
-    if (Math.random() < (burned ? 0.9 : 0.5)) {
+    // What a fallen demon leaves: coin often, a thing now and then.
+    if (Math.random() < 0.5) {
       const c = R(8, 40) * floorNum(st); st.silver = (st.silver ?? 0) + c; tally(st, "silverFound", c);
       lines.push(`It drops ${c} SILVER.`);
     }
-    if (Math.random() < (burned ? 0.5 : 0.25)) {
+    if (Math.random() < 0.25) {
       const it = rollItem(st);
       lines.push(`It leaves ${it}.`);
       gain(st, it, lines);
@@ -1677,27 +1670,6 @@
       st.log = `> KURA's party fights ${the(e.name)}.`;
       if (e.hp <= 0) { win(st, lines); lean(st, "kill", lines); } else lean(st, "fight", lines);
     }, "> Nothing here to fight.", true);
-  }
-  // DISCHARGE: spend the day's charge (or the banked spare) on one blow that ends most fights. It uses the cell that
-  // would have opened a door, so it is never free: the button is dim once both are gone.
-  function discharge(st) {
-    const t = today(st), free = !t.stepped || !!st.freeSteps, spare = (st.spare || 0) > 0;
-    if (st.dead || !st.encounter || (!free && !spare)) {
-      st = copy(st);
-      if (st.encounter && !st.dead) { st.log = "> The cell is empty. Nothing left to discharge."; st.round = ["The cell is empty. Nothing left to discharge."]; }
-      return show(st);
-    }
-    return round(st, (st, lines) => {
-      const e = st.encounter, tt = today(st);
-      if (!tt.stepped || st.freeSteps) { if (!st.freeSteps) tt.stepped = true; } else st.spare--;
-      tally(st, "discharges");
-      e.stage = null;
-      lines.push("The cell discharges. White light fills the room.");
-      const dmg = UNIQUE[e.name] ? Math.ceil(e.hpmax * 0.75) : e.hp;       // a named horror shrugs most of it off
-      e.hp = Math.max(0, e.hp - dmg);
-      st.log = `> KURA discharges the cell at ${the(e.name)}.`;
-      if (e.hp <= 0) { win(st, lines, true); lean(st, "kill", lines); } else { lines.push(`${THE(e.name)} reels. -${dmg}`); lean(st, "fight", lines); }
-    }, "> Nothing here to discharge at.");
   }
   // TALK: the demon may listen and leave (sometimes with a gift), ask a price, or take offense.
   // RECRUITING. KURA is the only human; everyone else in the party is a demon (ELF, PIXIE and CU SITH too).
@@ -2738,7 +2710,7 @@
     return st;
   }
   const score = st => ({ run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: (st.stats || {}).beaten || 0, turns: st.steps || 0 });
-  const api = { setName, score, summary, next, discharge, chargeLeft: st => { const t = st.today || {}; return (!t.stepped || st.freeSteps ? 1 : 0) + ((st.spare || 0) > 0 ? 1 : 0); }, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

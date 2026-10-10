@@ -666,8 +666,6 @@
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
       "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
       "  [R]UN in a fight ... run through any open door (a locked one uses the charge; it may block you)",
-      "  [D]ISCHARGE ........ in a fight: spend the day's charge on one blow that ends most fights",
-      "                       (a spare cell is stored for each day nobody played, one at most)",
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "  [S]ILENT ........... a third answer: say nothing",
       "  1-8 ................ pick a gift when a demon asks for one",
@@ -754,10 +752,9 @@
     floatBox(box);
     pre.innerHTML = "";
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
-    const spare = !!(save && save.today && save.today.stepped && save.spare > 0);
-    add(again ? "ARE YOU REALLY SURE?" : spare ? `USE THE SPARE CELL ON THE ${NAMES[dir]} DOOR?` : `POWER THE ${NAMES[dir]} DOOR?`, "gold");
+    add(again ? "ARE YOU REALLY SURE?" : `POWER THE ${NAMES[dir]} DOOR?`, "gold");
     add(" ");
-    add(again ? "Only one new door a day. Today's charge is gone once it cycles." : spare ? "Today's charge is spent. This uses the spare. A door already open is free." : "This uses today's charge. A door already open is free.");
+    add(again ? "Only one new door a day. Today's charge is gone once it cycles." : "This uses today's charge. A door already open is free.");
     add(" ");
     const row = document.createElement("div"), opt = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.cact = a; return e; };
     row.append(opt("[ YES ]", "yes"), "    ", opt("[ NO ]", "no"));
@@ -766,7 +763,7 @@
     box.hidden = false;
   }
   // STANDBY, a new run and loading a password all ask in the game too (no browser dialogs).
-  let pending = null, holdOK = false, resetOK = false, dischargeOK = false, loadCode = null;
+  let pending = null, holdOK = false, resetOK = false, loadCode = null;
   function askBox(kind, title, lines) {
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     floatBox(box);
@@ -784,7 +781,6 @@
     box.hidden = false;
   }
   const holdBox = () => askBox("hold", "GO ON STANDBY?", ["KURA stays put and opens no new door today.", "This uses today's charge. The party camps, and tonight runs deeper."]);
-  const dischargeBox = () => askBox("discharge", "DISCHARGE THE CELL?", ["One blow that ends most fights.", RULES.chargeLeft(save) === 2 ? "This uses the day's charge, or the spare cell if it's spent." : "This uses the cell that would have opened a door."]);
   const resetBox = () => askBox("reset", "BEGIN A NEW RUN?", ["This run will be lost."]);
   function answerConfirm(yes) {
     if (pending) {
@@ -799,7 +795,7 @@
         } else { loadCode = null; draw(); restoreBoxes(); }
         return;
       }
-      if (yes) { if (kind === "hold") holdOK = true; else if (kind === "discharge") dischargeOK = true; else resetOK = true; act(kind); } else { draw(); restoreBoxes(); }
+      if (yes) { if (kind === "hold") holdOK = true; else resetOK = true; act(kind); } else { draw(); restoreBoxes(); }
       return;
     }
     const dir = armed;
@@ -1127,7 +1123,7 @@
   }
 
   function act(name) {
-    const okHold = holdOK, okReset = resetOK, okDis = dischargeOK; holdOK = resetOK = dischargeOK = false;      // a confirmation is good for this one call only
+    const okHold = holdOK, okReset = resetOK; holdOK = resetOK = false;      // a confirmation is good for this one call only
     if (replayTimer) finishReplay();
     prevDemonHp = save && save.encounter ? save.encounter.hp : null;
     prevKuraHp = save && save.encounter && save.party && save.party[0] ? save.party[0].hp : null;
@@ -1185,11 +1181,6 @@
     if (!save) return;
     if (name === "reset") { if (!okReset) { resetBox(); return; } }
     if (name === "hold") { if (!okHold) { holdBox(); return; } }
-    if (name === "discharge") {
-      if (!save.encounter) return;
-      if (!RULES.chargeLeft(save)) { save.log = "> The cell is empty. Nothing left to discharge."; persist(); draw(); encounterBox(); return; }
-      if (!okDis) { dischargeBox(); return; }
-    }
     const log = save.log, steps = save.steps, exBefore = save.extra, ranBefore = !!(save.encounter && save.encounter.ranTried), partyBefore = (save.party || []).map(p => p.name);
     const before = { items: (save.items || []).slice(), silver: save.silver };
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false) : name === "silent" ? RULES.answer(save, "silent")
