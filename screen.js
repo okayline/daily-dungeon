@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.55";
+  const VERSION = "v0.56";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -133,6 +133,19 @@
     if (age < 0) age += syn;
     return Math.floor(age / syn * 8 + 0.5) % 8;
   }
+
+  // SEASON EPOCH: a whole-number count of real lunar months since the same new-moon reference moonIndex
+  // uses, so it advances on its own (no manual bump) and is identical for every player at every instant.
+  // Unlike moonIndex (a repeating 0-7 phase), this only ever increases, so it can seed a month's shared content.
+  function epochIndex(date) {
+    const ref = Date.UTC(2000, 0, 6, 18, 14), syn = 29.530588853;
+    return Math.floor((date.getTime() - ref) / 86400000 / syn);
+  }
+
+  // UTC-DAY: a whole-number calendar day, in UTC only (no timezone), so it is the same for every
+  // player at every instant. The one thing players can locally differ on is WHEN they last checked it
+  // (see rules.js's omen stamping) -- never on what the number itself is for any given moment.
+  const utcDay = date => Math.floor(date.getTime() / 86400000);
 
   // Moon and demon lines by phase: line 1 before omens existed, and line 3 now and then.
   const MOONLINE_ALL = [
@@ -284,7 +297,10 @@
     const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH", cell = `CELL [${(st.today || {}).stepped && !st.freeSteps ? " " : "#"}][${st.spare > 0 ? "+" : " "}]`,   // today's charge, and a stored spare
       daily = cell.padEnd(15) + "STA[N]DBY ";
     S.push("|" + free + " ".repeat(78 - free.length - daily.length) + daily + "|");
-    const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
+    // [U]SE DAY only shows up when there's a held day worth spending (see rules.js's useBankedOmen) --
+    // most runs never see it at all, so it stays out of the system buttons' way otherwise.
+    const bankReady = st.bankedOmen !== undefined && !st.useBanked;
+    const sys = " [?] [L]OG [R]ESET " + (bankReady ? "[U]SE DAY " : "");   // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");
@@ -303,7 +319,7 @@
     return S.join("\n");
   }
 
-  const api = { VERSION, moonNote, renderView, renderScreen, moonIndex, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  const api = { VERSION, moonNote, renderView, renderScreen, moonIndex, epochIndex, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);

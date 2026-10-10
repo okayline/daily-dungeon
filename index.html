@@ -208,7 +208,8 @@
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
         .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
-        .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>');
+        .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>')
+        .replace("[U]SE DAY", '<span class="btn" data-act="useBankedOmen">[U]SE DAY</span>');
       return esc(line);
     }).join("\n")
       // The ALIGN arrow (which way the last action pulled KURA) glows white.
@@ -321,7 +322,7 @@
     const stash = suffix => { try { if (raw) localStorage.setItem(KEY + suffix, raw); } catch (e) {} };   // keep what we can't use, never just overwrite it
     try { raw = localStorage.getItem(KEY); s = JSON.parse(raw || "null"); } catch (e) { stash("-corrupt"); s = null; }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.dispatchEvent(new Event("resize")));   // popups are placed by measuring the font
-    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 5 && s.party) {
+    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 7 && s.party) {
       try { save = s; tick(); flashStatus(); draw(); if (!nameBox()) { encounterBox(); altarBox(); } return; }
       catch (err) { console.error(err); stash("-corrupt"); save = null; }
     } else if (s) stash("-old");
@@ -1368,7 +1369,7 @@
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
-      s: "search", n: "hold", g: "altar", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
+      s: "search", n: "hold", g: "altar", u: "useBankedOmen", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
     if (k) { e.preventDefault(); act(k); }
   });

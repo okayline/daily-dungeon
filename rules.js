@@ -103,7 +103,7 @@
   const MOON_DROPS = names("MOON");
   // A found item's rarity: mostly common, sometimes uncommon, rarely rare.
   function rollItem(st) {
-    const loot = st ? omen(clock(st) + (st.omenSalt || 0)).fx.loot : 1, r = Math.random();
+    const loot = st ? omen(effectiveOmenDay(st)).fx.loot : 1, r = Math.random();
     const rare = 0.08 * loot;                            // a generous day makes rares three times as likely
     return pick(names(r < rare ? "RARE" : r < rare + 0.32 ? "UNCOMMON" : "COMMON"));
   }
@@ -160,7 +160,7 @@
   function pickDemon1(st) {
     if (Math.random() < 0.03) return "ATOM SLASHER";
     if (Math.random() < 0.07) { const free = PROGRAMS.filter(n => !(st.party || []).some(p => p.name === n)); if (free.length) return pick(free); }
-    const d = st.dungeon, w = { ...LADDER[Math.min(floorNum(st), 4) - 1] }, om = omen(clock(st) + (st.omenSalt || 0)).fx;
+    const d = st.dungeon, w = { ...LADDER[Math.min(floorNum(st), 4) - 1] }, om = omen(effectiveOmenDay(st)).fx;
     const wall = wallLoop(st), linger = d ? RS(d).linger : 0;
     if (wall >= 4) { w.data += 3; w.hardware += 2; }
     if (linger >= LINGER_AT) { w.folklore += 3; w.hybrid += 2; }
@@ -179,19 +179,29 @@
       "Someone walked here before.", "Count the doors. Count again.", "The ninth bell has not rung.",
       "What is below was once above.", "A light is left on for you.", "The stone dreams of the sea.",
       "Not every silence is empty.", "A promise kept, far below."] },
-    { key: "data", fx: { data: 2 }, lines: ["The wires remember.", "Something is counting down.", "A dial tone, far away."] },
-    { key: "folk", fx: { folk: 2 }, lines: ["Old things walk early.", "Salt on the wind.", "The old ones stir."] },
+    // Days with a LEAN (see omenStreak below): the system's own order (LAW) on one side, the old
+    // and the loose (CHAOS) on the other. Most days are "none" or one of the other neutral keys below,
+    // which carry no lean at all and simply break a streak in progress.
+    { key: "data", fx: { data: 2 }, lean: "LAW", lines: ["The wires remember.", "Something is counting down.", "A dial tone, far away."] },
+    { key: "folk", fx: { folk: 2 }, lean: "CHAOS", lines: ["Old things walk early.", "Salt on the wind.", "The old ones stir."] },
     { key: "heat", fx: { heat: 2 }, lines: ["Do not linger.", "The room is listening today.", "Short stays. Quiet feet."] },
-    { key: "hard", fx: { find: 0.5 }, lines: ["The walls keep their secrets.", "Every seam is sealed today.", "The stone stays shut."] },
-    { key: "easy", fx: { find: 1.6 }, lines: ["A door is open somewhere.", "Something is loose in stone.", "The seams are soft today."] },
+    { key: "hard", fx: { find: 0.5 }, lean: "LAW", lines: ["The walls keep their secrets.", "Every seam is sealed today.", "The stone stays shut."] },
+    { key: "easy", fx: { find: 1.6 }, lean: "CHAOS", lines: ["A door is open somewhere.", "Something is loose in stone.", "The seams are soft today."] },
     { key: "talk", fx: { talk: 1.6 }, lines: ["Strangers listen.", "Today, they will hear you out.", "Speak first. They are lonely."] },
     // Good days, plainly good.
     { key: "calm", fx: { heat: 0.5 }, lines: ["The halls are sleeping.", "Soft steps go unheard.", "Even the walls are tired."] },
-    { key: "loot", fx: { loot: 3 }, lines: ["The deep is generous today.", "Something precious is near.", "Fortune favors the patient."] },
+    { key: "loot", fx: { loot: 3 }, lean: "CHAOS", lines: ["The deep is generous today.", "Something precious is near.", "Fortune favors the patient."] },
   ];
   const hash = n => { let x = (n * 2654435761) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return x >>> 0; };
+  const omenOf = t => { const h = hash(t); return (h % 100) < 50 ? OMENS[0] : OMENS[1 + (h >>> 8) % (OMENS.length - 1)]; };
+  // OMEN STREAK: three real UTC days running with the same lean. A pure function of the calendar --
+  // every player's game agrees on it without asking anyone, the same way the omen itself does.
+  function omenStreak(day) {
+    const a = omenOf(day).lean, b = omenOf(day - 1).lean, c = omenOf(day - 2).lean;
+    return (a && a === b && a === c) ? a : null;      // "LAW", "CHAOS", or null
+  }
   function omen(t) {
-    const h = hash(t), o = (h % 100) < 50 ? OMENS[0] : OMENS[1 + (h >>> 8) % (OMENS.length - 1)];
+    const o = omenOf(t), h = hash(t);
     const fx = { data: 1, folk: 1, heat: 1, find: 1, talk: 1, loot: 1, ...o.fx };
     const pool = o.lines;
     return { key: o.key, fx, text: '> "' + pool[(h >>> 16) % pool.length] + '"' };
@@ -217,7 +227,7 @@
   function heatUp(st, amount) {
     const d = st.dungeon;
     const rs = RS(d), before = heatTier(rs.heat);
-    rs.heat = Math.min(HEAT_MAX + 4, rs.heat + amount * omen(clock(st) + (st.omenSalt || 0)).fx.heat);
+    rs.heat = Math.min(HEAT_MAX + 4, rs.heat + amount * omen(effectiveOmenDay(st)).fx.heat);
     const after = heatTier(rs.heat);
     st.stats = st.stats || {}; st.stats.maxHeat = Math.max(st.stats.maxHeat || 0, rs.heat);
     if (after > before) {
@@ -336,6 +346,7 @@
     forge: ["smells of solder and ash", "ticks like cooling metal"],
     altar: ["glows faintly at one wall", "seems to be listening"],
     archive: ["blinks with rows of tiny lights", "whirs, dry and low"],
+    husk: ["stands bare, stripped of anything worth taking", "is empty, and smells of something already gone"],
     hall: ["is only a narrow way through, bare and echoing", "stretches on, narrow and bare"],
     dead: ["closes in, with nowhere further to go", "is small and shut, at the end of the way"],
     plain: ["is bare and quiet", "is plain and still"],
@@ -344,6 +355,35 @@
   const FALSE_GO = ["The door is only paint. The cell keeps its charge.", "KURA pushes. It is a wall with a door painted on it. No charge spent.", "A painted door. The cell was never needed."];
   const SEALED = ["The door is jammed shut. It won't open now.", "Something settled behind this door. It will not move.", "The frame has seized. This way is closed for good."];
   function atmosphere(st) { return flavor(st); }
+
+  // Which family this floor's encounters lean on hardest (LADDER is fixed per depth, so this is the
+  // same for every player at this depth -- not random, just not spelled out anywhere on screen).
+  const FAMILY_HINT = {
+    data: ["Wires hum, somewhere under the floor.", "A dial tone carries, very faint."],
+    hardware: ["The air tastes faintly of rust and old oil.", "Something metal ticks, cooling, far off."],
+    hybrid: ["Nothing down here is quite one thing.", "The air doesn't agree with itself."],
+    folklore: ["The halls feel old here.", "Something older than the building is awake."],
+  };
+  function dominantFamily(num) {
+    const w = LADDER[Math.min(Math.max(num, 1), 4) - 1];
+    return Object.keys(w).reduce((a, b) => (w[b] > w[a] ? b : a));
+  }
+  // The omen-streak telegraph (see floor.js's buildWing / rules.js's omenStreak): not a number, not a
+  // name, just a line that something about THIS floor is a little different -- the same for every
+  // player on a LAW or CHAOS streak, since the streak itself already is.
+  const STREAK_LINE = { LAW: "The pattern holds. Something about this floor feels orderly.",
+    CHAOS: "The pattern breaks. Something about this floor feels wrong." };
+  // A fresh-floor-only version of atmosphere(): the ordinary ambient line, plus (sometimes) a hint of
+  // which family this depth favors, plus (always, when it applies) the streak telegraph. Called only
+  // at arrival -- atmosphere() alone still covers every other place line 3 gets refreshed.
+  function floorArrivalLine(st) {
+    const base = atmosphere(st), fl = st.dungeon && st.dungeon.floor;
+    if (!fl) return base;
+    const bits = [];
+    if (Math.random() < 0.5) bits.push(pick(FAMILY_HINT[dominantFamily(floorNum(st))]));
+    if (fl.streak && STREAK_LINE[fl.streak]) bits.push(STREAK_LINE[fl.streak]);
+    return bits.length ? base + " " + bits.join(" ") : base;
+  }
 
   // The stairs sit against a wall with no door. Which wall is fixed by the floor's seed.
   // A wall with a door on it: a real door (open, locked or sealed) or a false one.
@@ -438,7 +478,7 @@
     const d = st.dungeon, room = d.floor.rooms[d.at];
     if (st.round) st.round = st.round.map(l => translate(st, l));
     if (st.extra) st.extra = translate(st, st.extra);
-    st.omenText = omen(clock(st) + (st.omenSalt || 0)).text;                 // the omen, framed under the 3D view
+    st.omenText = omen(effectiveOmenDay(st)).text;                 // the omen, framed under the 3D view
     status(st);                                         // line 1
     st.extraUrgent = false;                             // the page holds line 3 for a moment, unless this is a warning
     if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; st.extraUrgent = true; } // a heat tell takes line 3 right away (not over a question)
@@ -469,6 +509,13 @@
   // (If the server's time can't be had, e.g. offline, this guards the device clock.)
   const rawClock = st => TIME.localDay(TIME.now(), st.tz) + (st.clockOffset || 0);
   const clock = st => Math.max(rawClock(st), st.lastSeen || -Infinity);
+  // UTC day: the one calendar number every player's game agrees on, at every instant, with no
+  // timezone in it at all (see screen.js). Used only to seed the shared omen and the shared floor epoch.
+  const utcDay = () => TIME.utcDay(TIME.now());
+  const epochNow = () => TIME.epochIndex(TIME.now());
+  // Which UTC day's omen actually applies today: normally the one stamped at KURA's own midnight
+  // (st.omenDay), but a banked day from an earlier STANDBY can be spent instead (see useBankedOmen).
+  const effectiveOmenDay = st => (st.useBanked && st.bankedOmen !== undefined) ? st.bankedOmen : st.omenDay;
   const weekday = n => (n + 3) % 7;                    // 0 = MONDAY ... 6 = SUNDAY
   const sundayOf = n => n + (6 - weekday(n));
   const WD = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -477,9 +524,21 @@
   // A new run's first floor closes this Sunday, unless that leaves fewer than 3 days; then next Sunday.
   const firstDeadline = t => (sundayOf(t) - t >= 2 ? sundayOf(t) : sundayOf(t) + 7);
 
+  // Mix two numbers into one well-spread 32-bit seed (never just adding or XORing them raw).
+  const seedFrom = (a, b) => hash((hash(a >>> 0) ^ Math.imul((b >>> 0) + 1, 0x9e3779b1)) >>> 0);
+
   // KURA arrives on a fresh floor. Its way down closes at the end of `deadline` (a Sunday).
+  // The floor's SHAPE is seeded off (this epoch, this floor depth) -- shared: every player who reaches
+  // this same depth during this same real lunar month gets the identical shape. Its CONTENTS (which
+  // kind is where, where things are hidden, the wildcard, any bonus/husk room) are seeded off (this
+  // account's own private salt, this floor depth) -- never shared, re-rolled every floor.
+  // The epoch itself is stamped here and held for the rest of the time on this floor (see screen.js's
+  // epochIndex): a lunar-month rollover mid-floor must never reshuffle a floor out from under a player.
   function arrive(st, num, deadline) {
-    const floor = FLOOR.generate(undefined, { days: Math.min(7, deadline - clock(st) + 1) });
+    st.floorEpoch = epochNow();
+    const shared = seedFrom(st.floorEpoch, num), priv = seedFrom(st.pseed || 0, num);
+    const streak = omenStreak(effectiveOmenDay(st));
+    const floor = FLOOR.generate(shared, priv, { days: Math.min(7, deadline - clock(st) + 1), streak });
     const a = FLOOR.arrive(floor);
     st.floor = `B${num}F`;
     st.facing = a.facing;
@@ -519,6 +578,10 @@
     if (st.dungeon && st.dungeon.deadline === undefined) st.dungeon.deadline = firstDeadline(t);
     const newDay = st.today.date !== t;
     st.day = t - st.startDay + 1;
+    // The omen is stamped once, right here, at KURA's own midnight -- never recomputed mid-day, and
+    // never touched by anything else in the file. (First-ever call: nothing has rolled over yet, but
+    // there's still no stamp, so take one now.)
+    if (st.omenDay === undefined) st.omenDay = utcDay();
     if (!newDay || st.dead) return st;
     // A day KURA chose to HOLD (see hold) is STANDBY: a deeper rest tonight.
     const held = !!st.today.held && st.today.date === t - 1 && !!st.dungeon && !st.dead;
@@ -528,6 +591,12 @@
     if (away) st.spare = 1;
     st.today = { date: t, stepped: false };
     st.unsaved = true;
+    // STANDBY banks that day's omen (good or bad) for later -- one slot, the newest held day wins.
+    // Using it (see useBankedOmen) is a choice made fresh each day, so yesterday's pick never lingers.
+    if (held) st.bankedOmen = st.omenDay;
+    st.omenDay = utcDay();
+    if (st.useBanked) delete st.bankedOmen;   // spent yesterday -- the bank is empty again today
+    delete st.useBanked;
     st.statusIn = 0; st.statusKind = "news";
     // Overnight every room's heat halves. It never quite resets.
     let settled = false;
@@ -564,7 +633,7 @@
     delete st.campNote;
     st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight."
       : earned ? "> The cell kept its charge while KURA was away. A spare is stored."
-      : held ? (st.restedDay = t, `> In the dark, a voice: "${omen(t + 1 + (st.omenSalt || 0)).text.replace(/^> "|"$/g, "")}"`) : settled ? "> The room settles." : atmosphere(st);
+      : held ? (st.restedDay = t, `> In the dark, a voice: "${omen(st.omenDay + 1).text.replace(/^> "|"$/g, "")}"`) : settled ? "> The room settles." : atmosphere(st);
     return st;
   }
 
@@ -700,6 +769,7 @@
     if (st.dungeon) return true;
     arrive(st, floorNum(st), firstDeadline(clock(st)));
     st.log = `> KURA enters ${st.floor}.`;
+    st.extra = floorArrivalLine(st);
     st.unsaved = true;
     return false;
   }
@@ -711,6 +781,11 @@
   // that happens more under a bright moon.
   const NOISES = ["KURA hears something. Then nothing.", "A faint scrape, and then quiet.", "Something ticks, very softly.",
     "A low sound. KURA holds her breath.", "A small sound, there and gone.", "KURA hears a soft knock. Or her own pulse."];
+  // The fixture's own wall gets its own near-miss flavor (same odds, same rules, just a different tell --
+  // the same "warmer than the rest" idea the heat tells already use), so a returning player can start to
+  // tell a fixture-wall near-miss from an ordinary one without the game ever saying so outright.
+  const FIXTURE_NOISES = ["Something behind the stone shifts, just once.", "A warmth comes through, here and only here.",
+    "Something ticks, deeper in the wall than the rest."];
   const MISSES = ["Nothing.", "Nothing yet.", "Only stone.", "Nothing but dust.", "The wall gives nothing away.",
     "Cold stone, cold hands.", "Mortar, mostly. Some is older.", "Fingers come away gray.", "A crack. It goes nowhere.",
     "Damp. The smell of old pipes.", "Someone has looked here before.", "A dead cable runs in and stops.",
@@ -796,7 +871,7 @@
     const tier = heatTier(RS(d).heat);                  // the room's noise as KURA starts this search
     lean(st, tier >= 2 ? "hot" : "search");
     heatUp(st, 1);
-    const fx = omen(clock(st) + (st.omenSalt || 0)).fx;
+    const fx = omen(effectiveOmenDay(st)).fx;
     // How much a search is worth. The day's omen sets the luck of the day (hard 0.5, easy 1.6). A calm room means
     // steady hands (x1.25) and a hot one hurried ones (x0.75). After a STANDBY day KURA is rested (x1.25).
     // The moon's fullness helps too: up to x1.35 at the full moon, nothing at the new moon. Capped under 2 points, so nothing
@@ -852,7 +927,8 @@
     // A near-miss line only when it's true: this wall still hides something.
     // (it starts after a couple of searches: a hint to keep going; it never says where the sound comes from)
     const noise = w.taken[dir] < pile.length && (w.prog[dir] || 0) >= 3 && Math.random() < 0.25;
-    st.log = say(noise ? pick(NOISES) : pick(MISSES));
+    const atFixture = w.fixtureDir === dir && pile.includes("fixture") && !found.includes("fixture");
+    st.log = say(noise ? pick(atFixture ? FIXTURE_NOISES : NOISES) : pick(MISSES));
     if (!nag(st)) drift(st);
     return show(st);
   }
@@ -940,7 +1016,7 @@
       const deadline = sundayOf(clock(st)) + 7;
       arrive(st, floorNum(st) + 1, deadline);
       st.log = `> KURA goes ${NAME[dir]} and descends to ${st.floor}.`;
-      st.extra = atmosphere(st);   // line 3 is flavor only: the deadline already shows on the status line
+      st.extra = floorArrivalLine(st);   // line 3 is flavor only: the deadline already shows on the status line
       return show(st);
     }
     const i = FLOOR.grow(d.floor, d.at, dir);               // builds the room behind a locked door the first time
@@ -1008,6 +1084,11 @@
       PIXIE: ['PIXIE: "Blinky blinky! There are SO many!"', 'PIXIE: "Everything in here is whispering."'],
       "CU SITH": ['CU SITH whines at the blinking racks.', 'CU SITH stands very still, watching the racks.'],
     },
+    husk: {
+      ELF: ['ELF: "Everything good was taken out of this room."', 'ELF: "This was picked clean a long time ago."'],
+      PIXIE: ['PIXIE: "It\'s so EMPTY. Why is it so empty?"', 'PIXIE: "I don\'t want to be in here. Can we not."'],
+      "CU SITH": ['CU SITH won\'t cross the threshold.', 'CU SITH backs out, then sits in the doorway.'],
+    },
     hall: {
       ELF: ['ELF: "Single file. I do not like a long way."', 'ELF: "A passage. Let us not linger in it."'],
       PIXIE: ['PIXIE: "Are we there yet? We\'re not even anywhere."', 'PIXIE: "Echo! ...echo? Hm. No echo."'],
@@ -1046,7 +1127,7 @@
   // The Den, Bay, Forge and Altar keep working: going back does it again at HALF strength, once a day per room.
   // The rest are one-time finds. No kind is better than another: they answer different needs.
   // Placeholders (nothing to act on yet): DEN gear, BAY shield, VAULT keys, FORGE repairs.
-  const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR", archive: "THE ARCHIVE" };
+  const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR", archive: "THE ARCHIVE", husk: "THE HUSK" };
   // Walking into a room only shows its flavor line. Its benefit waits behind a fixture the player has to find (see FIXTURE) and use.
   function enterKind(st, i, isNew) {
     const d = st.dungeon, rm = d.floor.rooms[i], k = rm.kind;
@@ -1068,6 +1149,17 @@
         st.encounter = { name, base: name, corrupt: false, family: "data", align: "LAW", hp: hpmax, hpmax, round: 0, angered: false, stage: null };
         st.question = null;
         st.round = [`${A(name)} is running here.`, "It does not seem to mind KURA."];
+        note(st, "demons", name, "met"); tally(st, "met");
+      }
+    } else if (k === "husk") {               // the anti-bonus room: whatever's left here isn't friendly
+      st.tell = "> Stripped shelves. Something shifts in the dark at the back.";
+      // Something is always waiting here too -- but the husk never gives KURA a clean one.
+      if (!st.encounter) {
+        const base = pickDemon(st), corrupt = !isProgram(base) && !UNIQUE[base];
+        const name = corrupt ? glitch(base) : base, hpmax = Math.round(16 + 9 * floorNum(st) + R(0, 8));
+        st.encounter = { name, base, corrupt, family: familyOf(base), align: corrupt ? "CHAOS" : alignOf(base), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
+        st.question = null;
+        st.round = [`${A(name)} was already here.`, "It was not waiting for company."];
         note(st, "demons", name, "met"); tally(st, "met");
       }
     } else if (k === "altar") st.tell = "> Something in the wall glows, very faintly.";
@@ -1211,6 +1303,19 @@
     return show(st);
   }
 
+  // USE BANKED OMEN: spend a day STANDBY once set aside, in place of today's own omen. Free to call --
+  // it doesn't cost the day's cell, it just picks which day's conditions govern the rest of today.
+  // One-shot: gone at the next sunrise either way, used or not.
+  function useBankedOmen(st) {
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    if (st.bankedOmen === undefined) { st.log = "> There is no held day to call back."; return show(st); }
+    if (st.useBanked) { st.log = "> Today is already that held day."; return show(st); }
+    st.useBanked = true;
+    st.log = "> " + pick(["KURA calls back a held day.", "The remembered day settles over this one.", "KURA borrows a day from the dark."]);
+    return show(st);
+  }
+
   // FREESTEPS (hidden, key X): a testing cheat. Toggles infinite steps: the day's step is never spent.
   function freesteps(st) {
     st = copy(st);
@@ -1233,7 +1338,8 @@
     const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/${fl.pairs + 2}`, stairs, exs];
     const row2 = [`CELL ${(st.today || {}).stepped ? "spent" : "ready"}${st.spare ? " +SPARE" : ""}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
       `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`];
-    const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`];
+    const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`,
+      `OMEN ${omen(effectiveOmenDay(st)).key}${st.useBanked ? "(banked)" : ""}${st.bankedOmen !== undefined ? " +BANK" : ""}`];
     return [row1, row2, row3].map(r => r.filter(Boolean).join("  ")).join("\n");   // three lines under the screen
   }
 
@@ -1261,7 +1367,8 @@
     const d = st.dungeon, t = st.today || {};
     const out = d && !st.dead ? exits(d).concat(d.floor.rooms[d.at].falseDoors || []) : [];
     // SEARCH works on the wall KURA faces; a door (or found stairs) can't be searched.
-    const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps) };   // a door can be searched too (it just says so)
+    const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps),
+      useBankedOmen: !st.dead && st.bankedOmen !== undefined && !st.useBanked };   // a door can be searched too (it just says so)
     const spent = !!t.stepped && !st.freeSteps && !(st.spare > 0);           // a locked door needs the day's key; open doors are always free
     res.locked = {}; res.door = {};
     for (const x of CW) {
@@ -1283,10 +1390,15 @@
     if (st.clockOffset) { delete st.clockOffset; delete st.lastSeen; delete st.rewindNoted; }
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
-      "fidgetLine", "spare", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText"]) delete st[k];
+      "fidgetLine", "spare", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
+      "omenDay", "bankedOmen", "useBanked"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
-    st.omenSalt = 1 + Math.floor(Math.random() * 100000);   // a new run rerolls the omens
+    // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
+    // What a new run DOES reroll is this: the private seed that decides which room kind lands where, where
+    // things are hidden, and which room (if any) turns out to be a bonus or an omen-streak room on this floor --
+    // never the shared shape (wing count, topology, which kinds are paired) that every player's floor agrees on.
+    st.pseed = 1 + Math.floor(Math.random() * 4294967295);
     st.runId = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(""); delete st.submitted; st.needName = true;   // the leaderboard takes one entry per run; every new run asks the player's name (kept as the default)
     const t = clock(st);
     Object.assign(st, {
@@ -1308,7 +1420,7 @@
     const deadline = firstDeadline(t);
     arrive(st, 1, deadline);
     st.log = `> KURA descends into B1F.${lucky ? " Her bag feels heavier than it should." : ""}`;
-    st.extra = atmosphere(st);   // line 3 is flavor only: the deadline already shows on the status line
+    st.extra = floorArrivalLine(st);   // line 3 is flavor only: the deadline already shows on the status line
     st.unsaved = true;
     return show(st);
   }
@@ -1701,7 +1813,7 @@
     if (e.angered || (UNIQUE[e.name] && !UNIQUE[e.name].talks)) {
       lines.push(`${THE(e.name)} won't listen.`);
       demonTurn(st, lines);
-    } else if (isProgram(e.name) || Math.random() < Math.min(0.95, LISTEN[moon()] * (e.corrupt ? 0.7 : 1) * omen(clock(st) + (st.omenSalt || 0)).fx.talk * STANCE_TALK[stance(st, e)])) {
+    } else if (isProgram(e.name) || Math.random() < Math.min(0.95, LISTEN[moon()] * (e.corrupt ? 0.7 : 1) * omen(effectiveOmenDay(st)).fx.talk * STANCE_TALK[stance(st, e)])) {
       lines.push(said(e, "open"));
       // First it sizes KURA up: one or two questions, answered YES or NO (see DEMON TALK below).
       // Then it asks for a gift: anything. What it gets decides how it reacts (see GIFTS below).
@@ -2598,7 +2710,7 @@
     return st;
   }
   const score = st => ({ run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: (st.stats || {}).beaten || 0, turns: st.steps || 0 });
-  const api = { setName, score, summary, next, discharge, chargeLeft: st => { const t = st.today || {}; return (!t.stepped || st.freeSteps ? 1 : 0) + ((st.spare || 0) > 0 ? 1 : 0); }, freesteps, debugInfo, reset, hold, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { setName, score, summary, next, discharge, chargeLeft: st => { const t = st.today || {}; return (!t.stepped || st.freeSteps ? 1 : 0) + ((st.spare || 0) > 0 ? 1 : 0); }, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

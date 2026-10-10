@@ -2,6 +2,20 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.56 - Oct 10 2026, 01:41 HST
+
+![v0.56](screenshots/v0.56.png)
+
+The same floors for everyone, and omens with consequences.
+
+- **Floors:** a floor's shape — its wings, how they connect, which kinds pair up — is now the same for every player this lunar month. What's actually behind each door, and where the day's extra room turns up, stays private to your own run.
+- **Omen:** the day's omen is no longer rolled per run. It's the same for everyone, set by the calendar date, and still turns over fresh at your own midnight.
+- **Omen streaks:** three LAW-leaning days in a row raise the odds of a bonus room; three CHAOS-leaning days can open a different one instead — THE HUSK, stripped bare with something waiting in the back of it.
+- **STANDBY** now banks that day's omen. Call it back later, in place of today's, with the new [U]SE DAY.
+- **Searching:** a near-miss near the one spot actually worth finding doesn't sound like an ordinary one.
+- **Arrivals:** stepping onto a new floor says a little more now — who's dominant down here, and whether the pattern feels like it's holding or broken.
+- **Saves:** this one breaks old saves. Floors are built differently now, so every run in progress starts fresh.
+
 ## v0.55 - Oct 8 2026, 04:14 HST
 
 ![v0.55](screenshots/v0.55.png)

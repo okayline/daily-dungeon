@@ -16,6 +16,7 @@
   const DIRS = { N: [-1, 0], E: [0, 1], S: [1, 0], W: [0, -1] };
   const KINDS = ["den", "bay", "relay", "vault", "forge", "altar"];
   const BONUS_KIND = "archive";                  // the seventh type: only on bonus weeks, behind the wildcard door
+  const ANTI_KIND = "husk";                      // the eighth type: only on a CHAOS omen streak, behind a locked door
   const OPP = { N: "S", E: "W", S: "N", W: "E" };
   const DAYS = 7;
 
@@ -35,8 +36,15 @@
   // The week's deck: the six types dealt twice into pairs (never the same type twice in a pair), one pair for each of
   // days 1 to (days-1). The last day is a wildcard: one door of a random type (on a bonus week, the seventh type).
   // opts.days is how many days this floor lasts (up to 7).
-  function generate(seed = Math.floor(Math.random() * 2 ** 32), opts = {}) {
-    const rand = rng(seed);
+  //
+  // Two seeds, two different jobs (the async-multiplayer "shared shape, private contents" split):
+  //   `seed` (shared) decides the floor's SHAPE -- wing count, each wing's internal layout, and which two
+  //     kinds are paired together this floor. Every player on the same (epoch, floor depth) agrees on this.
+  //   `pseed` (private, per account) decides everything that would turn the shared shape into a walkthrough
+  //     if shared -- which paired kind lands in which slot, where things are hidden, the wildcard door's
+  //     kind, and whether a bonus or omen-streak room shows up at all, and where. Re-rolled every floor.
+  function generate(seed = Math.floor(Math.random() * 2 ** 32), pseed = Math.floor(Math.random() * 2 ** 32), opts = {}) {
+    const rand = rng(seed), prand = rng(pseed);
     const days = Math.max(3, Math.min(DAYS, opts.days || DAYS)), pairs = days - 1;
     let deck;
     for (let tries = 0; ; tries++) {
@@ -44,10 +52,11 @@
       if (tries > 200 || Array.from({ length: 6 }, (_, i) => deck[2 * i] !== deck[2 * i + 1]).every(Boolean)) break;
     }
     const offers = Array.from({ length: pairs }, (_, i) => [deck[(2 * i) % 12], deck[(2 * i + 1) % 12]]);
-    offers.push([KINDS[Math.floor(rand() * KINDS.length)]]);       // the wildcard door
-    const floor = { v: 6, seed, days, pairs, rooms: [], start: 0, stairs: -1, lure: -1, kinds: [],
-      offers,                                                                  // the kinds offered, wing by wing
-      lureStage: rand() < 0.6 ? 1 + Math.floor(rand() * pairs) : -1,           // which wing hides the locker (?), if any
+    offers.push([KINDS[Math.floor(prand() * KINDS.length)]]);      // the wildcard door: private, per account -- never drawn from the shared deck
+    const floor = { v: 7, seed, pseed, days, pairs, rooms: [], start: 0, stairs: -1, lure: -1, kinds: [],
+      offers,                                                                  // the kinds offered, wing by wing (shared)
+      lureStage: prand() < 0.6 ? 1 + Math.floor(prand() * pairs) : -1,         // which wing hides the locker (?), if any (private)
+      streak: opts.streak || null,                                 // "LAW", "CHAOS", or null -- stamped once, at arrival (see rules.js)
       wings: [], exits: {}, count: 0, pos: [], cells: {}, parent: [], depth: [] };
     buildWing(floor, book(floor, -1, 0, 0), null);
     return floor;
@@ -66,7 +75,8 @@
   function buildWing(floor, k, from) {
     const stage = floor.wings.length;
     const rand = rng((floor.seed ^ Math.imul(stage + 7, 0x9e3779b1)) >>> 0);
-    const R = n => Math.floor(rand() * n);
+    const prand = rng((floor.pseed ^ Math.imul(stage + 7, 0x9e3779b1)) >>> 0);   // private: this wing's own content stream
+    const R = n => Math.floor(rand() * n), PR = n => Math.floor(prand() * n);
     const exitsWanted = stage < floor.pairs ? 2 : stage === floor.pairs ? 1 : 0;     // the stairs wing has one exit: the wildcard door
     const back = from ? OPP[from.dir] : null;
     const at = (p, d) => ({ r: p.r + DIRS[d][0], c: p.c + DIRS[d][1] });
@@ -128,7 +138,9 @@
     const doors = { K: {}, P: {}, X: {} };
     if (from) doors.K[back] = from.room;
     for (const l of plan.links) { doors[l.a][l.d] = idx[l.b]; doors[l.b][OPP[l.d]] = idx[l.a]; }
-    const offer = shuffleWith(floor.offers[Math.min(stage, floor.pairs)].slice(), rand), exitIdx = [];
+    // Which paired kind lands in which slot is private: the pairing itself ("vault pairs with forge
+    // this floor") is shared and safe to say out loud, but which exact door that is would spoil it.
+    const offer = shuffleWith(floor.offers[Math.min(stage, floor.pairs)].slice(), prand), exitIdx = [];
     plan.exits.forEach((e, i) => {
       const x = book(floor, idx[e.host], e.p.r, e.p.c);
       floor.kinds[x] = offer[i]; floor.exits[x] = { wing: stage, kind: offer[i], from: idx[e.host], dir: e.d };
@@ -147,10 +159,20 @@
 
     // BONUS ROOM: each time a door is unlocked there is a 1 in 10 chance that one of the new wing's open rooms (its dead end,
     // else its passage) turns out to be THE ARCHIVE. Once per floor. It never swaps a room behind a hinted door, so hints stay true.
-    const bonusN = !floor.bonusRolled && stage > 0 && rand() < 0.10 ? (names.includes("X") ? "X" : names.includes("P") ? "P" : null) : null;
+    // A LAW omen streak (three real days running, the same for every player -- see rules.js's omenStreak) nudges this roll,
+    // without guaranteeing it: still private, still rare, just a little more likely while the pattern holds.
+    const bonusSlot = names.includes("X") ? "X" : names.includes("P") ? "P" : null;
+    const bonusN = !floor.bonusRolled && stage > 0 && bonusSlot
+      && (prand() < 0.10 || (floor.streak === "LAW" && prand() < 0.15)) ? bonusSlot : null;
     if (bonusN) floor.bonusRolled = true;
+    // ANTI-BONUS ROOM (THE HUSK): the mirror case. Only ever appears on a CHAOS omen streak -- it isn't a
+    // worse version of an ordinary room, it's a room that wasn't there at all until the pattern turned.
+    // Independent of the bonus roll above (both share this floor's streak, but never both at once -- the
+    // streak is stamped once, at arrival, so a floor is never both a LAW streak and a CHAOS streak).
+    const antiN = !bonusN && !floor.antiRolled && stage > 0 && bonusSlot && floor.streak === "CHAOS" && prand() < 0.15 ? bonusSlot : null;
+    if (antiN) floor.antiRolled = true;
     for (const n of names) {
-      const i = idx[n], rr = rng((floor.seed ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0);
+      const i = idx[n], rr = rng((floor.pseed ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0);
       const RR = m => Math.floor(rr() * m), pickR = a => a[RR(a.length)];
       const kind = n === "K" ? floor.kinds[i] || null : null;
       const pile = extra[n].slice();
@@ -165,9 +187,15 @@
         hidden = hidden.filter(h => !["demon", "item", "silver"].includes(h)).concat(["lure", "item", "item", "silver"]);
         for (let j = hidden.length - 1; j > 0; j--) { const m = RR(j + 1); [hidden[j], hidden[m]] = [hidden[m], hidden[j]]; }
       }
+      // The husk still has to be searched for too, but there's less to find, and more of it bites back.
+      if (n === antiN) {
+        hidden = hidden.filter(h => !["item", "silver"].includes(h)).concat(["demon", "demon"]);
+        for (let j = hidden.length - 1; j > 0; j--) { const m = RR(j + 1); [hidden[j], hidden[m]] = [hidden[m], hidden[j]]; }
+      }
       const room = { r: floor.pos[i].r, c: floor.pos[i].c, doors: doors[n], hidden, wing: stage };
       if (kind) room.kind = kind;
       if (n === bonusN) room.kind = BONUS_KIND;
+      if (n === antiN) room.kind = ANTI_KIND;
       if (n === "P") room.hall = true;                       // a passage
       if (n === "X") room.dead = true;                       // a dead end
       if (plan.falseDoors[n].length) room.falseDoors = plan.falseDoors[n];
@@ -274,7 +302,7 @@
     return { at: 0, visited: [true], found: [[]], facing: facing || firstDoor };
   }
 
-  const api = { generate, grow, minimap, arrive, rng, kindBehind, isSealed, DAYS, BONUS_KIND };
+  const api = { generate, grow, minimap, arrive, rng, kindBehind, isSealed, DAYS, BONUS_KIND, ANTI_KIND };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.FLOOR = api;
 })(this);
