@@ -24,9 +24,8 @@ Simpler cell.
 
 The last gap in shared floors: two players on the same floor now see different maps.
 
-- **Minimaps are private.** The floor's actual shape is still identical for everyone sharing it, but each account sees its own rooms and doors rotated or mirrored, fixed for as long as you're on that floor. Nothing about moving, turning or the map's own stability changes — only how it's labeled.
-- **The omen-streak bonus/void room is a guarantee, not a boost.** The day a 3-day LAW or CHAOS streak freshly completes, that day's bonus or void room is certain, same as before — it's just no longer folded into the ordinary roll's odds. The ordinary daily roll (capped at 2 a month, never two days running) is untouched by a streak either way.
-- **The ordinary bonus-room roll now tracks real moon brightness** — a little likelier around the full moon, a little rarer near the new moon — instead of a flat rate.
+- **Minimaps are private.** The floor's actual shape is still identical for everyone sharing it, but each account sees its own rooms and doors rotated or mirrored, fixed for as long as you're on that floor. 
+
 
 ## v0.56.1 - Oct 10 2026, 02:00 HST
 
@@ -46,7 +45,6 @@ The same floors for everyone, and omens with consequences.
 
 - **Floors:** a floor's shape — its wings, how they connect, which kinds pair up — is now the same for every player this lunar month. What's actually behind each door, and where the day's extra room turns up, stays private to your own run.
 - **Omen:** the day's omen is no longer rolled per run. It's the same for everyone, set by the calendar date, and still turns over fresh at your own midnight.
-- **Omen streaks:** three LAW-leaning days in a row raise the odds of a bonus room; three CHAOS-leaning days can open a different one instead — THE HUSK, stripped bare with something waiting in the back of it.
 - **STANDBY** now banks that day's omen. Call it back later, in place of today's, with the new [U]SE DAY.
 - **Searching:** a near-miss near the one spot actually worth finding doesn't sound like an ordinary one.
 - **Arrivals:** stepping onto a new floor says a little more now — who's dominant down here, and whether the pattern feels like it's holding or broken.
