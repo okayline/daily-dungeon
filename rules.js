@@ -213,6 +213,7 @@
   const HEAT_MAX = 20;
   const heatTier = h => (h >= 18 ? 3 : h >= 12 ? 2 : h >= 6 ? 1 : 0);
   const MOON_PULL = [0.8, 0.9, 1, 1.1, 1.25, 1.1, 1, 0.9];       // the moon still stirs things a little
+  const MOON_BONUS = [0.03, 0.04, 0.05, 0.06, 0.07, 0.06, 0.05, 0.04];   // the ordinary bonus-room roll: 3% new moon, 7% full, same curve either side
   function encounterChance(st) {
     const d = st.dungeon, h = RS(d).heat;
     const here = d.floor.rooms[d.at];
@@ -614,11 +615,12 @@
       else if (freshStreak === "CHAOS") st.dungeon.floor.pendingAnti = true;
     }
     // 2. An ordinary private roll, bonus-room only (void never comes from this one -- see above),
-    // capped at 2 a real lunar month and never two days running.
+    // capped at 2 a real lunar month and never two days running. Odds follow the real moon, same
+    // brightness curve as MOON_PULL above: 3% new moon, up to 7% at full, back down either side.
     if (st.bonusEpoch !== epochNow()) { st.bonusEpoch = epochNow(); st.bonusCount = 0; }
     const bonusOK = (st.bonusCount || 0) < 2 && (st.lastBonusDay === undefined || utcDay() - st.lastBonusDay > 1);
     if (st.dungeon && bonusOK && !st.dungeon.floor.bonusRolled && !st.dungeon.floor.antiRolled
-      && !st.dungeon.floor.pendingBonus && !st.dungeon.floor.pendingAnti && Math.random() < 0.07) {
+      && !st.dungeon.floor.pendingBonus && !st.dungeon.floor.pendingAnti && Math.random() < MOON_BONUS[moon()]) {
       st.dungeon.floor.pendingBonus = true;
       st.lastBonusDay = utcDay(); st.bonusCount = (st.bonusCount || 0) + 1;
     }
