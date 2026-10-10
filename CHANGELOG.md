@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.57.2 - Oct 10 2026, 03:20 HST
+
+![v0.57.2](screenshots/v0.57.2.png)
+
+- **CELL is gone from the bottom border.** With the charge system itself gone (v0.57.1), the indicator for it didn't need to stay — the one-locked-door-a-day rule is still there, it's just not called out on screen anymore. STA[N]DBY moves to fill the space.
+
 ## v0.57.1 - Oct 10 2026, 03:15 HST
 
 ![v0.57.1](screenshots/v0.57.1.png)
