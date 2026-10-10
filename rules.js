@@ -597,15 +597,30 @@
     st.omenDay = utcDay();
     if (st.useBanked) delete st.bankedOmen;   // spent yesterday -- the bank is empty again today
     delete st.useBanked;
-    // The bonus/void room is a private roll made fresh each real day KURA spends in a dungeon, not
-    // something floor.js's buildWing decides on its own (see floor.js: it just places whatever this
-    // decided, the next time a wing actually builds). Stops once either lands, or one is already
-    // waiting to be placed, so a floor never gets more than one.
+    // The bonus/void room is decided fresh each real day KURA spends in a dungeon, not something
+    // floor.js's buildWing rolls on its own (see floor.js: it just places whatever this decided, the
+    // next time a wing actually builds). Two independent sources, either can fire, both stop once
+    // either lands or one is already waiting to be placed, so a floor never gets more than one:
+    //
+    // 1. A 100% GUARANTEE the day a 3-day LAW/CHAOS omen streak freshly completes (not every day the
+    // streak holds -- only the day it first turns true, so it fires once per streak, not once a day
+    // for its whole run). Independent of the roll below: no monthly cap, no cooldown, since a streak
+    // is already rare on its own (see omenStreak). LAW guarantees a bonus room; CHAOS guarantees void.
+    const streakNow = omenStreak(st.omenDay), streakYesterday = omenStreak(st.omenDay - 1);
+    const freshStreak = streakNow && streakNow !== streakYesterday ? streakNow : null;
     if (st.dungeon && !st.dungeon.floor.bonusRolled && !st.dungeon.floor.antiRolled
       && !st.dungeon.floor.pendingBonus && !st.dungeon.floor.pendingAnti) {
-      const streak = st.dungeon.floor.streak;
-      if (Math.random() < 0.07 + (streak === "LAW" ? 0.15 : 0)) st.dungeon.floor.pendingBonus = true;
-      else if (streak === "CHAOS" && Math.random() < 0.15) st.dungeon.floor.pendingAnti = true;
+      if (freshStreak === "LAW") st.dungeon.floor.pendingBonus = true;
+      else if (freshStreak === "CHAOS") st.dungeon.floor.pendingAnti = true;
+    }
+    // 2. An ordinary private roll, bonus-room only (void never comes from this one -- see above),
+    // capped at 2 a real lunar month and never two days running.
+    if (st.bonusEpoch !== epochNow()) { st.bonusEpoch = epochNow(); st.bonusCount = 0; }
+    const bonusOK = (st.bonusCount || 0) < 2 && (st.lastBonusDay === undefined || utcDay() - st.lastBonusDay > 1);
+    if (st.dungeon && bonusOK && !st.dungeon.floor.bonusRolled && !st.dungeon.floor.antiRolled
+      && !st.dungeon.floor.pendingBonus && !st.dungeon.floor.pendingAnti && Math.random() < 0.07) {
+      st.dungeon.floor.pendingBonus = true;
+      st.lastBonusDay = utcDay(); st.bonusCount = (st.bonusCount || 0) + 1;
     }
     st.statusIn = 0; st.statusKind = "news";
     // Overnight every room's heat halves. It never quite resets.
@@ -1349,7 +1364,8 @@
     const row2 = [`CELL ${(st.today || {}).stepped ? "spent" : "ready"}${st.spare ? " +SPARE" : ""}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
       `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`];
     const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`,
-      `OMEN ${omen(effectiveOmenDay(st)).key}${st.useBanked ? "(banked)" : ""}${st.bankedOmen !== undefined ? " +BANK" : ""}`];
+      `OMEN ${omen(effectiveOmenDay(st)).key}${st.useBanked ? "(banked)" : ""}${st.bankedOmen !== undefined ? " +BANK" : ""}`,
+      `BONUS ${st.bonusCount || 0}/2${fl.pendingBonus ? " +PEND" : ""}${fl.pendingAnti ? " +PEND(void)" : ""}`];
     return [row1, row2, row3].map(r => r.filter(Boolean).join("  ")).join("\n");   // three lines under the screen
   }
 
@@ -1401,7 +1417,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "spare", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "omenDay", "bankedOmen", "useBanked"]) delete st[k];
+      "omenDay", "bankedOmen", "useBanked", "bonusEpoch", "bonusCount", "lastBonusDay"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
