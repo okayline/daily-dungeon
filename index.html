@@ -208,8 +208,7 @@
           ? ` <span class="${t === "NOT SAVED" ? "unsaved" : "saved"}">${t}</span> ` : "=".repeat(m.length))
         .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
-        .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>')
-        .replace("[U]SE DAY", '<span class="btn" data-act="useBankedOmen">[U]SE DAY</span>');
+        .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>');
       return esc(line);
     }).join("\n")
       // The ALIGN arrow (which way the last action pulled KURA) glows white.
@@ -592,6 +591,9 @@
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
     if (save && (save.ichor || 0) > 0) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
       text: "Demon blood and old light. Heals demons. Not meant for KURA." });
+    // THE HELD DAY: a banked omen, only ever present after a STANDBY day. Enter spends it in place of today's own.
+    if (save && save.bankedOmen !== undefined && !save.useBanked) invList.unshift({ name: "THE HELD DAY", omen: true, count: 1, tier: "OMEN",
+      text: "A day kept back, on standby. Spend it in place of today's own." });
     invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
     pre.innerHTML = "";
@@ -619,6 +621,7 @@
       add(" ");
       const tag = it.ichor ? `${save.ichor} in hand` : "";
       const lines = it.ichor ? [it.text, "Enter: choose who gets it."]
+        : it.omen ? [it.text, "[ENTER] calls it back."]
         : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
       textBox(it.name, tag, lines, 41).forEach(l => add(l, ""));
     }
@@ -727,7 +730,7 @@
     if (!it || !save) return;
     const log = save.log;
     if (it.ichor && !drink) { ichorPick = 0; return showInv(true); }
-    save = it.ichor ? RULES.giveIchor(save, Number(drink) || 0) : RULES.useItem(save, it.name);
+    save = it.ichor ? RULES.giveIchor(save, Number(drink) || 0) : it.omen ? RULES.useBankedOmen(save) : RULES.useItem(save, it.name);
     ichorPick = -1;
     logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
@@ -1369,7 +1372,7 @@
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
-      s: "search", n: "hold", g: "altar", u: "useBankedOmen", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
+      s: "search", n: "hold", g: "altar", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
     if (k) { e.preventDefault(); act(k); }
   });

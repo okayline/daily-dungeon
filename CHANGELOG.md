@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.56.1 - Oct 10 2026, 02:00 HST
+
+![v0.56.1](screenshots/v0.56.1.png)
+
+Small fixes to yesterday's release.
+
+- **The held day moved into INVOKE,** as THE HELD DAY — pick it like an item to spend it instead of today's own omen. The `[U]SE DAY` border button is gone.
+- **Bonus and anti-bonus rooms are now rolled once a day,** privately, the way they were meant to be — not once per wing unlocked. Roughly the same overall odds, just counted differently.
+- **The anti-bonus room is renamed THE VOID.**
+
 ## v0.56 - Oct 10 2026, 01:41 HST
 
 ![v0.56](screenshots/v0.56.png)

@@ -16,7 +16,7 @@
   const DIRS = { N: [-1, 0], E: [0, 1], S: [1, 0], W: [0, -1] };
   const KINDS = ["den", "bay", "relay", "vault", "forge", "altar"];
   const BONUS_KIND = "archive";                  // the seventh type: only on bonus weeks, behind the wildcard door
-  const ANTI_KIND = "husk";                      // the eighth type: only on a CHAOS omen streak, behind a locked door
+  const ANTI_KIND = "void";                      // the eighth type: only on a CHAOS omen streak, behind a locked door
   const OPP = { N: "S", E: "W", S: "N", W: "E" };
   const DAYS = 7;
 
@@ -157,20 +157,19 @@
     const clueKind = exitIdx.length ? floor.kinds[exitIdx[R(exitIdx.length)]] : null;
     floor.wings[stage] = { rooms: names.map(n => idx[n]), exits: exitIdx, clueKind };
 
-    // BONUS ROOM: each time a door is unlocked there is a 1 in 10 chance that one of the new wing's open rooms (its dead end,
-    // else its passage) turns out to be THE ARCHIVE. Once per floor. It never swaps a room behind a hinted door, so hints stay true.
-    // A LAW omen streak (three real days running, the same for every player -- see rules.js's omenStreak) nudges this roll,
-    // without guaranteeing it: still private, still rare, just a little more likely while the pattern holds.
+    // BONUS ROOM: whether one happens at all is decided once a day, privately, in rules.js's sync() --
+    // not here. This just places whatever that daily roll already decided (floor.pendingBonus) into
+    // one of the new wing's open rooms (its dead end, else its passage) as THE ARCHIVE, the first
+    // chance it gets. Once per floor. Never swaps a room behind a hinted door, so hints stay true.
     const bonusSlot = names.includes("X") ? "X" : names.includes("P") ? "P" : null;
-    const bonusN = !floor.bonusRolled && stage > 0 && bonusSlot
-      && (prand() < 0.10 || (floor.streak === "LAW" && prand() < 0.15)) ? bonusSlot : null;
-    if (bonusN) floor.bonusRolled = true;
-    // ANTI-BONUS ROOM (THE HUSK): the mirror case. Only ever appears on a CHAOS omen streak -- it isn't a
-    // worse version of an ordinary room, it's a room that wasn't there at all until the pattern turned.
-    // Independent of the bonus roll above (both share this floor's streak, but never both at once -- the
-    // streak is stamped once, at arrival, so a floor is never both a LAW streak and a CHAOS streak).
-    const antiN = !bonusN && !floor.antiRolled && stage > 0 && bonusSlot && floor.streak === "CHAOS" && prand() < 0.15 ? bonusSlot : null;
-    if (antiN) floor.antiRolled = true;
+    const bonusN = !floor.bonusRolled && stage > 0 && bonusSlot && floor.pendingBonus ? bonusSlot : null;
+    if (bonusN) { floor.bonusRolled = true; floor.pendingBonus = false; }
+    // ANTI-BONUS ROOM (THE VOID): the mirror case, same deal -- rules.js's daily roll only sets this
+    // while a CHAOS omen streak holds (see omenStreak). Not a worse version of an ordinary room, it's
+    // a room that wasn't there at all until the pattern turned. Never both at once (the streak is
+    // stamped once, at arrival, so a floor is never both a LAW streak and a CHAOS streak).
+    const antiN = !bonusN && !floor.antiRolled && stage > 0 && bonusSlot && floor.pendingAnti ? bonusSlot : null;
+    if (antiN) { floor.antiRolled = true; floor.pendingAnti = false; }
     for (const n of names) {
       const i = idx[n], rr = rng((floor.pseed ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0);
       const RR = m => Math.floor(rr() * m), pickR = a => a[RR(a.length)];
@@ -187,7 +186,7 @@
         hidden = hidden.filter(h => !["demon", "item", "silver"].includes(h)).concat(["lure", "item", "item", "silver"]);
         for (let j = hidden.length - 1; j > 0; j--) { const m = RR(j + 1); [hidden[j], hidden[m]] = [hidden[m], hidden[j]]; }
       }
-      // The husk still has to be searched for too, but there's less to find, and more of it bites back.
+      // The void still has to be searched for too, but there's less to find, and more of it bites back.
       if (n === antiN) {
         hidden = hidden.filter(h => !["item", "silver"].includes(h)).concat(["demon", "demon"]);
         for (let j = hidden.length - 1; j > 0; j--) { const m = RR(j + 1); [hidden[j], hidden[m]] = [hidden[m], hidden[j]]; }

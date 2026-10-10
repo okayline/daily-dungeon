@@ -346,7 +346,7 @@
     forge: ["smells of solder and ash", "ticks like cooling metal"],
     altar: ["glows faintly at one wall", "seems to be listening"],
     archive: ["blinks with rows of tiny lights", "whirs, dry and low"],
-    husk: ["stands bare, stripped of anything worth taking", "is empty, and smells of something already gone"],
+    void: ["stands bare, stripped of anything worth taking", "is empty, and smells of something already gone"],
     hall: ["is only a narrow way through, bare and echoing", "stretches on, narrow and bare"],
     dead: ["closes in, with nowhere further to go", "is small and shut, at the end of the way"],
     plain: ["is bare and quiet", "is plain and still"],
@@ -530,7 +530,7 @@
   // KURA arrives on a fresh floor. Its way down closes at the end of `deadline` (a Sunday).
   // The floor's SHAPE is seeded off (this epoch, this floor depth) -- shared: every player who reaches
   // this same depth during this same real lunar month gets the identical shape. Its CONTENTS (which
-  // kind is where, where things are hidden, the wildcard, any bonus/husk room) are seeded off (this
+  // kind is where, where things are hidden, the wildcard, any bonus/void room) are seeded off (this
   // account's own private salt, this floor depth) -- never shared, re-rolled every floor.
   // The epoch itself is stamped here and held for the rest of the time on this floor (see screen.js's
   // epochIndex): a lunar-month rollover mid-floor must never reshuffle a floor out from under a player.
@@ -597,6 +597,16 @@
     st.omenDay = utcDay();
     if (st.useBanked) delete st.bankedOmen;   // spent yesterday -- the bank is empty again today
     delete st.useBanked;
+    // The bonus/void room is a private roll made fresh each real day KURA spends in a dungeon, not
+    // something floor.js's buildWing decides on its own (see floor.js: it just places whatever this
+    // decided, the next time a wing actually builds). Stops once either lands, or one is already
+    // waiting to be placed, so a floor never gets more than one.
+    if (st.dungeon && !st.dungeon.floor.bonusRolled && !st.dungeon.floor.antiRolled
+      && !st.dungeon.floor.pendingBonus && !st.dungeon.floor.pendingAnti) {
+      const streak = st.dungeon.floor.streak;
+      if (Math.random() < 0.07 + (streak === "LAW" ? 0.15 : 0)) st.dungeon.floor.pendingBonus = true;
+      else if (streak === "CHAOS" && Math.random() < 0.15) st.dungeon.floor.pendingAnti = true;
+    }
     st.statusIn = 0; st.statusKind = "news";
     // Overnight every room's heat halves. It never quite resets.
     let settled = false;
@@ -1084,7 +1094,7 @@
       PIXIE: ['PIXIE: "Blinky blinky! There are SO many!"', 'PIXIE: "Everything in here is whispering."'],
       "CU SITH": ['CU SITH whines at the blinking racks.', 'CU SITH stands very still, watching the racks.'],
     },
-    husk: {
+    void: {
       ELF: ['ELF: "Everything good was taken out of this room."', 'ELF: "This was picked clean a long time ago."'],
       PIXIE: ['PIXIE: "It\'s so EMPTY. Why is it so empty?"', 'PIXIE: "I don\'t want to be in here. Can we not."'],
       "CU SITH": ['CU SITH won\'t cross the threshold.', 'CU SITH backs out, then sits in the doorway.'],
@@ -1127,7 +1137,7 @@
   // The Den, Bay, Forge and Altar keep working: going back does it again at HALF strength, once a day per room.
   // The rest are one-time finds. No kind is better than another: they answer different needs.
   // Placeholders (nothing to act on yet): DEN gear, BAY shield, VAULT keys, FORGE repairs.
-  const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR", archive: "THE ARCHIVE", husk: "THE HUSK" };
+  const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR", archive: "THE ARCHIVE", void: "THE VOID" };
   // Walking into a room only shows its flavor line. Its benefit waits behind a fixture the player has to find (see FIXTURE) and use.
   function enterKind(st, i, isNew) {
     const d = st.dungeon, rm = d.floor.rooms[i], k = rm.kind;
@@ -1151,9 +1161,9 @@
         st.round = [`${A(name)} is running here.`, "It does not seem to mind KURA."];
         note(st, "demons", name, "met"); tally(st, "met");
       }
-    } else if (k === "husk") {               // the anti-bonus room: whatever's left here isn't friendly
+    } else if (k === "void") {               // the anti-bonus room: whatever's left here isn't friendly
       st.tell = "> Stripped shelves. Something shifts in the dark at the back.";
-      // Something is always waiting here too -- but the husk never gives KURA a clean one.
+      // Something is always waiting here too -- but the void never gives KURA a clean one.
       if (!st.encounter) {
         const base = pickDemon(st), corrupt = !isProgram(base) && !UNIQUE[base];
         const name = corrupt ? glitch(base) : base, hpmax = Math.round(16 + 9 * floorNum(st) + R(0, 8));
