@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.87 - Scry - Oct 11 2026, 07:27 HST
+
+![v0.87](screenshots/v0.87.png)
+
+- **`[M]OON`** on the bar looks up at her, and again to look level. While you look up, `[S]EARCH` becomes `[S]CRY`.
+- **Breath goes further now.** Every step into another room takes one, and so does using something from the bag. Fighting never does.
+- **Every search takes its moment,** doors and archways included, and every result waits with the blinking `_`.
+- **The breath bar sits in the middle** of its panel.
+- **When a run ends,** the last page shows the level laid out day by day: how much of each day's rooms you saw, and the room you took. The doors you left shut stay unknown.
+
 ## v0.86 - Wait For It - Oct 11 2026, 07:03 HST
 
 ![v0.86](screenshots/v0.86.png)
