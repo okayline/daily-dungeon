@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.91.1 - A Slow Hand - Oct 11 2026, 08:16 HST
+
+![v0.91](screenshots/v0.91.png)
+
+- **What a search turns up gets its own line,** above the line that says KURA searched. A find shows in gold.
+- **The typed line is slower,** both the typing and the deleting, and starts with a `>`.
+- **It has more to say about your run:** the party, the demons, the walls, the doors, and less that the screen already shows. Two lines about you, then one about everyone else.
+
 ## v0.91 - Typed - Oct 11 2026, 08:08 HST
 
 ![v0.91](screenshots/v0.91.png)
