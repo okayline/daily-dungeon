@@ -24,6 +24,7 @@
     min-height: 100vh; display: flex; flex-direction: column;
     align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
     font-family: "VT323", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-variant-ligatures: none;      /* VT323 joins fl, fi and ff into one cell, which pulls that row's border a column left */
   }
   .frame { max-width: 100%; overflow-x: auto; }
   pre {
@@ -73,7 +74,7 @@
     outline: 1px solid var(--trail); }
   .viewpop pre { white-space: pre; display: flex; flex-direction: column; min-height: 100%; margin: 0; }
   .viewpop pre > div { flex: none; }
-  .viewpop pre > div:last-child { margin-top: auto; }   /* the [ENTER] use row sits at the foot, so it never moves when the list or the box changes size */
+  .viewpop pre > div:last-child { margin-top: auto; position: sticky; bottom: 0; background: var(--bg); }   /* the [ENTER] use row sits at the foot, so it never moves when the list or the box changes size */
   .logview .dim { color: var(--trail); }
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
@@ -257,6 +258,7 @@
   // Put back the fight or altar box that belongs to the run (after a cancelled question, a loaded password...).
   function restoreBoxes() { if (save) { if (nameBox()) return; encounterBox(); altarBox(); } }
   function draw() {
+    if (atTitle) return drawTitle();               // a stray redraw (the clock, a closing box) must never paint the run over the title
     if (!save) return;
     try { document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extraToShow())); }
     catch (err) {                                  // never freeze on a bad frame: say so, and keep the keys working
@@ -363,7 +365,8 @@
       const total = titleLean.law + titleLean.chaos;
       if (total) {
         const chaosPct = Math.round((titleLean.chaos / total) * 100);
-        cards.push(`Faction lean: ${titleLean.chaos >= titleLean.law ? "CHAOS " + chaosPct : "LAW " + (100 - chaosPct)}%`);
+        cards.push(titleLean.chaos === titleLean.law ? "Faction lean: EVEN"
+          : `Faction lean: ${titleLean.chaos > titleLean.law ? "CHAOS " + chaosPct : "LAW " + (100 - chaosPct)}%`);
       }
     }
     if (titleDeep) cards.push(`Deepest floor: B${titleDeep}F`);
@@ -610,9 +613,9 @@
 
   // PASS: the run's password, like old console games: copy it to keep or move the run; paste one to continue it.
   function backup() {
-    if (!save) return;
     // The code carries the run and the last 300 log entries, so it stays short enough to copy.
-    const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) }))));
+    // With no run yet (opened from the title screen), there is nothing to copy: only the paste field shows.
+    const code = save ? btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) })))) : "";
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     floatBox(box);
     pre.innerHTML = "";
@@ -620,33 +623,35 @@
     const field = (v, ro) => { const t = document.createElement("textarea"); t.rows = 3; t.value = v; t.readOnly = !!ro; t.spellcheck = false; t.className = "passfield"; pre.appendChild(t); return t; };
     const btn = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.pact = a; return e; };
     add("PASSWORD", "gold"); add(" ");
-    add("Copy it to keep this run or move it to another device.");
-    const mine = field(code, true);
-    add(" ");
+    let mine = null;
+    if (save) { add("Copy it to keep this run or move it to another device."); mine = field(code, true); add(" "); }
     add("To continue a run, paste its password here.");
     const theirs = field("", false);
     const msg = add(" ");
     const row = document.createElement("div");
-    row.append(btn("[ COPY ]", "copy"), "   ", btn("[ LOAD ]", "load"), "   ", btn("[ CLOSE ]", "close"));
+    if (save) row.append(btn("[ COPY ]", "copy"), "   ");
+    row.append(btn("[ LOAD ]", "load"), "   ", btn("[ CLOSE ]", "close"));
     pre.appendChild(row);
     box.dataset.mode = "pass";
     box.hidden = false;
     passAct = a => {
       if (a === "close") { box.hidden = true; draw(); return; }
       if (a === "copy") {
+        if (!mine) return;
         mine.select();
         const ok = () => { msg.textContent = "Copied."; }, no = () => { try { document.execCommand("copy"); ok(); } catch (e) { msg.textContent = "Select the text above and copy it."; } };
         try { navigator.clipboard.writeText(code).then(ok, no); } catch (e) { no(); }
         return;
       }
       const got = theirs.value.trim();
-      if (!got || got === code) { msg.textContent = got ? "That is this run already." : "Paste a password first."; return; }
+      if (!got || (code && got === code)) { msg.textContent = got ? "That is this run already." : "Paste a password first."; return; }
       try {
         const s = JSON.parse(decodeURIComponent(escape(atob(got))));
-        if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 5) throw new Error("not a run");
+        if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 7) throw new Error("not a run");   // the same shape start() accepts
         const trial = JSON.parse(JSON.stringify(s)); RULES.tick(trial); SMT.renderScreen(trial, "");      // it must really run, not just parse
         loadCode = s;
-        askBox("load", "REPLACE THIS RUN?", ["The run in the password takes this one's place."]);
+        if (save) askBox("load", "REPLACE THIS RUN?", ["The run in the password takes this one's place."]);
+        else { pending = "load"; answerConfirm(true); }      // nothing to replace: no need to ask
       } catch (e) { msg.textContent = "That password didn't work. Nothing was changed."; }
     };
   }
@@ -739,9 +744,10 @@
     // The hold/release button gets its own line above the rest -- the box is a fixed 47 columns (it
     // overlays the 3D view), and "[1-9] choose  [ENTER] use  [H] Release Omen  [C]LOSE" alone runs
     // past that width (49-54 chars depending on label/cooldown), which would silently clip or scroll.
-    if (holdBtn) add("", "").append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : "")));
-    const help = add("[1-9] choose  ");
-    help.append(btn("[ENTER] use", "use"), "  ", btn("[C]LOSE", "close"));
+    // Both lines live in the one foot block, which stays pinned to the bottom of the box however long the list gets.
+    const help = add("", "");
+    if (holdBtn) { const hl = document.createElement("div"); hl.append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : ""))); help.append(hl); }
+    help.append("[1-9] choose  ", btn("[ENTER] use", "use"), "  ", btn("[C]LOSE", "close"));
   }
   // ABOUT: the build, what the game is, a few numbers from this run and the codex.
   // (The full stats only show at the end of a run.)
@@ -754,9 +760,10 @@
     const count = list => { const all = list.flatMap(g => g.entries); return `${all.filter(e => e.known).length} / ${all.length}`; };
     const two = (a, b, c, d) => "  " + (a + " ").padEnd(16, ".") + " " + String(b).padEnd(10) + " " + (c + " ").padEnd(16, ".") + " " + d;
     const line = "-".repeat(71);
-    const head = save ? "{{CODEX}}   {{PASS}}" : "";
+    // The header buttons as shown: [C]ODEX and [P]ASSWORD with a run, [P]ASSWORD alone (to paste one in) without.
+    const head = save ? "{{CODEX}}   {{PASS}}" : "{{PASS}}", headLen = save ? 20 : 10;
     const text = [
-      "DAILY DIGITAL DEMON DUNGEON   " + head + ("build " + SMT.VERSION).padStart(71 - 30 - head.length), line,
+      "DAILY DIGITAL DEMON DUNGEON   " + head + ("build " + SMT.VERSION).padStart(71 - 30 - headLen), line,
       "A dungeon crawler you play one charge a day, on the real calendar.",
       "Each floor is four wings. Three times, two locked doors offer two",
       "rooms: take one and the other seals. Listen at the doors; dead ends",
@@ -913,6 +920,7 @@
       document.getElementById("found").hidden = true;
       if (kind === "load") {
         if (yes && loadCode) {
+          if (atTitle) leaveTitle();          // a password loaded from the title screen goes straight into that run
           save = loadCode; loadCode = null; tick();
           if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
           heldExtra = null; disarm(); logGlow = false; invSel = 0;
@@ -1371,6 +1379,8 @@
     if (e.target.closest(".submitrow")) return;                      // typing a name must not close the log
     if (e.target.closest("[data-download]")) return downloadLog();
     if (e.target.closest("[data-copy]")) return copyLog(e.target.closest("[data-copy]"));
+    const sel = window.getSelection && window.getSelection();
+    if (sel && !sel.isCollapsed && String(sel).trim()) return;      // dragging to select log text is not a click to close
     toggleLog(false);          // [C]LOSE, C, L, Esc, or any other click on the page
   });
   document.getElementById("board").addEventListener("click", () => toggleBoard(false));   // no other interactive bits in here: any click closes
@@ -1498,11 +1508,8 @@
       return;
     }
     if (atTitle) {
-      e.preventDefault();
-      if (key === "n") titleAction("title-new");
-      else if (key === "c") titleAction("title-continue");
-      else if (key === "b") titleAction("title-board");
-      else if (key === "?") titleAction("title-about");
+      const a = { n: "title-new", c: "title-continue", b: "title-board", "?": "title-about" }[key];
+      if (a) { e.preventDefault(); titleAction(a); }      // every other key (F5, Tab, F12...) is left to the browser
       return;
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
@@ -1519,7 +1526,7 @@
   let shownMinute = SMT.now().getMinutes();
   setInterval(() => {
     const m = SMT.now().getMinutes();
-    if (m !== shownMinute) { shownMinute = m; tick(); draw(); }
+    if (m !== shownMinute) { shownMinute = m; if (!atTitle) tick(); draw(); }   // on the title, only the title redraws; the run waits for CONTINUE
   }, 1000);
 </script>
 </body>

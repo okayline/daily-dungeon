@@ -16,7 +16,7 @@ npx wrangler deploy                               # prints the Worker's address
 Then put that address in `index.html` (`LEADERBOARD_URL`) and set `ALLOW_ORIGIN` in `wrangler.toml` to the game's address.
 Until `LEADERBOARD_URL` is filled in, the game hides every leaderboard button.
 
-If you set this up before v0.59, re-run the schema once to add the `faction_season` table (it's additive,
+If you set this up before v0.60, re-run the schema once to add the `faction_season` table (it's additive,
 `CREATE TABLE IF NOT EXISTS`, so this is safe on an existing database): `npx wrangler d1 execute daily-dungeon-board --remote --file=schema.sql`
 
 ## Removing an entry

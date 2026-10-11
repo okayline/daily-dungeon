@@ -588,7 +588,10 @@
     const held = !!st.today.held && st.today.date === t - 1 && !!st.dungeon && !st.dead;
     // A day with no step spent at all, not even STANDBY: an unmanaged tense party gets a little worse
     // even when nothing is actively happening (see the DISSONANCE block above fight/alignOf).
-    if (st.dungeon && !st.dead && !st.today.stepped && !held) wearTension(st, DISSONANCE_SKIP);
+    // Counted from the calendar: any whole days away since the last visit, plus that last day itself
+    // if it ended with no step. One wear per return, like the one night's rest below.
+    const skipped = (t - st.today.date - 1) + (!st.today.stepped && !st.today.held ? 1 : 0);
+    if (st.dungeon && !st.dead && skipped > 0) wearTension(st, DISSONANCE_SKIP);
     st.today = { date: t, stepped: false };
     st.unsaved = true;
     // STANDBY banks that day's omen (good or bad) for later -- one slot, the newest held day wins.

@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.62";
+  const VERSION = "v0.62.1";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -349,7 +349,14 @@
     const PW = 29, rule = " " + "-".repeat(PW - 1);
     const cards = opts.cards && opts.cards.length ? opts.cards : ["..."];
     // One blank line between every card (Part 11), so the ticker's real cycle length is 2x the card count.
-    const content = []; for (const c of cards) { content.push(ljust(" " + c, PW)); content.push(""); }
+    // A card longer than the sidebar wraps onto more lines at a space, never clipped mid-word.
+    const wrap = c => { const out = []; let cur = "";
+      for (const w of String(c).split(" ")) {
+        if (cur && (cur + " " + w).length > PW - 1) { out.push(cur); cur = w; } else cur = cur ? cur + " " + w : w;
+        while (cur.length > PW - 1) { out.push(cur.slice(0, PW - 1)); cur = cur.slice(PW - 1); }
+      }
+      if (cur || !out.length) out.push(cur); return out; };
+    const content = []; for (const c of cards) { for (const l of wrap(c)) content.push(ljust(" " + l, PW)); content.push(""); }
     const off = ((opts.cardOffset || 0) % content.length + content.length) % content.length;
     const windowH = VH - 2;        // the header + rule take the first two sidebar rows
     const ticker = Array.from({ length: windowH }, (_, i) => content[(off + i) % content.length]);
@@ -395,7 +402,7 @@
     const side = law === chaos ? "EVEN" : law > chaos ? "LAW" : "CHAOS";
     const BAR = 17, lead = Math.max(lawPct, chaosPct), filled = Math.round((lead / 100) * BAR);
     const bar = "|".repeat(filled) + ".".repeat(BAR - filled);
-    return `this week leans ${side}   [${bar}]  ${lawPct} / ${chaosPct}`;
+    return `this season leans ${side}   [${bar}]  ${lawPct} / ${chaosPct}`;
   }
 
   const api = { VERSION, moonNote, renderView, renderScreen, renderTitle, moonIndex, epochIndex, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
