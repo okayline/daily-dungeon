@@ -1448,14 +1448,6 @@
       if (save.look) name = "search"; else       // looking up, [^] asks the moon
       name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
     }
-    // Out of breath: the refusal shows at once, the bar is pressed, and the line waits for a click like any result.
-    if (name === "search" && save && !searchGo && !contWait && !save.encounter && !save.dead && !save.look && !save.question
-        && RULES.breath(save) < 1 && (!RULES.available(save).door[save.facing] || RULES.available(save).locked[save.facing])) {
-      squeeze();
-      searchGo = true; try { act("search"); } finally { searchGo = false; }
-      if (save && document.getElementById("found").hidden) { contWait = true; draw(); }
-      return;
-    }
     // Searching a bare wall, or listening at a locked door, takes a moment: "KURA is searching" (or "listening"),
     // a dot at a time, then the result. Nothing else can be pressed meanwhile. Only the log line changes: no
     // dimming or other visual effect, ever. (Not at an open door, not looking up, not when she is out of breath.)
@@ -1473,6 +1465,15 @@
         // The result waits on the log's middle line with a blinking _ until a click or a key (unless something opened over it).
         if (save && !save.dead && !save.encounter && !save.question && document.getElementById("found").hidden) { contWait = true; draw(); }
       }, 250 + (6 - Math.min(6, RULES.breath(save))) * 50);   // slower as she tires: a second in all at full breath, two on her last
+      return;
+    }
+    // Every other search is instant (out of breath, an open archway, a sealed door, scrying the moon), and waits
+    // with the same blinking _ once its line is up, unless it opened something (a terminal, a popup, a fight).
+    if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.question) {
+      const before = RULES.breath(save);
+      searchGo = true; try { act("search"); } finally { searchGo = false; }
+      if (save && (before < 1 || RULES.breath(save) < before)) squeeze();
+      if (save && !save.dead && !save.encounter && !save.question && !(save.altar && save.altar.open) && document.getElementById("found").hidden) { contWait = true; draw(); }
       return;
     }
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
