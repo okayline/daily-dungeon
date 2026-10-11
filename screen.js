@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.80";
+  const VERSION = "v0.81";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -360,7 +360,9 @@
     const PHASE = ["   ", "  ▓", " ▓█", "▓██", "███", "██▓", "█▓ ", "▓  "];
     // The dot sits over the middle of the lit part of today's cell (a half column right of the printed spot for the two quarters, which the page shifts).
     const DOT = [1, 2, 1, 1, 1, 1, 0, 0][idx];
-    const phaseV = " ".repeat(3 + 3 * idx + DOT) + ".", phaseRow = "   " + PHASE.join("");
+    // The strip closes in from both ends as the room heats (st.heatNow, 0 to 24): fully open when calm, shut at the top.
+    const shut = Math.max(0, Math.min(12, Math.round((st.heatNow || 0) / 2))), bar = PHASE.join("");
+    const phaseV = " ".repeat(3 + 3 * idx + DOT) + ".", phaseRow = "   " + " ".repeat(shut) + bar.slice(shut, 24 - shut) + " ".repeat(shut);
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
       rule, money, mapHead, ...mp.map(m => " ".repeat(mapPad) + m), "", ...(mapRows === 4 ? [""] : []), rule, bottom];
     stat.splice(stat.length - 3, 3, phaseV, phaseRow, bottom);

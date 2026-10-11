@@ -52,6 +52,8 @@
   .cell { display: inline-block; width: 1ch; text-align: center; overflow: visible; white-space: nowrap; }
   /* The moon strip: shorter blocks, so the row is not taller than its neighbours. */
   .ph .g { display: inline-block; transform: scale(1.3, 0.62); }
+  body.tired, body.tired .btn { cursor: wait; }
+  body.tired #screen { opacity: .82; }
   .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
   .door { color: var(--trail); }
@@ -1369,6 +1371,7 @@
     return true;
   }
 
+  let searchWait = null, searchGo = false;      // the pause before a search lands in a hot room
   function act(name) {
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
     // screen (resetBox() -> answerConfirm(true) -> act("reset")); that's the title's own exit into the game.
@@ -1382,6 +1385,17 @@
       if (save.encounter) return;                  // in a fight, running is the [R]UN button in the fight box
       if (save.look) name = "search"; else       // looking up, [^] asks the moon
       name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
+    }
+    // A hot room is slow to search: a pause that grows with the room's heat (none while it is calm, 2 seconds at
+    // the top). Nothing else can be done while she is at it.
+    if (searchWait) return;
+    if (name === "search" && save && !save.encounter && !save.dead && !save.look && !searchGo) {
+      const h = save.heatNow || 0, ms = h < 5 ? 0 : Math.min(2000, Math.round((h - 4) / 20 * 2000));
+      if (ms) {
+        document.body.classList.add("tired");
+        searchWait = setTimeout(() => { searchWait = null; document.body.classList.remove("tired"); searchGo = true; try { act("search"); } finally { searchGo = false; } }, ms);
+        return;
+      }
     }
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
     if ((name === "qyes" || name === "qno" || name === "qsilent") && save) {

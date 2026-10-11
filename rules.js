@@ -228,6 +228,7 @@
   function heatUp(st, amount) {
     const d = st.dungeon;
     const rs = RS(d), before = heatTier(rs.heat);
+    if (!(rs.heat > 0)) rs.heatAt = TIME.now().getTime();   // the room starts cooling from the moment it first warms
     rs.heat = Math.min(HEAT_MAX + 4, rs.heat + amount * omen(effectiveOmenDay(st)).fx.heat);
     const after = heatTier(rs.heat);
     st.stats = st.stats || {}; st.stats.maxHeat = Math.max(st.stats.maxHeat || 0, rs.heat);
@@ -329,8 +330,7 @@
   }
   // THE MOON. There is no ceiling: looking up ("U") is the open sky, with the real moon in it at her real phase.
   // SEARCHing the moon asks her. Once a night she may answer with what one of the still-locked doors hides (never
-  // which door): the fuller she is, the likelier, and a new moon never answers. Asking is free: no heat, no noise,
-  // nothing wanders in.
+  // which door): the fuller she is, the likelier, and a new moon never answers. Asking adds 2 heat.
   const MOON_SEEN = ["No moon tonight.", "A thin moon, just begun.", "Half a moon, waxing.", "A swelling moon, nearly full.", "The full moon, wide open.",
     "A heavy moon, just past full.", "Half a moon, waning.", "A thin moon, almost gone."];
   const MOON_ANSWER = [0, 0.15, 0.5, 0.85, 1, 0.85, 0.5, 0.15];
@@ -346,6 +346,7 @@
     if (m === 0) { st.log = "> " + pick(["KURA searches the sky. No moon tonight. No one to ask.", "KURA searches the sky. Only the dark, a long way up."]); return show(st); }
     if (st.moonDay === st.day) { st.log = "> " + pick(["The moon has said what she will tonight.", "KURA looks to the moon again. She has nothing more tonight."]); return show(st); }
     st.moonDay = st.day;
+    heatUp(st, 2);                                       // asking is no longer free: it stirs the room a little
     tally(st, "moonAsked");
     st.log = "> KURA searches the moon.";
     // The doors still locked in this room; failing that, any still locked on the level she has seen.
@@ -525,6 +526,7 @@
     if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; st.extraUrgent = true; } // a heat tell takes line 3 right away (not over a question)
     RS(d);                                              // (converts an old save's room arrays)
     st.roomName = roomName(d, d.at);
+    st.heatNow = RS(d).heat || 0;                       // for the moon strip under the map, which closes as the room heats
     if (st.look && !st.dead) st.roomName = moon() === 0 ? "THE SKY" : "THE MOON";   // looking up, the slot under the map names what she sees
     st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.facing, visited: allRooms(d).map(s => s.visited), found: allRooms(d).map(s => s.found) });
     const door = dir => doorWall(room, dir);
@@ -623,7 +625,22 @@
   }
   const STANDBY_LINES = ["> KURA kept still all day. The party sleeps deeper tonight.", "> A quiet day. Everyone wakes lighter.",
     "> Nothing moved, and nothing was lost. The room feels kinder.", "> The long stillness did its work."];
+  // A ROOM COOLS IN REAL TIME: one point of heat a minute, whether or not the game is open (rs.heatAt is when
+  // it last lost a point). The overnight halving in sync still applies on top.
+  const COOL_MS = 60000;
+  function cool(st) {
+    if (!st.dungeon) return;
+    const now = TIME.now().getTime();
+    for (const rs of allRooms(st.dungeon)) {
+      if (!rs) continue;
+      if (!(rs.heat > 0)) { delete rs.heatAt; continue; }
+      if (!rs.heatAt || rs.heatAt > now) rs.heatAt = now;
+      const m = Math.floor((now - rs.heatAt) / COOL_MS);
+      if (m > 0) { rs.heat = Math.max(0, rs.heat - m); rs.heatAt += m * COOL_MS; }
+    }
+  }
   function sync(st) {
+    cool(st);
     snapBack(st);
     const t = clock(st);
     if (rawClock(st) < t && !st.rewindNoted) { st.extra = "> The calendar won't turn back."; st.rewindNoted = true; }
