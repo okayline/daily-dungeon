@@ -78,7 +78,10 @@
   .logview .dim { color: var(--trail); }
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
-  .logline.gold { color: var(--gold); }
+  .logline.q-plain { color: var(--trail); }
+  .logline.q-rare { color: #6aa6e8; }
+  .logline.q-mythic { color: var(--gold); }
+  .logline.q-moon { color: var(--moon); }
   #ticker { display: inline-block; width: 76ch; overflow: hidden; white-space: pre; vertical-align: top; }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
@@ -190,7 +193,7 @@
       // straight even if a glyph in the font (an apostrophe, say) isn't exactly one cell wide.
       // Line 2 glows gold right after using an item.
       if (i >= lines.length - 6 && i <= lines.length - 4) {
-        let inner = esc(line.slice(1, -1)); const gold = resultGold && i === lines.length - 6;
+        let inner = esc(line.slice(1, -1)); const gold = i === lines.length - 6 ? resultGold : false;   // (a quality's class for a search result on the top line)
         // A party member's question: [Y]ES and [N]O sit at the right end of the top line and answer it.
         // The bottom line is the ticker: the status report, this run's news and word of everyone else, typed out a line at a time.
         if (i === lines.length - 4) return `|<span class="logline"> <span id="ticker">${tickerHtml()}</span> </span>|`;
@@ -201,7 +204,7 @@
         // The beat before a search's result: a blinking _ after the middle line (in place of one of its spaces).
         if (searchBeat && i === lines.length - 5) { const body = line.slice(1, -1), txt = body.replace(/\s+$/, "");
           if (txt.length < body.length - 1) inner = esc(txt) + ' <span class="wait">_</span>' + " ".repeat(body.length - txt.length - 2); }
-        return `|<span class="logline${gold ? " gold" : ""}">${inner}</span>|`;
+        return `|<span class="logline${gold ? " " + gold : ""}">${inner}</span>|`;
       }
       if (i === lines.length - 2) {
         // Daily actions dim once used (or when there's no door that way).
@@ -283,7 +286,13 @@
       let top = extraToShow(), whole = null; resultGold = false;
       if (!save.dead && !save.question && !searchBeat) {
         const m = /^(> KURA (?:searches|scries) the [^.]+\.) (.+)$/.exec(save.log || "");
-        if (m) { whole = save.log; save.log = m[1]; top = "> " + m[2]; resultGold = /^(KURA finds|A locker holds|Coins in the rubble|Deep in the stone)/.test(m[2]); }
+        if (m) {
+          whole = save.log; save.log = m[1]; top = "> " + m[2];
+          // The result is always in a quality's color: grey for nothing or a common or uncommon thing, blue for a
+          // rare one, yellow for a mythic one, the moon's own for a moon thing. Coins are yellow.
+          const it = (/^(?:KURA finds|A locker holds) (.+?)\.$/.exec(m[2]) || [])[1], tier = it ? RULES.tierOf(it) : null;
+          resultGold = /^Coins in the rubble|^Deep in the stone/.test(m[2]) || tier === "MYTHIC" ? "q-mythic" : tier === "RARE" ? "q-rare" : tier === "MOON" ? "q-moon" : "q-plain";
+        }
       }
       const html = colorize(SMT.renderScreen(save, top)); delete save.squeeze;
       if (whole !== null) save.log = whole;
@@ -1527,11 +1536,12 @@
     return out;
   }
   // It is typed, not scrolled: a line appears a letter at a time, as if at a terminal, with a _ at the end; it
-  // holds for a few seconds with the _ blinking; it is deleted back to nothing; the next one is typed. The run's
+  // holds for a few seconds with the _ blinking; it is deleted back to nothing; the bare > waits two seconds with
+  // the _ blinking; the next one is typed. The run's
   // own status report goes next whenever a new one is waiting. Only the line's own span is rewritten.
   // (var and a function declaration, not let/const: the first frame is drawn before this point in the script is reached.)
   var TYPE_W = 72, typeLine = "", typeN = 0, typeMode = "gap", typeNext = 0, typeStatus = null;
-  function tickerHtml() { return "&gt; " + esc((typeLine || "").slice(0, typeN || 0)) + (typeMode === "hold" ? '<span class="wait">_</span>' : "_"); }   // the > is always there
+  function tickerHtml() { return "&gt; " + esc((typeLine || "").slice(0, typeN || 0)) + (typeMode === "hold" || typeMode === "gap" ? '<span class="wait">_</span>' : "_"); }   // the > is always there
   function typeStep() {
     let wait = 300;
     try {
@@ -1544,10 +1554,10 @@
       } else if (typeMode === "type") {
         typeN++;
         const ch = typeLine[typeN - 1];
-        wait = /[.,:;!?]/.test(ch) ? 520 : ch === " " ? 170 : 110 + Math.random() * 90;    // a slow hand: about six letters a second, a breath at punctuation
+        wait = /[.,:;!?]/.test(ch) ? 420 : ch === " " ? 120 : 80 + Math.random() * 70;     // an unhurried hand: about eight letters a second, a breath at punctuation
         if (typeN >= typeLine.length) { typeMode = "hold"; wait = 3200; }
       } else if (typeMode === "hold") { typeMode = "delete"; wait = 30; }
-      else if (typeMode === "delete") { typeN = Math.max(0, typeN - 1); wait = 45; if (typeN === 0) { typeMode = "gap"; wait = 700; } }   // one letter at a time, about twenty a second
+      else if (typeMode === "delete") { typeN = Math.max(0, typeN - 1); wait = 45; if (typeN === 0) { typeMode = "gap"; wait = 2200; } }   // one letter at a time, about twenty a second
       const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml();
     } catch (e) {}
     setTimeout(typeStep, wait);
