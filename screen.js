@@ -392,7 +392,7 @@
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step is the [^] button in
     // the 3D view, and HOLD/RELEASE now live in INVOKE with everything else that isn't always available.
-    const free = ` [F]IGHT [T]ALK [I]NVOKE ${st.look ? "[S]CRY  " : "[S]EARCH"} [M]OON`;   // (SCRY is padded to SEARCH's width, so [M]OON never moves)   // [M]OON looks up at her, and level again; looking up, SEARCH becomes SCRY (asking her)
+    const free = ` [T]ALK [I]NVOKE ${st.look ? "[S]CRY  " : "[S]EARCH"} [M]OON`;   // (SCRY is padded to SEARCH's width, so [M]OON never moves)   // [M]OON looks up at her, and level again; looking up, SEARCH becomes SCRY (asking her)
     S.push("|" + free + " ".repeat(78 - free.length) + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
