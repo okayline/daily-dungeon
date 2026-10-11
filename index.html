@@ -77,8 +77,7 @@
   .viewpop pre > div:last-child { margin-top: auto; position: sticky; bottom: 0; background: var(--bg); }   /* the [ENTER] use row sits at the foot, so it never moves when the list or the box changes size */
   .logview .dim { color: var(--trail); }
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
-    border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
-  .foundbox.plain { box-shadow: none; }
+    border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
   .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
@@ -1126,7 +1125,6 @@
       .map(l => String(l).replace(/^> /, "").replace(/^KURA (searches|scries) the [A-Za-z ]+?\.\s*/, "")).filter(Boolean);
     if (!said.length) return;
     floatBox(box);
-    box.classList.add("plain");                       // the gold border, without the glow around it
     pre.innerHTML = "";
     said.forEach((l, k) => { if (k) add(" "); for (const w of wrapText(l, 38)) add(w); });
     add(" ");
