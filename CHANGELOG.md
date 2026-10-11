@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.96 - Crescent Over the Gate - Oct 11 2026, 11:40 HST
+
+![v0.96](screenshots/v0.96.png)
+
+- **A crescent moon on the title screen,** to the left of the lettering. It is the same every day.
+
 ## v0.95 - The Locked Drawer - Oct 11 2026, 10:51 HST
 
 ![v0.95](screenshots/v0.95.png)

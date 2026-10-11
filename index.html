@@ -103,6 +103,7 @@
   .lit { color: var(--moon); text-shadow: 0 0 6px var(--moon); animation: breathe 4s ease-in-out infinite; }
   @keyframes breathe { 50% { opacity: 0.55; text-shadow: 0 0 2px var(--moon); } }
   .mframe { color: var(--trail); }
+  .cres { color: var(--moon); }
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
   .wait { animation: blink 1s steps(1) infinite; }   /* the _ that waits for a click */
   .caret2 { display: inline-block; transform: scale(1.35); transform-origin: 50% 62%; }   /* the action button's caret: a little bigger, without moving anything */
@@ -250,7 +251,14 @@
       if (i === 2 || i === 3) return moonBox(esc(line));
       if (i === 4) return moonBox(esc(line)).replace("^^^", '<span class="moon">^^^</span>');
       // The wordmark (rows 6 to 13): each block glyph boxed to one cell, like the moon's, so the letters hold their shape.
-      if (i >= 6 && i <= 13) return esc(line).replace(/[▀▄█▓▌▐]/g, ch => `<span class="cell wm"><span class="g">${ch}</span></span>`);
+      if (i >= 6 && i <= 13) {
+        const wm = t => esc(t).replace(/[▀▄█▓▌▐]/g, ch => `<span class="cell wm"><span class="g">${ch}</span></span>`);
+        const C = SMT.CRES, b = i - 6 - C.row;
+        if (b < 0 || b >= C.rows) return wm(line);
+        // the crescent's cells: blue, flat (no glow), the dotted block boxed like the lettering's own
+        const moon = line.slice(1 + C.col, 1 + C.col + C.w).replace(/[▀▄█▓]/g, ch => `<span class="cell cres${ch === "▓" ? " wm" : ""}"><span class="g">${ch}</span></span>`);
+        return wm(line.slice(0, 1 + C.col)) + moon + wm(line.slice(1 + C.col + C.w));
+      }
       // WEEK / EPOCH / LEAN: the same three rows the in-run log box occupies.
       if (i >= lines.length - 6 && i <= lines.length - 4) return `|<span class="logline">${esc(line.slice(1, -1))}</span>|`;
       // The menu bar: [N]EW RUN [C]ONTINUE [B]OARD [?] ABOUT, same bracket convention as the real bar.

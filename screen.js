@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.95";
+  const VERSION = "v0.96";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -456,6 +456,10 @@
     while (rows.length > y0 + 1 && !rows[rows.length - 1]) rows.pop();
     return [...rows, "", center(`${level} - ${name} - Lunar Days ${first}-${last}`, VW)];
   }
+  // The title's crescent moon: seven rows of block characters, thirteen columns wide. Only the shape lives here; the
+  // page colors it (blue, the dotted block on the inner edge matches the lettering's dots).
+  const CRESCENT = [" ▀▀▀▓▓█▄▄    ", "     ▀▓▓███▄ ", "       ▓▓███▄", "       ▓▓████", "       ▓▓███▀", "     ▄▓▓███▀ ", "▄▄▄▓▓██▀▀    "];
+  const CRES_W = 13, CRES_ROW = 1, CRES_COL = 3;   // CRES_COL: where it starts in the frame (the group of moon, gap and lettering is centered)
   function renderTitle(opts) {
     opts = opts || {};
     const now = opts.now || SMT_now();
@@ -467,8 +471,12 @@
     const TOP = 9;                                       // rows the wordmark takes (eight, and a blank one)
     const markTop = MARK.slice(0, 4), markBot = MARK.slice(5, 8), wide = a => Math.max(...a.map(l => l.length));
     const banner = Array.from({ length: TOP }, () => "");
-    markTop.forEach((l, i) => { banner[i] = " ".repeat(Math.floor((W - 2 - wide(markTop)) / 2)) + l; });
-    markBot.forEach((l, i) => { banner[5 + i] = " ".repeat(Math.floor((W - 2 - wide(markBot)) / 2)) + l; });
+    // A waxing crescent sits to the left of the lettering, the same on every day: lit on the right, the dotted
+    // block along its inner edge, one row down so it spans the letters' eight rows (rows 1 to 7 of the banner).
+    const logoW = Math.max(wide(markTop), wide(markBot)), gl = CRES_COL, x0 = gl + CRES_W + 3;
+    markTop.forEach((l, i) => { banner[i] = " ".repeat(x0 + Math.floor((logoW - wide(markTop)) / 2)) + l; });
+    markBot.forEach((l, i) => { banner[5 + i] = " ".repeat(x0 + Math.floor((logoW - wide(markBot)) / 2)) + l; });
+    CRESCENT.forEach((m, i) => { banner[CRES_ROW + i] = " ".repeat(gl) + m + ljust(banner[CRES_ROW + i], gl + CRES_W).slice(gl + CRES_W); });
     const view = Array.from({ length: VH }, () => " ".repeat(VW));
     levelBones(now).forEach((l, i) => { if (TOP + i < VH) view[TOP + i] = ljust(l, VW).slice(0, VW); });
     // Sidebar: a pinned "RUMORS AND SECRETS" header (never scrolls) over an auto-advancing card ticker.
@@ -534,7 +542,7 @@
     return `this season leans ${side}   [${bar}]  ${lawPct} / ${chaosPct}`;
   }
 
-  const api = { VERSION, moonNote, renderView, renderScreen, renderTitle, moonIndex, epochIndex, quarterOf, quarter, QUARTER_END, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  const api = { VERSION, CRES: { w: CRES_W, row: CRES_ROW, col: CRES_COL, rows: CRESCENT.length }, moonNote, renderView, renderScreen, renderTitle, moonIndex, epochIndex, quarterOf, quarter, QUARTER_END, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);
