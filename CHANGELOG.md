@@ -2,9 +2,9 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
-## v0.57.4 - Oct 10 2026, 18:55 HST
+## v0.58 - Oct 10 2026, 18:55 HST
 
-![v0.57.4](screenshots/v0.57.4.png)
+![v0.58](screenshots/v0.58.png)
 
 - **Hold Omen and Release Omen are now one slot in the bag.** Releasing a held omen greys the slot out for a week before KURA can hold again.
 
