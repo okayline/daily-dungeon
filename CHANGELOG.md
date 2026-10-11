@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.78 - A Word on the Button - Oct 11 2026, 04:52 HST
+
+![v0.78](screenshots/v0.78.png)
+
+Small changes to how the room is worked.
+
+- **The action button says what it does.** `[ SEARCH ]`, `[ LISTEN ]`, `[ CONSULT ]`, in place of `[ ^ ]` with a word above it.
+- **An opened door is labelled `[ ENTER ]`,** right under it. The action button is a plain `[ ^ ]` while it is.
+- **A demon's arrival unfolds a line at a time,** like a fight's ending, a little quicker. It can't be skipped.
+
 ## v0.77 - Out of the Pit - Oct 11 2026, 03:03 HST
 
 ![v0.77](screenshots/v0.77.png)
