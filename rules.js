@@ -633,15 +633,27 @@
   // is back in a couple of seconds and an empty bar takes about half a minute. It follows her from room to room.
   // st.breath = { n, at }: n breaths as of the instant `at` (ms), which is when the next one starts coming back.
   const BREATH_MAX = 6, BREATH_BACK = [10, 8, 6, 4, 3, 2], BREATH_WAIT = 2000;
+  // (n can sit on a half: a step costs half a breath. A breath comes back up to the next whole number, taking that
+  // share of BREATH_BACK for the whole number it is climbing from.)
+  const breathStep = n => { const lo = Math.floor(n); return { to: lo + 1, ms: BREATH_BACK[lo] * 1000 * (lo + 1 - n) }; };
   function breathNow(st, write) {
     const b = st.breath, now = TIME.now().getTime();
     if (!b || !(b.n < BREATH_MAX)) return BREATH_MAX;
     let n = Math.max(0, b.n), at = Math.min(b.at, now + BREATH_WAIT);     // (a clock that jumped back never strands her)
-    while (n < BREATH_MAX && now - at >= BREATH_BACK[n] * 1000) { at += BREATH_BACK[n] * 1000; n++; }
+    while (n < BREATH_MAX && now - at >= breathStep(n).ms) { const s = breathStep(n); at += s.ms; n = s.to; }
     if (write) { if (n >= BREATH_MAX) delete st.breath; else st.breath = { n, at }; }
     return n;
   }
-  function spendBreath(st) { const n = breathNow(st, true); st.breath = { n: n - 1, at: TIME.now().getTime() + BREATH_WAIT }; }
+  // How long until the next breath is back, in milliseconds (null when she has them all).
+  function breathNext(st) {
+    const b = st.breath, now = TIME.now().getTime();
+    if (!b || !(b.n < BREATH_MAX)) return null;
+    let n = Math.max(0, b.n), at = Math.min(b.at, now + BREATH_WAIT);
+    while (n < BREATH_MAX && now - at >= breathStep(n).ms) { const s = breathStep(n); at += s.ms; n = s.to; }
+    return n >= BREATH_MAX ? null : Math.max(0, at + breathStep(n).ms - now);
+  }
+  const STEP_BREATH = 0.5;                                // a step into another room: half of what a search takes
+  function spendBreath(st, amount = 1) { const n = breathNow(st, true); st.breath = { n: Math.max(0, n - amount), at: TIME.now().getTime() + BREATH_WAIT }; }
   function sync(st) {
     snapBack(st);
     const t = clock(st);
@@ -1088,7 +1100,7 @@
     }
     // Every step into another room (or up the stairs) takes a breath. Out of breath, she stays where she is --
     // except when running from a demon, which is never refused. Unlocking a door is not a step.
-    if (!st.encounter && !locked && breathNow(st, true) < 1) {
+    if (!st.encounter && !locked && breathNow(st, true) < STEP_BREATH) {
       st.facing = dir; st.log = "> " + pick(["KURA is out of breath. She stays where she is.", "Not yet. KURA catches her breath.", "KURA needs a moment before she moves on."].filter(l => "> " + l !== st.log));
       return show(st);
     }
@@ -1128,7 +1140,7 @@
       return show(st);
     } else act(st, "go");
     // Taking the stairs costs no key, like any open door.
-    if (breathNow(st, true) >= 1) spendBreath(st);          // the step itself
+    if (breathNow(st, true) >= STEP_BREATH) spendBreath(st, STEP_BREATH);   // the step itself: half a breath
     if (toStairs) tally(st, "floors"); else tally(st, "steps");
     st.facing = dir;
     if (toStairs) {
@@ -2925,7 +2937,7 @@
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0,
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0 } }; };
-  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
+  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

@@ -171,7 +171,9 @@
           .replace("[  ^  ]", `<span class="btn" data-act="forward">[  <span class="caret">^</span>  ]</span>`)
           .replace(/(<\/span>)(\s+)([NESWU?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
-        const tail = esc(line.slice(48)).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
+        // The moon strip (the breath bar) on row 21; at its right end, the seconds until the next breath is back.
+        const glyphs = s => esc(s).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
+        const tail = i === 21 ? glyphs(line.slice(48, 73)) + `<span id="breathT">${breathTimer()}</span>` + esc(line.slice(78)) : glyphs(line.slice(48));
         return left + tail;
       }
       // The v over today's phase (row 20, right panel).
@@ -1433,6 +1435,9 @@
     return true;
   }
 
+  // The countdown beside the breath bar: seconds to the next breath, to a tenth. Five cells, blank when she has them all.
+  const breathTimer = () => { const ms = save && save.dungeon && !save.dead && RULES.breathNext ? RULES.breathNext(save) : null; return (ms === null ? "" : (ms / 1000).toFixed(1) + "s").padStart(5); };
+  setInterval(() => { const el = document.getElementById("breathT"); if (el && !atTitle) { const t = breathTimer(); if (el.textContent !== t) el.textContent = t; } }, 100);   // only its own five cells change: the screen is not redrawn
   let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent
   let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
   const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
