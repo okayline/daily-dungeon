@@ -2,6 +2,15 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.98 - Short of Breath - Oct 11 2026, 12:40 HST
+
+![v0.98](screenshots/v0.98.png)
+
+- **Out of breath, pressing on makes the wait longer.** Each try adds a little to the countdown, up to a limit. A held key counts once.
+- **The dots above the breath bar count it too:** one when she is rested, three when she is out.
+- **A search reads "KURA searches the wall..."** and the result follows on the same line.
+- **The arrows on the breath bar** are no longer covered by it.
+
 ## v0.97 - Plain Words - Oct 11 2026, 11:59 HST
 
 ![v0.97](screenshots/v0.97.png)

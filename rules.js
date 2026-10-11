@@ -359,12 +359,12 @@
   function askMoon(st) {
     const d = st.dungeon, m = moon();
     act(st, "moon");
-    if (m === 0) { st.log = "> " + pick(["KURA scries the sky. No moon tonight. No one to ask.", "KURA scries the sky. Only the dark, a long way up."]); return show(st); }
+    if (m === 0) { st.log = "> " + pick(["KURA scries the sky... No moon tonight. No one to ask.", "KURA scries the sky... Only the dark, a long way up."]); return show(st); }
     if (st.moonDay === st.day) { st.log = "> " + pick(["The moon has said what she will tonight.", "KURA looks to the moon again. She has nothing more tonight."]); return show(st); }
     st.moonDay = st.day;
     spendBreath(st);
     tally(st, "moonAsked");
-    st.log = "> KURA scries the moon.";
+    st.log = "> KURA scries the moon...";
     // The doors still locked in this room; failing that, any still locked on the level she has seen.
     const fl = d.floor, shut = j => !fl.rooms[j] && !(fl.sealed && fl.sealed[j]) && MOON_SAYS[fl.kinds[j]];
     let kinds = Object.values(fl.rooms[d.at].doors).filter(shut).map(j => fl.kinds[j]);
@@ -649,13 +649,17 @@
   // is back in a couple of seconds and an empty bar takes about half a minute. It follows her from room to room.
   // st.breath = { n, at }: n breaths as of the instant `at` (ms), which is when the next one starts coming back.
   const BREATH_MAX = 6, BREATH_BACK = [10, 8, 6, 4, 3, 2], BREATH_WAIT = 2000;
+  // Pressing on while out of breath makes her wait longer: every refused try pushes the return of the next breath
+  // back half a second, to at most ten seconds past the usual wait. A key held down counts as one try (heldKey).
+  const BREATH_NUDGE = 500, BREATH_NUDGE_MAX = 10000;
+  let heldKey = false;
   // (n can sit on a half: a step costs half a breath. A breath comes back up to the next whole number, taking that
   // share of BREATH_BACK for the whole number it is climbing from.)
   const breathStep = n => { const lo = Math.floor(n); return { to: lo + 1, ms: BREATH_BACK[lo] * 1000 * (lo + 1 - n) }; };
   function breathNow(st, write) {
     const b = st.breath, now = TIME.now().getTime();
     if (!b || !(b.n < BREATH_MAX)) return BREATH_MAX;
-    let n = Math.max(0, b.n), at = Math.min(b.at, now + BREATH_WAIT);     // (a clock that jumped back never strands her)
+    let n = Math.max(0, b.n), at = Math.min(b.at, now + BREATH_WAIT + BREATH_NUDGE_MAX);     // (a clock that jumped back never strands her)
     while (n < BREATH_MAX && now - at >= breathStep(n).ms) { const s = breathStep(n); at += s.ms; n = s.to; }
     if (write) { if (n >= BREATH_MAX) delete st.breath; else st.breath = { n, at }; }
     return n;
@@ -665,11 +669,15 @@
   function breathNext(st) {
     const b = st.breath, now = TIME.now().getTime();
     if (!b || !(b.n < BREATH_MAX)) return null;
-    let n = Math.max(0, b.n), at = Math.min(b.at, now + BREATH_WAIT);
+    let n = Math.max(0, b.n), at = Math.min(b.at, now + BREATH_WAIT + BREATH_NUDGE_MAX);
     while (n < BREATH_MAX && now - at >= breathStep(n).ms) { const s = breathStep(n); at += s.ms; n = s.to; }
     return n >= 1 ? null : Math.max(0, at + breathStep(n).ms - now);
   }
   const STEP_BREATH = 0.5;                                // a step into another room: half of what a search takes
+  function nudgeBreath(st) {
+    if (heldKey || !st.breath) return;
+    st.breath = { n: st.breath.n, at: Math.min(st.breath.at + BREATH_NUDGE, TIME.now().getTime() + BREATH_WAIT + BREATH_NUDGE_MAX) };
+  }
   function spendBreath(st, amount = 1) { const n = breathNow(st, true); st.breath = { n: Math.max(0, n - amount), at: TIME.now().getTime() + BREATH_WAIT }; }
   function sync(st) {
     snapBack(st);
@@ -968,7 +976,7 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
-    if (breathNow(st, true) < 1) { if (!/breath|needs a moment/.test(st.log || "")) tally(st, "breathOut"); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
+    if (breathNow(st, true) < 1) { if (!/breath|needs a moment/.test(st.log || "")) tally(st, "breathOut"); nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
     if (st.look === "U") return askMoon(st);              // looking up, SEARCH asks the moon
     spendBreath(st);
     const d = st.dungeon, room = d.floor.rooms[d.at], found = RS(d).found, dir = st.facing;
@@ -1020,11 +1028,11 @@
     // can ever turn up on a first look (the cheapest thing needs 5).
     const fullness = (1 - Math.cos(moon() / 8 * 2 * Math.PI)) / 2;
     const worth = Math.min(1.9, fx.find * (tier === 0 ? 1.25 : tier >= 2 ? 0.75 : 1) * (st.restedDay === clock(st) ? 1.25 : 1) * (1 + 0.35 * fullness));
-    const where = `KURA searches the ${NAME[dir]} wall.`;
+    const where = `KURA searches the ${NAME[dir]} wall...`;
     const say = text => {
       const long = `> ${where} ${text}`;
       if (long.length <= 77) return long;
-      const short = `> KURA searches ${NAME[dir]}. ${text}`;
+      const short = `> KURA searches ${NAME[dir]}... ${text}`;
       return short.length <= 77 ? short : `> ${text.replace(/^KURA finds /, "Found ")}`.slice(0, 77);
     };
     if (Math.random() < chance) {
@@ -1117,7 +1125,7 @@
     // Every step into another room (or up the stairs) takes a breath. Out of breath, she stays where she is --
     // except when running from a demon, which is never refused. Unlocking a door is not a step.
     if (!st.encounter && !locked && breathNow(st, true) < STEP_BREATH) {
-      st.facing = dir; st.log = "> " + pick(["KURA is out of breath. She stays where she is.", "Not yet. KURA catches her breath.", "KURA needs a moment before she moves on."].filter(l => "> " + l !== st.log));
+      nudgeBreath(st); st.facing = dir; st.log = "> " + pick(["KURA is out of breath. She stays where she is.", "Not yet. KURA catches her breath.", "KURA needs a moment before she moves on."].filter(l => "> " + l !== st.log));
       return show(st);
     }
     // With a demon in the way, stepping through a door is running: half the time the demon blocks it and strikes.
@@ -1644,7 +1652,7 @@
     if (i < 0) return show(st);
     // Using a thing from the bag takes a breath. Out of breath, she can't -- except in a fight, where it is never
     // refused (it still takes a breath if she has one).
-    if (breathNow(st, true) < 1 && !st.encounter) { st.log = "> " + pick(["KURA is out of breath. The bag can wait.", "Not yet. KURA catches her breath.", "KURA needs a moment before she tries that."].filter(l => "> " + l !== st.log)); return show(st); }
+    if (breathNow(st, true) < 1 && !st.encounter) { nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath. The bag can wait.", "Not yet. KURA catches her breath.", "KURA needs a moment before she tries that."].filter(l => "> " + l !== st.log)); return show(st); }
     if (breathNow(st, true) >= 1) spendBreath(st);
     const info = ITEM_INFO[name] || {};
     // Most things can't be used (yet). Trying anyway can break it: every try is a roll, so one battery
@@ -2957,7 +2965,7 @@
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0,
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0 } }; };
-  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

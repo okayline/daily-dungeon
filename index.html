@@ -52,6 +52,7 @@
   .cell { display: inline-block; width: 1ch; text-align: center; overflow: visible; white-space: nowrap; }
   /* The moon strip: shorter blocks, so the row is not taller than its neighbours. */
   .ph .g { display: inline-block; transform: scale(1.3, 0.62); }
+  .mk { position: relative; z-index: 1; }
   .wm .g { display: inline-block; transform: scale(0.82, 1); }   /* the wordmark's blocks: the fallback font's are wider than a cell */
   .cell .g { font-family: "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace; line-height: 0; }
   .room { color: var(--trail); }
@@ -181,12 +182,14 @@
           .replace(/(<\/span>)(\s+)([NESWU?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
         // The moon strip (the breath bar) on row 21; at its right end, the seconds until the next breath is back.
-        const glyphs = s => esc(s).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
+        const glyphs = s => esc(s).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`)
+          // the > and < that press on the bar after a search: kept above the bar and a little outside it, so the bar's wider blocks never cover them
+          .replace("&gt;", '<span class="mk" style="left:-.25ch;top:-1px">&gt;</span>').replace("&lt;", '<span class="mk" style="left:calc(.5ch + 2px);top:-1px">&lt;</span>');
         const tail = i === 21 ? glyphs(line.slice(48, 73)) + `<span id="breathT">${breathTimer()}</span>` + esc(line.slice(78)) : glyphs(line.slice(48));
         return left + tail;
       }
       // The v over today's phase (row 20, right panel).
-      if (i === 20) return esc(line.slice(0, 48)) + esc(line.slice(48)).replace(/\./, `<span class="cell" style="position:relative;left:${[2, 6].includes(SMT.moonIndex(SMT.now())) ? ".65ch" : ".15ch"}">.</span>`);
+      if (i === 20) return esc(line.slice(0, 48)) + esc(line.slice(48)).replace(/\./g, `<span class="cell" style="position:relative;left:${[2, 6].includes(SMT.moonIndex(SMT.now())) ? ".65ch" : ".15ch"}">.</span>`);
       // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
       const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);
       if (i === 1) return moonBox(esc(line)).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
@@ -205,11 +208,11 @@
           .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')
           .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>')
           .replace("[S]ILENT", '<span class="btn ask" data-act="qsilent">[S]ILENT</span>');
-        // The middle line, after a search: "KURA searches the WEST wall." stays as it is, and what came of it follows
+        // The middle line, after a search: "KURA searches the WEST wall..." stays as it is, and what came of it follows
         // in its quality's color (grey for nothing or a common or uncommon thing, silver for SILVER, blue for a rare
         // thing, gold for a mythic one or the deep find, lavender for a moon thing).
         if (i === lines.length - 5) {
-          const m = /^( &gt; KURA (?:searches|scries) the [^.]+\.) (.+?)(\s*)$/.exec(inner);
+          const m = /^( &gt; KURA (?:searches|scries) the [^.]+\.+) (.+?)(\s*)$/.exec(inner);
           if (m) inner = `${m[1]} <span class="${resultClass(m[2])}">${m[2]}</span>${m[3]}`;
         }
         return `|<span class="logline${gold ? " " + gold : ""}">${inner}</span>|`;
@@ -1617,13 +1620,13 @@
         : can.door[save.facing] ? "> KURA listens at the door" : `> KURA searches the ${WALL[save.facing] || ""} wall`;
       let dots = 0, shown = 0, full = null, head = null, parts = [];
       const step = () => {
-        if (dots < 3) { dots++; save.log = lead + " .".repeat(dots); draw(); searchBeat = setTimeout(step, 200); return; }
+        if (dots < 3) { dots++; save.log = lead + ".".repeat(dots); draw(); searchBeat = setTimeout(step, 200); return; }
         if (full === null) {                              // the dots are done: now the search itself
           save.log = was;
           searchBeat = null; searchGo = true; try { act("search"); } finally { searchGo = false; }
           if (!save || save.dead || save.encounter || save.question || (save.altar && save.altar.open) || !document.getElementById("found").hidden) return;
           full = save.log;
-          const m = /^> KURA (?:searches|scries) the [^.]+\./.exec(full || "");
+          const m = /^> KURA (?:searches|scries) the [^.]+\.+/.exec(full || "");
           head = m ? m[0] : null;
           const rest = head && full.startsWith(head + " ") ? full.slice(head.length + 1) : null;
           parts = rest ? (rest.match(/[^.!?]+[.!?]+(?:\s+|$)/g) || [rest]).map(x => x.trim()) : [];
@@ -1890,7 +1893,7 @@
       adminGate().then(ok => { gating = false; if (ok) act(shift ? "next" : "freesteps"); }, () => { gating = false; });
       return;
     }
-    if (k) { e.preventDefault(); act(k); }
+    if (k) { e.preventDefault(); RULES.holding(e.repeat); try { act(k); } finally { RULES.holding(false); } }
   });
 
   start();
