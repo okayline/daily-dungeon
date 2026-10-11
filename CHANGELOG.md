@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.59 - Oct 10 2026, 20:05 HST
+
+- **Dissonance.** Mixed-alignment parties wear on each other now — fighting, lingering too long in a dangerous room, and skipping a day all chip at a tense member's patience a little faster, worse the bigger the alignment gap between them. No new meter: it's the same patience number as always, just worn down from a second direction, with its own line when a member's at zero over the others rather than over talking.
+
 ## v0.58 - Oct 10 2026, 18:55 HST
 
 ![v0.58](screenshots/v0.58.png)

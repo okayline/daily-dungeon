@@ -586,6 +586,9 @@
     if (!newDay || st.dead) return st;
     // A day KURA chose to HOLD (see hold) is STANDBY: a deeper rest tonight.
     const held = !!st.today.held && st.today.date === t - 1 && !!st.dungeon && !st.dead;
+    // A day with no step spent at all, not even STANDBY: an unmanaged tense party gets a little worse
+    // even when nothing is actively happening (see the DISSONANCE block above fight/alignOf).
+    if (st.dungeon && !st.dead && !st.today.stepped && !held) wearTension(st, DISSONANCE_SKIP);
     st.today = { date: t, stepped: false };
     st.unsaved = true;
     // STANDBY banks that day's omen (good or bad) for later -- one slot, the newest held day wins.
@@ -727,7 +730,12 @@
     if (st.talkLine) { if (st.extra === st.talkLine) st.extra = ""; delete st.talkLine; }   // a party member's reply doesn't outstay the next action
     if (st.altar) st.altar = null;           // walking off closes the terminal
     bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
-    if (st.dungeon) RS(st.dungeon).linger++;
+    if (st.dungeon) {
+      const rs = RS(st.dungeon);
+      rs.linger++;
+      // A tense party wears a little more each time the stay in a hot room crosses another LINGER_AT.
+      if (heatTier(rs.heat) >= 2 && rs.linger > 0 && rs.linger % LINGER_AT === 0) wearTension(st, DISSONANCE_LINGER);
+    }
     st.dreadCheck = true;                  // show() looks at the loop once the action has finished
     st.statusIn = (st.statusIn ?? 0) - 1;  // line 1 (the status report) changes every 5-10 actions
     if (st.question) { st.question = null; }  // a question KURA walks away from just lapses
@@ -1681,6 +1689,7 @@
       lines.push(`The party strikes. -${total}`);
       st.log = `> KURA's party fights ${the(e.name)}.`;
       if (e.hp <= 0) { win(st, lines); lean(st, "kill", lines); } else lean(st, "fight", lines);
+      wearTension(st, DISSONANCE_FIGHT);   // fighting wears on a tense party on top of anything else
     }, "> Nothing here to fight.", true);
   }
   // TALK: the demon may listen and leave (sometimes with a gift), ask a price, or take offense.
@@ -1710,6 +1719,33 @@
   const STANCE_LINE = { same: n => `KURA is recognized. ${THE(n)} lowers its guard.`,
     neutral: n => `${THE(n)} watches. Undecided.`, opposite: n => `${THE(n)} bares its teeth.` };
   const STANCE_TALK = { same: 1.5, neutral: 1, opposite: 0.6 };
+  // DISSONANCE. Mixed-alignment parties are the strongest and riskiest combo, folded straight into
+  // PATIENCE above rather than built as a second hidden value. Every standing member (KURA included,
+  // via st.align) has a gap against every other -- same alignment 0, one side NEUTRAL 1, LAW vs CHAOS
+  // 2 -- and a member's tension is the worst gap against anyone else currently standing. Three wear
+  // sources (fighting, skipping a real day, lingering in a hot room -- see fight/sync/act) feed that
+  // tension into the member's ordinary patience, scaled by gap size, so CALM/STRAINED/FRACTURING is
+  // just patience's own level (3-5 / 1-2 / 0) relabeled, nothing new to track or display.
+  function memberAlign(st, p) { return p === st.party[0] ? (st.align || "NEUTRAL") : (p.align || "NEUTRAL"); }
+  function alignGap(a, b) { return a === b ? 0 : (a === "NEUTRAL" || b === "NEUTRAL") ? 1 : 2; }
+  function tensionOf(st, p) {
+    const mine = memberAlign(st, p);
+    let worst = 0;
+    for (const q of st.party) if (q !== p && q.hp > 0) worst = Math.max(worst, alignGap(mine, memberAlign(st, q)));
+    return worst;
+  }
+  // Tuning (exact amounts still TBD, per the design doc): bigger for an opposite pair than a
+  // neutral-adjacent one. Note the skip-day wear currently loses to the nightly +3 regen even at the
+  // worst gap -- faithful to the mechanism, not yet balanced to actually erode an unmanaged party.
+  const DISSONANCE_FIGHT = { 1: 1, 2: 2 };
+  const DISSONANCE_SKIP = { 1: 0, 2: 1 };
+  const DISSONANCE_LINGER = { 1: 0, 2: 1 };
+  function wearTension(st, table) {
+    for (const p of st.party) if (p.demon && p.hp > 0) {
+      const w = table[tensionOf(st, p)] || 0;
+      if (w) p.patience = Math.max(0, (p.patience ?? PATIENCE) - w);
+    }
+  }
   // KURA's lean. One hidden score (negative = LAW, positive = CHAOS) that choices nudge as she makes them.
   // Early choices weigh more (each shift counts a little less than the last, down to 40%), the score is
   // capped at +-6, and the tag only changes at thresholds: -3 LAW, +3 CHAOS, back to NEU within 1 of zero,
@@ -1899,7 +1935,9 @@
   };
   // PATIENCE. Each party member has a little (5); every time KURA talks to them it drops by one.
   // At 2 and below they get short with her, and at 0 they ignore her. A night's rest gives back 3.
-  // (A hidden value with a tell: only the replies show it. May fold into Dissonance later.)
+  // (A hidden value with a tell: only the replies show it. Dissonance, above, folds straight into
+  // this same number rather than a second one -- PARTY_TENSE/FAMILY_TENSE below is its own tell,
+  // shown instead of the ordinary tired line when tension, not talk fatigue, is what's at zero.)
   const PATIENCE = 5;
   const PARTY_TIRED = {
     ELF: [['ELF pretends not to hear.', 'ELF has turned her back.'],
@@ -1925,6 +1963,20 @@
     folklore: [['{n} will not look at KURA.', '{n} has gone very, very still.'],
       ['{n}: "Speak once more and I bite."', '{n} glares.'],
       ['{n}: "Mortals never know when to stop."', '{n}: "Again? Truly?"']],
+  };
+  // The tell for Dissonance specifically: shown in place of PARTY_TIRED/FAMILY_TIRED's zero-patience
+  // line whenever the member currently has unresolved tension with someone else standing, so a player
+  // can tell "sick of talking" apart from "can't stand this party." See tensionOf, wired in chat().
+  const PARTY_TENSE = {
+    ELF: ['ELF: "I cannot stand beside that thing a moment longer."', 'ELF will not look at the others. Her hand rests on her blade.'],
+    PIXIE: ['PIXIE hides behind KURA. "They scare me when they talk like that."', "PIXIE won't fly near the others right now."],
+    "CU SITH": ['CU SITH bares its teeth at the air, not at KURA.', 'CU SITH stands between KURA and the others, hackles up.'],
+  };
+  const FAMILY_TENSE = {
+    data: ['{n}: "INCOMPATIBLE ALIGNMENT DETECTED. PROXIMITY ALERT."', '{n}: "THIS PARTY VIOLATES EXPECTED PARAMETERS."'],
+    hardware: ['{n}: "don\'t like standing next to that. not one bit"', '{n} keeps its back to the wall, watching the others.'],
+    hybrid: ['{n} stands exactly between the two sides, and looks tired of it.', '{n}: "I am so tired of being the only one who can stand all of you."'],
+    folklore: ['{n} will not share words with that thing beside it.', '{n}: "Old things do not forgive easily. Keep it away from me."'],
   };
   const SNAP = { ELF: "ELF's blade flicks out. A thin cut on KURA's arm.", "CU SITH": "CU SITH bites KURA's hand. Not hard. Hard enough." };
   const QUIT = {
@@ -1964,8 +2016,11 @@
     // does talking start to wear their patience down.
     p.chats = (p.chats || 0) + 1;
     if (p.chats > ({ HAUGHTY: 5, DREAMY: 8 }[personaOf(p)] || 6)) p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
-    // A dangerous room (nervous or worse) outranks being annoyed; otherwise a tired member says so.
+    // A dangerous room (nervous or worse) outranks being annoyed; otherwise a tired member says so --
+    // unless they're actually at zero over unresolved tension with someone else standing, which gets
+    // its own tell instead of the ordinary "tired of talking" line.
     const lines = tier >= 2 ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier]
+      : p.patience === 0 && tensionOf(st, p) > 0 ? (PARTY_TENSE[p.name] || FAMILY_TENSE[fam])
       : p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[fam])[p.patience]
       : tier ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier] : (PARTY_TALK[p.name] || FAMILY_TALK[fam]);
     const pool = lines.map(l => "> " + l.replace(/\{n\}/g, p.name));
