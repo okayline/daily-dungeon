@@ -956,7 +956,7 @@
         const desc = pick(ARCH_DESC[k] || (to && to.hall ? ARCH_DESC.hall : to && to.dead ? ARCH_DESC.dead : ARCH_DESC.plain));
         pool = [`An arch to another room. It ${desc}.`];
       }
-      st.log = "> " + pick(pool.filter(l => "> " + l !== st.log));
+      { const other = pool.filter(l => "> " + l !== st.log); st.log = "> " + pick(other.length ? other : pool); }   // (an arch has one line: it may repeat)
       act(st, "door"); nag(st);
       return show(st);
     }

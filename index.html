@@ -1400,7 +1400,7 @@
         if (++dots <= 3) return paint();
         clearInterval(searchWait); searchWait = null; save.log = was;
         searchGo = true; try { act("search"); } finally { searchGo = false; }
-      }, 250);
+      }, 250 + (6 - Math.min(6, RULES.breath(save))) * 50);   // slower as she tires: a second in all at full breath, two on her last
       return;
     }
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
