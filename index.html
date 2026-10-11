@@ -198,6 +198,9 @@
           .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')
           .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>')
           .replace("[S]ILENT", '<span class="btn ask" data-act="qsilent">[S]ILENT</span>');
+        // The beat before a search's result: a blinking _ after the middle line (in place of one of its spaces).
+        if (searchBeat && i === lines.length - 5) { const body = line.slice(1, -1), txt = body.replace(/\s+$/, "");
+          if (txt.length < body.length - 1) inner = esc(txt) + ' <span class="wait">_</span>' + " ".repeat(body.length - txt.length - 2); }
         return `|<span class="logline${gold ? " gold" : ""}">${inner}</span>|`;
       }
       if (i === lines.length - 2) {
@@ -1525,6 +1528,7 @@
   let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent
   let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
   const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
+  let searchBeat = null;                        // the beat between a search and its result box
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   function act(name) {
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
@@ -1543,11 +1547,18 @@
     // (The "KURA is searching . . ." moment before a result was taken out in v0.88.2, at the dev's request "for now".)
     // A search lands at once. Its result comes up in a small box with [ OK ] (unless something else opened: a find,
     // a fight, the terminal); being refused for want of breath only shows its line.
+    if (searchBeat) return;                       // nothing else until the result is up
     if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.question) {
       const before = RULES.breath(save);
       searchGo = true; try { act("search"); } finally { searchGo = false; }
       if (save && (before < 1 || RULES.breath(save) < before)) squeeze();
-      if (save && before >= 1 && !save.dead && !save.encounter && !save.question && !(save.altar && save.altar.open) && document.getElementById("found").hidden) resultBox();
+      if (save && before >= 1 && !save.dead && !save.encounter && !save.question && !(save.altar && save.altar.open) && document.getElementById("found").hidden) {
+        // A beat before the result: the log says what she is doing, with a blinking _ after it, and then the box opens.
+        const full = save.log, m = /^> KURA (searches|scries) the [^.]+\./.exec(full || "");
+        save.log = m ? m[0] : "> KURA listens at the door.";
+        searchBeat = setTimeout(() => { searchBeat = null; save.log = full; draw(); resultBox(); }, 800);
+        draw();
+      }
       return;
     }
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
@@ -1812,7 +1823,7 @@
   }, 250);
   setInterval(() => {
     const m = SMT.now().getMinutes();
-    if (m !== shownMinute) { shownMinute = m; if (!atTitle) tick(); draw(); }   // on the title, only the title redraws; the run waits for CONTINUE
+    if (m !== shownMinute && !searchBeat) { shownMinute = m; if (!atTitle) tick(); draw(); }   // on the title, only the title redraws; the run waits for CONTINUE
   }, 1000);
 </script>
 </body>
