@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.97 - Plain Words - Oct 11 2026, 11:59 HST
+
+![v0.97](screenshots/v0.97.png)
+
+- **The `[?]` page opens with a new, plainer intro.** It says what the game is and leaves the rest to find out.
+- **THIS RUN has a border** around it, so it stands out.
+
 ## v0.96 - Crescent Over the Gate - Oct 11 2026, 11:40 HST
 
 ![v0.96](screenshots/v0.96.png)

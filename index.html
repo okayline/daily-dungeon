@@ -965,22 +965,23 @@
     const count = list => { const all = list.flatMap(g => g.entries); return `${all.filter(e => e.known).length} / ${all.length}`; };
     const two = (a, b, c, d) => "  " + (a + " ").padEnd(16, ".") + " " + String(b).padEnd(10) + " " + (c + " ").padEnd(16, ".") + " " + d;
     const line = "-".repeat(71);
+    // A titled box the width of the divider, in the page's own frame characters.
+    const framed = (title, ...rows) => ["+- " + title + " " + "-".repeat(71 - 5 - title.length) + "+", ...rows.map(r => "|" + r.padEnd(69) + "|"), "+" + "-".repeat(69) + "+"].join("\n");
     // The header buttons as shown: [C]ODEX and [P]ASSWORD with a run, [P]ASSWORD alone (to paste one in) without.
     const head = save ? "{{CODEX}}   {{PASS}}" : "{{PASS}}", headLen = save ? 20 : 10;
     const text = [
       "DAILY DIGITAL DEMON DUNGEON   " + head + ("build " + SMT.VERSION).padStart(71 - 30 - headLen), line,
-      "A dungeon crawler you play one key a day, on the real calendar.",
-      "Each level is four wings. Three times, two locked doors offer two",
-      "rooms: take one and the other seals. Listen at the doors; dead ends",
-      "hold the big clues. Look up: the sky is open, and the moon may answer.",
-      "A level's way up closes when its quarter of the moon ends.",
-      "The moon, the omens and the demons follow real time.", "",
-      "Search as much as you like. Talk to demons, or fight them.",
-      "Unlock your one new door. Come back tomorrow.", "",
-      ...(save ? ["THIS RUN",
+      "A dungeon crawler you play on the real lunar calendar.",
+      "You wake at the bottom of a pit and the dark rises with the moon.",
+      "Everyone shares the same floor. Each floor closes when its quarter of",
+      "the moon ends, so find the stairs before the darkness comes.",
+      "The moon is real, and so are the demons. Some will talk, some will",
+      "fight. Search all you like, but be careful digging too deep.",
+      "Come back tomorrow.", "",
+      ...(save ? [framed("THIS RUN",
         two("Floor", save.floor, "Day", save.day),
         two("Turns", save.steps || 0, "Alignment", String(save.align).slice(0, 3)),
-        two("Demons met", k.met || 0, "Items found", k.items || 0), ""] : []),
+        two("Demons met", k.met || 0, "Items found", k.items || 0)), ""] : []),
       ...(cx ? ["CODEX", two("Demons", count(cx.demons), "Items", count(cx.items)), ""] : []),
       "KEYS",
       ...[["[ ^ ] / up arrow", "walk through the door KURA faces"],
