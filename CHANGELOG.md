@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.91 - Typed - Oct 11 2026, 08:08 HST
+
+![v0.91](screenshots/v0.91.png)
+
+- **The bottom line of the log is typed now,** not scrolled: a line appears a letter at a time, stays a moment, is deleted, and the next is typed.
+- **A search has a beat again.** The log says what KURA is doing, with a blinking `_`, and then the result opens.
+- **`[M]OON` stays where it is** when `[S]EARCH` becomes `[S]CRY`.
+
 ## v0.90 - News From This Level - Oct 11 2026, 07:58 HST
 
 ![v0.89](screenshots/v0.89.png)
