@@ -166,7 +166,7 @@
           .replace("[ &lt; ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="left">[ &lt; ]</span>`)
           .replace("[ &gt; ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="right">[ &gt; ]</span>`)
           // [^] looks up at the sky; again, down at the floor; again, level.
-          .replace("[ ^ ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="do">[ <span class="caret2">^</span> ]</span>`)
+          .replace(/\[ (LISTEN|OPEN|ENTER|SEARCH|USE|OFFER|CONSULT|CLIMB|\^) \]/, m => `<span class="btn${save && save.encounter ? " off" : ""}" data-act="do">${m}</span>`)
 
           .replace(/(<\/span>)(\s+)([NESWUD?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5')
 ;
@@ -181,8 +181,7 @@
         const b = (txt, act, ok) => `<span class="btn${ok && !fight ? "" : " off"}" data-act="${act}">${txt}</span>`;
         const open = Object.keys(can.doors || {}).find(k => can.doors[k].state === "open");
         const ok = k => !!(can.doors[k] && can.doors[k].can);
-        return esc(line.slice(0, 48)).replace(/\b(LISTEN|OPEN|ENTER|SEARCH|USE|OFFER|CONSULT|CLIMB)\b/, w => b(w, "do", true))   // the word for what [ ^ ] does
-          .replace("[ &lt; LEFT ]", b("[ &lt; LEFT ]", "go-L", ok("L"))).replace("[ RIGHT &gt; ]", b("[ RIGHT &gt; ]", "go-R", ok("R")));
+        return esc(line.slice(0, 48)).replace("[ &lt; LEFT ]", b("[ &lt; LEFT ]", "go-L", ok("L"))).replace("[ RIGHT &gt; ]", b("[ RIGHT &gt; ]", "go-R", ok("R")));
       })() + esc(line.slice(48)).replace(/\./, `<span class="cell" style="position:relative;left:${[2, 6].includes(SMT.moonIndex(SMT.now())) ? ".65ch" : ".15ch"}">.</span>`);
       // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
       const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);

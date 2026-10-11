@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.77";
+  const VERSION = "v0.78";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -310,13 +310,14 @@
       : renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
     // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
     // and the letter between them is what she faces: a compass wall, or U (the sky) or D (the floor).
-    // The controls at the foot of the view, top to bottom: the word for what [ ^ ] will do here (with [ < LEFT ]
-    // and [ RIGHT > ] either side of it while the two doors ahead are locked), then [ ^ ] itself, then the turn
+    // The controls at the foot of the view, top to bottom: [ < LEFT ] and [ RIGHT > ] while the two doors ahead are
+    // locked, then the action button with its word inside ([ SEARCH ]), then the turn
     // buttons with what she faces between them: a compass wall, U (the sky) or D (the floor).
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 16, `[ < ]  ${st.look || st.facing || "?"}  [ > ]`);
-    overlay(VH - 2, 21, "[ ^ ]");            // the one "do the obvious thing" button: search, listen, consult, enter, descend
-    if (st.actLabel) overlay(VH - 3, 19, center(String(st.actLabel).slice(0, 8), 8));
+    // The one "do the obvious thing" button, with its word inside the brackets: [ SEARCH ], [ CONSULT ], [ ENTER ].
+    const actBtn = `[ ${st.actLabel ? String(st.actLabel).slice(0, 8) : "^"} ]`;
+    overlay(VH - 2, 23 - Math.floor((actBtn.length - 1) / 2), actBtn);
     for (const x of (!v.look && v.doors) || []) if (x.state === "locked" && x.side !== "C") overlay(VH - 3, x.side === "L" ? 9 : 27, x.side === "L" ? "[ < LEFT ]" : "[ RIGHT > ]");
     const r = s => "|" + ljust(s, W - 2) + "|";
     const rc = s => "|" + center(s, W - 2) + "|";
