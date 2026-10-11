@@ -449,8 +449,8 @@
     for (let x = x0 - 4; x <= x0 + gap * (days - 1) + 4; x++) if (x >= 1 && x < VW - 1 && !lab[x] && !lab[x - 1] && !lab[x + 1]) g[y0][x] = "-";
     // Each quarter is named for the moon it opens with: the new moon, the first quarter (half, waxing), the full
     // moon, the last quarter (half, waning).
-    const level = `B${4 - q}F`, name = ["new moon", "first quarter", "full moon", "last quarter"][q];
-    return [center(`${level}  -  ${name}  -  days ${first}-${last}`, VW), "", ...g.map(r => r.join("").replace(/\s+$/, ""))];
+    const level = `B${4 - q}F`, name = ["New Moon", "First Quarter", "Full Moon", "Last Quarter"][q];
+    return [center(`${level} - ${name} - Lunar Days ${first}-${last}`, VW), "", ...g.map(r => r.join("").replace(/\s+$/, ""))];
   }
   function renderTitle(opts) {
     opts = opts || {};
