@@ -1146,24 +1146,6 @@
     box.hidden = false;
     box.dataset.mode = "found";
   }
-  // A SEARCH RESULT: what the search (or the scrying) turned up, in the same small box a find uses, with [ OK ].
-  // Only when nothing else opened: a find, a fight and the terminal have boxes of their own.
-  function resultBox() {
-    const box = document.getElementById("found"), pre = box.querySelector("pre");
-    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
-    // Only what came of it: "KURA searches the SOUTH wall." and "KURA scries the moon." are dropped from the front.
-    // After a scry, the moon's own line (her answer, or her silence) follows.
-    const said = [save.log, save.look && /^> (Moonlight|The moon|KURA asks)/.test(save.extra || "") ? save.extra : null].filter(Boolean)
-      .map(l => String(l).replace(/^> /, "").replace(/^KURA (searches|scries) the [A-Za-z ]+?\.\s*/, "")).filter(Boolean);
-    if (!said.length) return;
-    floatBox(box);
-    pre.innerHTML = "";
-    said.forEach((l, k) => { if (k) add(" "); for (const w of wrapText(l, 38)) add(w); });
-    add(" ");
-    add("[ OK ]", "btn");
-    box.hidden = false;
-    box.dataset.mode = "found";
-  }
   // An item breaks: a box says so, lists what fell out (if anything) and waits for [ OK ]. If something came to
   // see what broke, the fight box opens when the break box closes.
   let afterBreak = false;
@@ -1594,10 +1576,11 @@
       searchGo = true; try { act("search"); } finally { searchGo = false; }
       if (save && (before < 1 || RULES.breath(save) < before)) squeeze();
       if (save && before >= 1 && !save.dead && !save.encounter && !save.question && !(save.altar && save.altar.open) && document.getElementById("found").hidden) {
-        // A beat before the result: the log says what she is doing, with a blinking _ after it, and then the box opens.
+        // A beat before the result: the log says what she is doing, with a blinking _ after it; then the result
+        // appears on the line above, in its quality's color. (There is no result box any more.)
         const full = save.log, m = /^> KURA (searches|scries) the [^.]+\./.exec(full || "");
         save.log = m ? m[0] : "> KURA listens at the door.";
-        searchBeat = setTimeout(() => { searchBeat = null; save.log = full; draw(); resultBox(); }, 800);
+        searchBeat = setTimeout(() => { searchBeat = null; save.log = full; draw(); }, 800);
         draw();
       }
       return;
