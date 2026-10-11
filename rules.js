@@ -268,6 +268,10 @@
     return d.state[i];
   };
   const allRooms = d => { RS(d, Math.max(d.at, d.floor.count - 1)); return d.state; };
+  // AMBIENT EVENTS, for the title screen's rumor cards: when one of a handful of moments happens, a tag goes on
+  // st.events ({ t: tag, v: a small number or absent }). The page sends them to the Worker and empties the list;
+  // the rules never talk to the network. A tag says only THAT something happened, never who or where.
+  const ev = (st, t, v) => { st.events = (st.events || []).slice(-7); st.events.push(v === undefined ? { t } : { t, v }); };
   // Run stats for the end-of-run summary: counts kept in st.stats (steps, searches, demons, finds...).
   const tally = (st, k, n = 1) => { st.stats = st.stats || {}; st.stats[k] = (st.stats[k] || 0) + n; };
 
@@ -525,6 +529,17 @@
     if (RS(d).found.includes("fixture") && RS(d).walls && RS(d).walls.fixtureDir === f) return FIXTURE_LABEL[rm.kind] || "BARE WALL";
     return "BARE WALL";
   }
+  // WHAT [ ^ ] WILL DO from here, in one word (9 characters at most): the page's "do" action follows the same rules.
+  function actLabel(st) {
+    const d = st.dungeon, rm = d.floor.rooms[d.at], f = st.facing;
+    if (st.dead || st.encounter) return "";
+    if (st.look === "U") return moon() === 0 ? "SEARCH" : "CONSULT";
+    if (st.look === "D") return RS(d).found.includes("stairs") ? "DESCEND" : "SEARCH";
+    if (f === rm.ahead && rm.exits.length) { const ds = doorStates(d); return ds.some(x => x.state === "open") ? "ENTER" : ds.length === 1 ? "OPEN" : "LISTEN"; }
+    if (facingAltar(st)) return "OFFER";
+    if (RS(d).found.includes("fixture") && RS(d).walls && RS(d).walls.fixtureDir === f && RS(d).fixtureDay !== st.day) return "USE";
+    return "SEARCH";
+  }
   function show(st) {
     if (!st.dungeon) return st;
     if (st.dreadCheck) dread(st);
@@ -538,6 +553,7 @@
     RS(d);                                              // (converts an old save's room arrays)
     roomName(d, d.at);                                  // (each room keeps its own flavor name, said once as she walks in)
     st.roomName = facingLabel(st);                      // the slot under the map names what she is looking at
+    st.actLabel = actLabel(st);                         // and the word between the turn buttons says what [ ^ ] will do
     st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.look ? null : st.facing });
     const door = dir => doorWall(room, dir);
     if (st.dead) {
@@ -1013,7 +1029,7 @@
       // Something deep in the stone: a much longer slog (about 35 searches), three times faster while tripping.
       w.deep.prog = (w.deep.prog || 0) + worth * (tripping(st) ? 3 : 1);
       if (w.deep.prog >= (w.deep.need || 35)) {
-        w.deep.found = true;
+        w.deep.found = true; ev(st, "deep");
         gain(st, w.deep.item);
         st.log = say("Deep in the stone, something gives.");
         st.extra = `> KURA pulls out ${w.deep.item}.`;
@@ -1340,6 +1356,7 @@
     RS(d).altarDay = st.day;
     tally(st, "offerings");
     st.log = `> KURA makes an offering.`;
+    if (mood === "good") ev(st, "altar");
     st.altar = { open: true, used: true, result: { mood, face: ALTAR_FACE[mood], say: pick(ALTAR_SAYS[mood]), lines: ALTAR_FLAVOR[mood] } };
     return show(st);
   }
@@ -1488,7 +1505,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen"]) delete st[k];
+      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
@@ -1651,7 +1668,7 @@
     if (st.party[0].hp <= 0) {
       st.dead = true;
       st.party = st.party.map(p => ({ ...p, hp: 0 }));
-      lines.push("KURA falls. The run is over.");
+      lines.push("KURA falls. The run is over."); ev(st, "fall");
       st.log = `> ${THE(e.name)} strikes KURA down.`;
       st.encounter = null;
       st.round = lines;
@@ -1667,9 +1684,12 @@
   };
   const LAST_ANY = ["my Mom is going to be SO mad."];   // any family can say these
   const LAST_BEAST = ["CU SITH lies down and doesn't get up.", "CU SITH sighs, once, like a bellows."];
-  function lastWords(e) {
+  const ALL_WORDS = [...LAST_WORDS.data, ...LAST_WORDS.hardware, ...LAST_WORDS.hybrid, ...LAST_WORDS.folklore, ...LAST_ANY];
+  function lastWords(e, st) {
     if (beast(e)) return pick(LAST_BEAST);
-    return `"${pick([...(LAST_WORDS[e.family] || LAST_WORDS.folklore), ...LAST_ANY])}"`;
+    const w = pick([...(LAST_WORDS[e.family] || LAST_WORDS.folklore), ...LAST_ANY]);
+    if (st) ev(st, "words", ALL_WORDS.indexOf(w));          // quoted on the title screen, never attributed
+    return `"${w}"`;
   }
   function win(st, lines) {
     const e = st.encounter;
@@ -1677,7 +1697,7 @@
     st.ichor = (st.ichor ?? st.mag ?? 0) + n;
     tally(st, "beaten"); tally(st, "ichorWon", n);
     lines.push(`${THE(e.name)} falls.  +${n} ICHOR`);
-    st.lastLine = lastWords(e);                         // shown on the end-of-fight screen, right under the art
+    st.lastLine = lastWords(e, st);                         // shown on the end-of-fight screen, right under the art
     // What a fallen demon leaves: coin often, a thing now and then.
     if (Math.random() < 0.5) {
       const c = R(8, 40) * floorNum(st); st.silver = (st.silver ?? 0) + c; tally(st, "silverFound", c);
@@ -2137,7 +2157,7 @@
     }
     const [say, odds] = LEAVE_NO[personaOf(p)] || LEAVE_NO.PRIM;
     if (Math.random() < odds) {
-      st.party = st.party.filter(q => q !== p); endPact(st, p.name);
+      st.party = st.party.filter(q => q !== p); endPact(st, p.name); ev(st, "left");
       st.log = `> ${p.name} leaves the party.`;
       st.extra = "> " + (p.name === "PIXIE" ? QUIT.PIXIE : say).replace(/\{n\}/g, p.name);
     } else {
@@ -2215,7 +2235,7 @@
       st.log = `> ${p.name} has had enough.`;
       st.extra = "> " + (SNAP[p.name] || `${p.name} strikes KURA.`) + (dmg > 0 ? ` -${dmg} HP` : "");
     } else {
-      st.party = st.party.filter(q => q !== p); endPact(st, p.name);
+      st.party = st.party.filter(q => q !== p); endPact(st, p.name); ev(st, "left");
       st.log = `> ${p.name} leaves the party.`;
       st.extra = "> " + (QUIT[p.name] || QUIT[p.family || "folklore"]).replace(/\{n\}/g, p.name);
     }
@@ -2447,7 +2467,7 @@
   function demonAsks(st, e, lines) {
     const pool = DEMON_ASK[famOf(e)], free = pool.map((_, i) => i).filter(i => !e.asked.includes(i));
     const k = pick(free);
-    e.asked.push(k); e.q = k; e.stage = "chat";
+    e.asked.push(k); e.q = k; e.stage = "chat"; if (e.asked.length === 1) ev(st, "asked");
     lines.push(beast(e) ? pool[k][0] : `${e.name}: "${pool[k][0]}"`);
   }
   // PERSONALITY. Every demon has one, fixed by its name (each family leans toward a few). It decides how a
@@ -2471,7 +2491,7 @@
   function demonHears(st, e, yes, lines) {
     const [, likes, good, bad] = DEMON_ASK[famOf(e)][e.q];
     const quiet = yes === "silent";
-    if (quiet) tally(st, "silent");
+    if (quiet) { tally(st, "silent"); ev(st, "silent"); }
     if (quiet) {                                      // a third answer: say nothing, and let its nature decide
       const [say, feel] = SILENCE[personaOf(e)] || SILENCE.PRIM, first = !e.quiet;
       let d = feel();
@@ -2505,7 +2525,7 @@
     if (e.corrupt) {                                   // the damage lifts, or it doesn't
       if (e.mood >= 1) {
         e.corrupt = false; e.name = e.base; e.align = alignOf(e.base);
-        tally(st, "restored"); lean(st, "restore");
+        tally(st, "restored"); lean(st, "restore"); ev(st, "restored");
         lines.push(`The noise drains out of ${e.name}. It is whole again.`);
         if (Math.random() < 0.6) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
         else { lines.push(said(e, "leave")); leaves(st, e); }
@@ -2610,7 +2630,7 @@
     if (v < 0) {
       // Hated: it throws the gift back (KURA keeps it) and attacks.
       lines.push(`KURA offers ${g.label}.`, said(e, "hate", who), `${THE(e.name)} throws it back.`);
-      tally(st, "refused");
+      tally(st, "refused"); ev(st, "refused");
       e.stage = null; e.angered = true; demonTurn(st, lines);
       st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st);
     }
@@ -2632,7 +2652,7 @@
       const joins = Math.max(0, Math.min(0.95, (chaos ? (love ? 0.3 : 0.1) : (love ? 0.9 : 0.65)) + 0.05 * (e.mood || 0)));
       if (Math.random() < joins) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
       else if (chaos && e.asks < 3 && Math.random() < 0.5) { e.asks++; lines.push(who + `"More. MORE."`); }
-      else if (chaos) { lines.push(`${THE(e.name)} runs off laughing with it.`); leaves(st, e); }
+      else if (chaos) { lines.push(`${THE(e.name)} runs off laughing with it.`); leaves(st, e); ev(st, "trickster"); }
       else { lines.push(`${THE(e.name)} is satisfied. ${say2(e, "leave")}`); leaves(st, e); }
     }
     st.round = lines;
@@ -2800,7 +2820,7 @@
     const hpmax = 12 + lv * 5, mpmax = lv * 2 + R(0, 4);
     st.party.push({ name: e.base || e.name, lv, hp: hpmax, hpmax, mp: mpmax, mpmax, family: e.family, align: e.align, demon: true });
     lines.push(said(e, "join"), `${e.name} joins the party.`);
-    note(st, "demons", e.name, "joined"); tally(st, "recruited");
+    note(st, "demons", e.name, "joined"); tally(st, "recruited"); ev(st, "joined");
     (st.pacts = st.pacts || []).push({ name: e.name, floor: st.floor, day: st.day, on: true });      // the pact is kept on record
     lean(st, e.align, lines);
     st.log = `> ${e.name} joins the party.`;
@@ -2843,7 +2863,7 @@
   const score = st => { const k = st.stats || {}, pacts = st.pacts || [];
     return { run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: k.beaten || 0, turns: st.steps || 0, align: String(st.align || "NEUTRAL").toUpperCase(),
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0 } }; };
-  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, side) => !!st.dungeon && isLocked(st.dungeon, side), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
+  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, side) => !!st.dungeon && isLocked(st.dungeon, side), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

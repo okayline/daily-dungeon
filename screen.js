@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.73";
+  const VERSION = "v0.74";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -300,12 +300,14 @@
       : renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
     // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
     // and the letter between them is what she faces: a compass wall, or U (the sky) or D (the floor).
-    // [  ^  ] tips her head back: once for the sky, again for the floor, again for level.
+    // [ ^ ] acts on whatever she faces. Beside the turn buttons, one more tips her head: [ UP ] to the sky,
+    // then [ DOWN ] to the floor, then [ AHEAD ] to level again; its label is always the next place she'd look.
     // The row above holds whatever can be walked through from here: [ < LEFT ] and [ RIGHT > ] under the two
     // doors ahead ([ ENTER ] under one that stands open), [ OPEN ] for a lone door, [ DESCEND ] over found stairs.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
-    overlay(VH - 1, 16, `[ < ]  ${st.look || st.facing || "?"}  [ > ]`);
-    overlay(VH - 2, 20, "[  ^  ]");
+    overlay(VH - 1, 13, `[ < ] ${center(String(st.actLabel || "").slice(0, 9), 9)} [ > ]`);   // between the turn buttons: what [ ^ ] does here
+    overlay(VH - 2, 21, "[ ^ ]");            // the one "do the obvious thing" button: search, consult, enter, descend
+    if (v.end !== "dark") overlay(VH - 1, 35, st.look === "U" ? "[ DOWN ]" : st.look === "D" ? "[ AHEAD ]" : "[ UP ]");   // where her eyes go next
     if (v.look === "D" && v.stairs) overlay(VH - 3, 18, "[ DESCEND ]");
     for (const x of (!v.look && v.doors) || []) {
       if (x.state === "sealed") continue;
@@ -447,6 +449,9 @@
   function weekLine(now, tz) {
     const WD = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
     const today = localDay(now, tz), wd = (today + 3) % 7, left = 6 - wd;
+    // With under two days left, a run that starts now is given next week's floor instead (see firstDeadline
+    // in rules.js), so the line says so: otherwise the title and a fresh run's own countdown disagree.
+    if (left < 2) return `${WD[wd]}, day ${wd + 1} of 7  -  closes ${left ? "tomorrow" : "tonight"}. New runs get next week's.`;
     return `${WD[wd]}, day ${wd + 1} of 7  -  ${left} day${left === 1 ? "" : "s"} left, this floor closes SUN`;
   }
 

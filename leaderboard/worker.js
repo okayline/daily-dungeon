@@ -3,6 +3,8 @@
 //   GET  /top?n=20&run=ID                                      -> {rows: [...], you: {...} | null}
 //   GET  /season                                               -> {epoch, law, chaos}
 //   GET  /stats                                                -> {epoch, counts: {...}, lastFall}
+//   POST /event   {t, v?}                                      -> {ok}        (an anonymous "this happened" ping)
+//   GET  /feed                                                 -> everything the title screen shows, in one read
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
 const MAX = { floor: 20, days: 400 };
@@ -57,6 +59,20 @@ async function tallyStats(db, b, turns, who) {
   const seen = await db.prepare(`INSERT OR IGNORE INTO seen (period, who) VALUES (?1, ?2)`).bind(epoch, who).run();
   if (seen.meta && seen.meta.changes) await add("players", 1);
 }
+// AMBIENT EVENTS, for the title screen's rumor cards: a tag from a fixed list, an optional small number, and
+// the time. No name, no run, no free text, so nothing here can carry a message or a spoiler. The newest 20 of
+// each tag are kept. Forging one is cheap and harmless: nothing ranks on these or rewards them.
+const EVENT_TAGS = ["refused", "asked", "restored", "trickster", "altar", "joined", "silent", "deep", "left", "fall", "words"];
+async function titleFeed(db) {
+  const epoch = epochIndex(), counts = {}, tally = { LAW: 0, CHAOS: 0 };
+  const quiet = async (fn, fallback) => { try { return await fn(); } catch (e) { return fallback; } };   // a table missing on an old database just leaves its part empty
+  for (const r of await quiet(async () => (await db.prepare(`SELECT key, count FROM counters WHERE period = ?1 LIMIT 40`).bind(epoch).all()).results, [])) counts[r.key] = r.count;
+  for (const r of await quiet(async () => (await db.prepare(`SELECT side, count FROM faction_season WHERE epoch = ?1`).bind(epoch).all()).results, [])) if (r.side in tally) tally[r.side] = r.count;
+  const last = await quiet(() => db.prepare(`SELECT MAX(made) AS made FROM scores`).first(), null);
+  const top = await quiet(() => db.prepare(`SELECT floor FROM scores ORDER BY floor DESC, days DESC, made ASC LIMIT 1`).first(), null);
+  const events = await quiet(async () => (await db.prepare(`SELECT type AS t, v, made FROM events ORDER BY id DESC LIMIT 40`).all()).results, []);
+  return { epoch, law: tally.LAW, chaos: tally.CHAOS, counts, lastFall: (last && last.made) || null, deepest: (top && top.floor) || null, events };
+}
 const cors = () => ({ "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   "access-control-allow-headers": "content-type, x-admin-key", "access-control-max-age": "86400" });
 const json = (data, status, origin) => new Response(JSON.stringify(data), { status: status || 200, headers: { "content-type": "application/json", ...cors() } });
@@ -105,6 +121,24 @@ export default {
       for (const r of rows.results) counts[r.key] = r.count;
       const last = await env.DB.prepare(`SELECT MAX(made) AS made FROM scores`).first();
       return json({ epoch, counts, lastFall: (last && last.made) || null }, 200, allow);
+    }
+
+    // One read for the whole title screen: season, totals, deepest floor, and the latest ambient events.
+    if (url.pathname === "/feed" && req.method === "GET") return json(await titleFeed(env.DB), 200, allow);
+
+    // An ambient event: a tag (and maybe a small number). Thirty an hour per sender is plenty for real play.
+    if (url.pathname === "/event" && req.method === "POST") {
+      if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
+      let b; try { b = await req.json(); } catch (e) { return json({ error: "json" }, 400, allow); }
+      const t = String(b.t || ""), v = b.v === undefined || b.v === null ? null : Number(b.v);
+      if (!EVENT_TAGS.includes(t) || (v !== null && (!Number.isInteger(v) || v < 0 || v > 199))) return json({ error: "invalid" }, 400, allow);
+      const who = await hash((req.headers.get("cf-connecting-ip") || "?") + "daily-dungeon"), now = Math.floor(Date.now() / 1000);
+      const recent = await env.DB.prepare(`SELECT COUNT(*) AS n FROM events WHERE who = ?1 AND made > ?2`).bind(who, now - 3600).first();
+      if (recent.n >= 30) return json({ error: "slow down" }, 429, allow);
+      await env.DB.prepare(`INSERT INTO events (type, v, made, who) VALUES (?1, ?2, ?3, ?4)`).bind(t, v, now, who).run();
+      // Keep the newest 20 of this tag. Rows from the last hour stay regardless, so the rate limit above can count them.
+      await env.DB.prepare(`DELETE FROM events WHERE type = ?1 AND made <= ?2 AND id NOT IN (SELECT id FROM events WHERE type = ?1 ORDER BY id DESC LIMIT 20)`).bind(t, now - 3600).run();
+      return json({ ok: true }, 200, allow);
     }
 
     // Removing an entry takes the admin key (a Worker secret: `npx wrangler secret put ADMIN_KEY`).

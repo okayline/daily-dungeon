@@ -35,3 +35,15 @@ CREATE TABLE IF NOT EXISTS seen (
   PRIMARY KEY (period, who)
 );
 CREATE INDEX IF NOT EXISTS made_idx ON scores (made);
+
+-- Ambient events for the title screen's rumor cards: a tag, maybe a small number, and when. Nothing else.
+-- The newest 20 of each tag are kept (see POST /event). `who` is only for the per-sender rate limit.
+CREATE TABLE IF NOT EXISTS events (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL,
+  v    INTEGER,
+  made INTEGER NOT NULL,
+  who  TEXT
+);
+CREATE INDEX IF NOT EXISTS events_type_idx ON events (type, id);
+CREATE INDEX IF NOT EXISTS events_who_idx ON events (who, made);

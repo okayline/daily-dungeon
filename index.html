@@ -97,6 +97,7 @@
   .mframe { color: var(--trail); }
   .logline { display: inline-block; width: 78ch; overflow: hidden; vertical-align: top; white-space: pre; }
   .wait { animation: blink 1s steps(1) infinite; }   /* the _ that waits for a click */
+  .caret2 { display: inline-block; transform: scale(1.35); transform-origin: 50% 62%; }   /* the action button's caret: a little bigger, without moving anything */
   .caret { display: inline-block; position: relative; left: calc(-1ch / 6); width: calc(1ch / 1.5); font-size: 1.5em; line-height: 0.6; vertical-align: middle; text-shadow: none; }   /* just the ^ is bigger; its cell stays one column wide */
   .btn.nudge { animation: blink 0.35s steps(1) 2; }   /* two flashes when keys are pressed while a question waits */
   /* The build number, small, under the screen's lower right corner. */
@@ -128,7 +129,7 @@
   let save = null;
   // TITLE SCREEN: shown first on every load (even over a save in progress -- CONTINUE is the explicit
   // resume). atTitle gates the click/keydown handlers over at the bottom of this file.
-  let atTitle = true, titleTimer = null, titleOffset = 0, titleCards = [], titleLean = null, titleDeep = null, titleStats = null;
+  let atTitle = true, titleTimer = null, titleOffset = 0, titleCards = [], titleLean = null, titleDeep = null, titleStats = null, titleEvents = [];
 
   // Color only the minimap rows (right panel) and the moon marker.
   function colorize(text) {
@@ -165,8 +166,9 @@
           .replace("[ &lt; ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="left">[ &lt; ]</span>`)
           .replace("[ &gt; ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="right">[ &gt; ]</span>`)
           // [^] looks up at the sky; again, down at the floor; again, level.
-          .replace("[  ^  ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="look">[  <span class="caret">^</span>  ]</span>`)
-          .replace(/(<\/span>)(\s+)([NESWUD?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
+          .replace("[ ^ ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="do">[ <span class="caret2">^</span> ]</span>`)
+          .replace(/\[ (UP|DOWN|AHEAD) \]/, m => `<span class="btn${save && save.encounter ? " off" : ""}" data-act="look">${m}</span>`)
+          .replace(/(data-act="left">[^<]*<\/span> )([A-Z ]{9})( <span)/, (m, a, w, c) => a + w.replace(/[A-Z]+/, x => `<span class="btn facing" data-act="do">${x}</span>`) + c);
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
         const tail = esc(line.slice(48)).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
         return left + tail;
@@ -306,7 +308,16 @@
     if (h.length > 20000) h.splice(0, h.length - 20000);
   }
 
+  // AMBIENT EVENTS: the rules leave tags on save.events (see rules.js); each is sent to the Worker once, quietly,
+  // and forgotten whether or not it arrives. Never while the testing cheat is on.
+  function flushEvents() {
+    if (!save || !save.events || !save.events.length) return;
+    const list = save.events; delete save.events;
+    if (!LEADERBOARD_URL || save.freeSteps) return;
+    for (const e of list.slice(-4)) try { fetch(LEADERBOARD_URL + "/event", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify(e) }).catch(() => {}); } catch (err) {}
+  }
   function persist() {
+    flushEvents();
     try {
       delete save.unsaved;
       save.saved = hstDate();
@@ -366,7 +377,38 @@
   const titleCanContinue = () => !!(save && save.dungeon && save.dungeon.floor && save.dungeon.floor.v === 9 && save.party);
   // The three hard-number cards that cost nothing new (Part 11, build-order note): today's shared omen
   // needs no save at all, and the other two just read the leaderboard's existing endpoints.
+  // RUMOR CARDS: each ambient event the Worker has kept becomes one vague line. It refers to a moment without
+  // quoting the game's own text, except a demon's last words, which are quoted and never attributed.
+  const RUMORS = {
+    refused: ["A demon rejected a traveler's paltry gift.", "A gift was thrown back.", "Something was offered. It was not enough.", "A demon looked at a gift, and laughed."],
+    asked: ["Someone was asked if they trust the dark.", "A demon asked a question, and waited.", "A question was put to a traveler, in the dark.", "Something wanted an honest answer."],
+    restored: ["A corrupted voice turned, and was made whole again.", "A broken name was mended tonight.", "Something damaged was talked back to itself."],
+    trickster: ["Something ran off laughing, gift in hand.", "A gift was taken. The taker did not stay.", "Laughter, going away down a hall."],
+    altar: ["An altar considered an offering, and was pleased.", "A screen in a wall glowed a little warmer.", "Something was fed, and said thank you."],
+    joined: ["A stranger walked in, and stayed.", "A pact was made in the dark.", "Two walked on where one had come.", "Something old took a traveler's side."],
+    silent: ["Silence, offered instead of an answer.", "A traveler said nothing at all.", "A question went unanswered. On purpose."],
+    deep: ["A wall gave up its secret, after many tries.", "Something very old came out of the stone.", "Patience was rewarded, for once."],
+    left: ["Someone walked out, and did not look back.", "A pact ended badly.", "One fewer set of footsteps, somewhere below."],
+    fall: ["Someone fell. The dark closed over them.", "A light went out, somewhere below.", "A run ended tonight. The dungeon noticed."],
+  };
+  function rumorCards() {
+    const out = [], seen = new Set();
+    for (const e of titleEvents) {
+      let line = null;
+      if (e.t === "words") { const w = RULES.lastWordsList[e.v]; if (w) line = `${["The dungeon whispered", "From below", "A voice, going out", "Somewhere, the last thing said"][(e.made || 0) % 4]}, "${w}"`; }
+      else if (RUMORS[e.t]) line = RUMORS[e.t][((e.made || 0) + out.length) % RUMORS[e.t].length];   // which wording: steady for one event, varied across the feed
+      if (line && !seen.has(line)) { seen.add(line); out.push(line); }
+      if (out.length >= 8) break;
+    }
+    return out;
+  }
+  // Numbers and rumors share the feed: never more than two of one kind in a row while both last.
   function buildTitleCards() {
+    const nums = numberCards(), rum = rumorCards(), cards = [];
+    while (nums.length || rum.length) { cards.push(...nums.splice(0, rum.length ? 2 : nums.length)); if (rum.length) cards.push(rum.shift()); }
+    return cards;
+  }
+  function numberCards() {
     const cards = [];
     if (titleLean) {
       const total = titleLean.law + titleLean.chaos;
@@ -401,6 +443,19 @@
   }
   async function loadTitleExtras() {
     if (!LEADERBOARD_URL) return;
+    // One request for everything (the Worker's /feed). An older Worker has no /feed: fall back to the separate reads.
+    try {
+      const r = await fetch(`${LEADERBOARD_URL}/feed`);
+      if (r.ok) {
+        const d = await r.json();
+        if (typeof d.law === "number" && typeof d.chaos === "number") titleLean = { law: d.law, chaos: d.chaos };
+        if (d.deepest) titleDeep = d.deepest;
+        if (d && typeof d.counts === "object") titleStats = d;
+        if (Array.isArray(d.events)) titleEvents = d.events;
+        if (atTitle) { titleCards = buildTitleCards(); drawTitle(); }
+        return;
+      }
+    } catch (e) {}
     try {
       const r = await fetch(`${LEADERBOARD_URL}/season`);
       if (r.ok) { const d = await r.json(); if (typeof d.law === "number" && typeof d.chaos === "number") titleLean = { law: d.law, chaos: d.chaos }; }
@@ -808,7 +863,8 @@
         two("Demons met", k.met || 0, "Items found", k.items || 0), ""] : []),
       ...(cx ? ["CODEX", two("Demons", count(cx.demons), "Items", count(cx.items)), ""] : []),
       "KEYS",
-      "  [^] / up arrow ..... look up at the sky; again, down; again, ahead (down arrow: look down)",
+      "  [^] / up arrow ..... act on what KURA faces: search it, consult the moon, enter, descend",
+      "  [ UP ] / [U] ....... look up at the sky; again, down; again, ahead (down arrow: look down)",
       "  [ < ] [ > ] / arrows ... turn (free)",
       "  [A] [D] ............ the left door, the right door (asks first: it takes the day's charge)",
       "  [ENTER] / [W] ...... through an open door, or down found stairs",
@@ -1040,6 +1096,7 @@
   let queuedNotice = null;
   let doneAt = 0;
   function closeFound() {
+    if (document.getElementById("found").dataset.mode === "done" && doneReveal) { doneReveal(); return; }   // still unfolding: the first press shows the rest, the next one closes
     if (document.getElementById("found").dataset.mode === "done" && Date.now() - doneAt < 900) return;   // the victory screen can't be dismissed by the click that brought it up
     document.getElementById("found").hidden = true;
     if (blockedRun) { blockedRun = false; encounterBox(true); return; }
@@ -1054,6 +1111,7 @@
   // (or KURA falls); then [ENTER] closes it.
   const floatBox = box => { pending = null; passAct = null; box.className = "foundbox"; box.removeAttribute("style"); };   // a new box replaces whatever was waiting
   const wrapText = (s, n) => { const out = []; let rest = String(s); while (rest.length > n) { let cut = rest.lastIndexOf(" ", n); if (cut <= 0) cut = n; out.push(rest.slice(0, cut)); rest = rest.slice(cut).trimStart(); } out.push(rest); return out; };
+  let doneTimer = null, doneReveal = null, doneSeen = null;      // the fight-end screen's beat-by-beat unfolding
   let blockedRun = false, replayTimer = null, replayAdvance = null, replayWait = false, prevDemonHp = null, prevKuraHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
   function finishReplay() { if (replayTimer) { clearInterval(replayTimer); replayTimer = null; replayAdvance = null; replayWait = false; encounterBox(false); } }
 
@@ -1166,6 +1224,11 @@
 
     if (!e) {                                          // the fight is over
       pre.innerHTML = ""; doneAt = Date.now();
+      if (doneTimer) { clearTimeout(doneTimer); doneTimer = null; doneReveal = null; }
+      // The end screen unfolds a beat at a time: the art, the last words, the verdict, each line of what
+      // happened, then [ OK ]. Everything is laid out at once and only made visible in turn, so nothing jumps.
+      const beats = [], beat = () => { const at = pre.children.length; return () => beats.push([...pre.children].slice(at)); };
+      let mark = beat();
       // The fallen enemy's last words sit on the line right under the art (only when this screen is a win).
       const won = lines.some(l => /falls\.  \+|burns out\.  \+/.test(l));
       const wl = []; for (const l of lines) { if (won && !/falls\.  \+|burns out\.  \+/.test(l)) continue; for (const w of wrapText(l, COLS)) wl.push([w, lineClass(l)]); }   // a win shows only the fall line
@@ -1173,13 +1236,25 @@
       const dArt = Math.min(5, ROWS - 4 - wl.length - 1 - (last.length ? last.length + 1 : 0));      // title, blank, text, blank, [ OK ], and the quote with a blank under it
       if (dArt >= 3) {
         for (let i = 0; i < dArt; i++) add(i === 0 ? "." + " ".repeat(COLS - 2) + "." : i === dArt - 1 ? "'" + " ".repeat(COLS - 2) + "'" : " ".repeat(COLS), "artframe");
-        if (last.length) { last.forEach(l => add(l)); add(" "); } else add(" ");
-      } else if (last.length) { last.forEach(l => add(l)); add(" "); }
+        mark(); mark = beat();
+        if (last.length) { last.forEach(l => add(l)); add(" "); mark(); mark = beat(); } else add(" ");
+      } else if (last.length) { last.forEach(l => add(l)); add(" "); mark(); mark = beat(); }
       add(save.dead ? "DEFEAT" : "THE WAY IS CLEAR", save.dead ? "demon" : "gold");
       add(" ");
-      for (const [w, c] of wl) add(w, c);
+      mark(); mark = beat();
+      for (const [w, c] of wl) { add(w, c); mark(); mark = beat(); }
       add(" ");
       add("[ OK ]", "btn");
+      mark();
+      // Only the first showing of this ending unfolds; a redraw (a resize, a box closing over it) shows it whole.
+      const key = save.runId + ":" + (save.steps || 0);
+      if (doneSeen !== key && beats.length > 1) {
+        doneSeen = key;
+        const hide = beats.slice(1); hide.forEach(g => g.forEach(n => { n.style.visibility = "hidden"; }));
+        const step = () => { const g = hide.shift(); if (g) g.forEach(n => { n.style.visibility = ""; }); if (hide.length) doneTimer = setTimeout(step, 700); else { doneTimer = null; doneReveal = null; doneAt = Date.now() - 600; } };
+        doneReveal = () => { if (doneTimer) clearTimeout(doneTimer); doneTimer = null; doneReveal = null; hide.splice(0).forEach(g => g.forEach(n => { n.style.visibility = ""; })); doneAt = Date.now() - 600; };
+        doneTimer = setTimeout(step, 700);
+      }
       return true;
     }
     // A new demon: say so first, and wait for [ OK ], so a run of key presses can't charge into the fight unseen.
@@ -1298,13 +1373,20 @@
     if (replayTimer) finishReplay();
     prevDemonHp = save && save.encounter ? save.encounter.hp : null;
     prevKuraHp = save && save.encounter && save.party && save.party[0] ? save.party[0].hp : null;
+    // [ ^ ] (and the up arrow): the obvious thing for what she faces. Found stairs underfoot: go down. An open
+    // door ahead, or the last room's lone door: go through (a locked one asks first). Anything else: search it,
+    // which listens at locked doors, consults the moon, and wakes a terminal.
+    if (name === "do" && save) {
+      const can = RULES.available(save), open = Object.keys(can.doors).find(k => can.doors[k].state === "open");
+      name = can.look === "D" && can.stairs ? "go-D" : can.facingDoors && open ? "go-" + open : can.facingDoors && can.doors.C && can.doors.C.can ? "go-C" : "search";
+    }
     // "enter" (Enter or W): whatever stands open from here: an open arch, the lone door, or found stairs underfoot.
     if (name === "enter" && save) {
       const can = RULES.available(save), open = Object.keys(can.doors).find(k => can.doors[k].state === "open");
       name = can.look === "D" && can.stairs ? "go-D" : open ? "go-" + open : can.doors.C ? "go-C" : null;
       if (!name) return;
     }
-    if (save && save.encounter && (name === "left" || name === "right" || name === "look" || name === "lookdown" || name.startsWith("go-"))) return;      // no looking around mid-fight; running is the fight box's [R]UN
+    if (save && save.encounter && (name === "left" || name === "right" || name === "look" || name === "lookdown" || name === "do" || name.startsWith("go-"))) return;      // no looking around mid-fight; running is the fight box's [R]UN
     if ((name === "qyes" || name === "qno" || name === "qsilent") && save) {
       const log = save.log, partyBefore = (save.party || []).map(p => p.name);
       save = RULES.reply(save, name === "qsilent" ? "silent" : name === "qyes");
@@ -1316,7 +1398,7 @@
     }
     // A party member's question waits for [Y]ES or [N]O: nothing else moves the game on until it's answered
     // (the bag, codex, log, help and password still open, so the player can think it over).
-    if (save && save.question && /^(search|hold|left|right|look|run|fight|talk|altar|go-)/.test(name)) {
+    if (save && save.question && /^(search|hold|left|right|look|do|run|fight|talk|altar|go-)/.test(name)) {
       document.querySelectorAll(".btn.ask").forEach(el => { el.classList.remove("nudge"); void el.offsetWidth; el.classList.add("nudge"); });
       return;
     }
@@ -1433,7 +1515,7 @@
     if (mode === "confirm") return;                  // only its YES / NO buttons (or the keys): a stray click is not an answer
     const b = e.target.closest("[data-fact]");
     if (b) act(b.dataset.fact);
-    else if (mode === "found" || mode === "done") { if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
+    else if (mode === "found" || mode === "done") { if (mode === "done" && doneReveal) doneReveal(); else if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
     else if (mode === "altar" && save.altar && save.altar.script && !save.altar.result && save.altar.page < save.altar.script.length - 1) act("altar-next");   // a click brings the terminal's next line
     else if (mode === "altar" || mode === "encounter") return;                   // their own buttons only
     else if (e.target.closest(".btn")) closeFound();   // any other box: only its [ OK ]
@@ -1550,7 +1632,7 @@
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
-      s: "search", g: "altar", u: "look", arrowup: "look", arrowdown: "lookdown", arrowleft: "left", arrowright: "right",
+      s: "search", g: "altar", u: "look", arrowup: "do", arrowdown: "lookdown", arrowleft: "left", arrowright: "right",
       a: "go-L", d: "go-R", w: "enter", enter: "enter" }[key];
     if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
     if (k) { e.preventDefault(); act(k); }
