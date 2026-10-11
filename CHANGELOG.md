@@ -2,6 +2,19 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.77 - Out of the Pit - Oct 11 2026, 03:03 HST
+
+![v0.77](screenshots/v0.77.png)
+
+The way is up now.
+
+- **You wake in a pit, and climb.** Four levels down: B4F at the bottom, then B3F, B2F, B1F, then the surface, and on from there.
+- **The dark rises with the moon.** It takes a level each quarter of the month: at the half moon, the full, the half, and the new. Be on your way up before then. Sundays no longer matter.
+- **Where you wake depends on the moon.** Early in the month, at the bottom. Later, higher up, because the lower levels are already gone. Everyone playing in the same quarter is on the same level.
+- **The stairs up are in a wall** of a level's last room. Face them and `[ ^ ]` climbs.
+- **The title screen** shows the level the dark has reached, and when it takes it.
+- **Saves:** runs in progress start fresh.
+
 ## v0.75 - The Path - Oct 11 2026, 02:42 HST
 
 ![v0.75](screenshots/v0.75.png)
