@@ -9,8 +9,9 @@ An 80-column ASCII roguelike dungeon crawler in the spirit of 80s CRPGs and Shin
 ## How it plays
 
 - **One room a day.** Every room has two locked doors. Open one and the other seals for good. Step through and the door shuts behind you. Then wait for tomorrow.
-- **Search all you like.** The walls, the ceiling and the floor hide things. Something else may notice.
-- **Listen at the doors.** Each one gives away a little of what's behind it.
+- **Search all you like.** The walls and the floor hide things. Something else may notice.
+- **Look up.** There's no ceiling, only the sky and the real moon. Ask her; some nights she answers.
+- **Listen at the doors.** The two are side by side in the wall ahead, and each gives away a little of what's behind it.
 - **Demons don't leave.** Fight them, talk to them, or run. Some want gifts. Some want to join you. Some are lying.
 - **Your party has opinions.** Talk to them. Don't push your luck.
 - **Every choice leans you.** LAW, NEUTRAL or CHAOS. The demons can tell.

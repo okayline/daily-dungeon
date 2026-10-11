@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.70";
+  const VERSION = "v0.72";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -75,28 +75,56 @@
     return c.map(row => row.join(""));
   }
 
-  // LOOKING UP OR DOWN: the room's ceiling ("U") or its floor ("D"), seen straight on, with the four walls
-  // falling away to the corners of the view. The floor shows the stairs down once they have been found.
-  function renderLook(which, stairs) {
+  // THE DOOR WALL: two doors side by side in the wall ahead, drawn over the plain wall view. A locked door
+  // shows a + knob, a sealed one an x, and one that stands open has no knob and a rounded top.
+  function renderDoors(view, doors) {
+    const c = view.map(r => r.split(""));
+    const put = (x, y, t) => [...t].forEach((ch, k) => { if (x + k >= 0 && x + k < VW && y >= 0 && y < VH) c[y][x + k] = ch; });
+    for (const d of doors) {
+      const x0 = d.side === "L" ? 10 : 28;
+      if (d.state === "open") { put(x0, 4, " _______ "); put(x0, 5, "/       \\"); }
+      else { put(x0, 4, "_________"); put(x0, 5, "|       |"); }
+      for (let y = 6; y <= 13; y++) put(x0, y, y === 13 ? "|_______|" : "|       |");
+      if (d.state !== "open") put(x0 + 6, 9, d.state === "sealed" ? "x" : "+");
+    }
+    return c.map(r => r.join(""));
+  }
+
+  // LOOKING UP OR DOWN. Up ("U") there is no ceiling: the room is open to the night sky, with the real moon in
+  // it at today's phase (moonIdx 0-7, lit on the right while waxing, like the block moon in the header). Down
+  // ("D") is the floor, seen straight on, with the stairs in it once they have been found.
+  function renderLook(which, stairs, moonIdx) {
     const c = Array.from({ length: VH }, () => Array(VW).fill(" "));
     const put = (x, y, t) => [...t].forEach((ch, k) => { if (x + k >= 0 && x + k < VW && y >= 0 && y < VH && ch !== " ") c[y][x + k] = ch; });
     for (let i = 0; i < 3; i++) { put(2 + i, i, "\\"); put(44 - i, i, "/"); put(2 + i, 16 - i, "/"); put(44 - i, 16 - i, "\\"); }
-    put(5, 2, "_".repeat(37)); put(5, 13, "_".repeat(37));
-    for (let y = 3; y <= 13; y++) { put(5, y, "|"); put(41, y, "|"); }
     if (which === "U") {
-      // Two pipes run the length of the ceiling, with a caged lamp between them.
-      put(6, 5, "=".repeat(35)); put(6, 11, "=".repeat(35));
-      put(14, 5, "[]"); put(31, 11, "[]");
-      [" .-----. ", "( ----- )", " '-----' "].forEach((t, j) => put(19, 7 + j, t));
-    } else if (stairs) {
-      // A lifted stone, and steps going down into the dark.
-      [".___________________.", "|___________________|", "| |_______________| |", "| | |___________| | |",
-        "| | | |_______| | | |", "|_|_|_|_______|_|_|_|"].forEach((t, j) => put(13, 5 + j, t));
+      // The broken rim of the walls, and the sky inside it.
+      put(5, 2, "_ __ _   ___  _ __   _  __ ___  _ _ __"); put(5, 13, "__ _  __ _ ___   __ _  _ __  ___ _  __");
+      for (const y of [3, 4, 6, 7, 9, 11, 12]) put(5, y, "|");
+      for (const y of [3, 5, 6, 8, 9, 10, 12]) put(41, y, "|");
+      for (const [x, y, ch] of [[9, 4, "."], [34, 4, "*"], [13, 7, "+"], [37, 8, "."], [8, 10, "*"], [31, 11, "."], [15, 12, "."], [36, 5, "."], [11, 5, "."], [33, 9, "+"]]) put(x, y, ch);
+      // The moon: a disc five rows tall. Each cell is lit or dark by how far across the disc it sits.
+      const k = (1 - Math.cos(moonIdx / 8 * 2 * Math.PI)) / 2, waxing = moonIdx <= 4, HALF = [3, 5, 6, 5, 3];
+      HALF.forEach((h, j) => {
+        const y = 6 + j, cx = 23;
+        for (let x = -h; x <= h; x++) {
+          const t = h ? x / h : 0, lit = moonIdx !== 0 && (waxing ? t >= 1 - 2 * k : t <= -(1 - 2 * k));
+          c[y][cx + x] = lit ? "#" : (x === -h ? "(" : x === h ? ")" : j === 0 || j === 4 ? (j === 0 ? "_" : "'") : " ");
+        }
+      });
     } else {
-      // Tiles: a grid of seams, one of them a little crooked.
-      for (const y of [5, 8, 11]) for (let x = 8; x <= 38; x += 6) put(x, y, "+");
-      for (const y of [5, 8, 11]) for (let x = 8; x < 38; x += 6) put(x + 2, y, "- -");
-      for (const y of [6, 7, 9, 10]) for (let x = 8; x <= 38; x += 6) put(x, y, ":");
+      put(5, 2, "_".repeat(37)); put(5, 13, "_".repeat(37));
+      for (let y = 3; y <= 13; y++) { put(5, y, "|"); put(41, y, "|"); }
+      if (stairs) {
+        // A lifted stone, and steps going down into the dark.
+        [".___________________.", "|___________________|", "| |_______________| |", "| | |___________| | |",
+          "| | | |_______| | | |", "|_|_|_|_______|_|_|_|"].forEach((t, j) => put(13, 5 + j, t));
+      } else {
+        // Tiles: a grid of seams.
+        for (const y of [5, 8, 11]) for (let x = 8; x <= 38; x += 6) put(x, y, "+");
+        for (const y of [5, 8, 11]) for (let x = 8; x < 38; x += 6) put(x + 2, y, "- -");
+        for (const y of [6, 7, 9, 10]) for (let x = 8; x <= 38; x += 6) put(x, y, ":");
+      }
     }
     return c.map(row => row.join(""));
   }
@@ -267,15 +295,24 @@
     now = now || SMT_now(); extra = extra || "";
     const idx = moonIndex(now);
     const v = st.view;
-    const view = v.look ? renderLook(v.look, v.stairs)
+    const view = v.look ? renderLook(v.look, v.stairs, idx)
+      : v.end === "doors" ? renderDoors(renderView(v.left, v.right, "wall", 1, null), v.doors)
       : renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
     // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
-    // and the letter between them is what she faces: a compass wall, or U (the ceiling) or D (the floor).
-    // [U]P at the top of the view tips her head back: once for the ceiling, again for the floor, again for level.
+    // and the letter between them is what she faces: a compass wall, or U (the sky) or D (the floor).
+    // [  ^  ] tips her head back: once for the sky, again for the floor, again for level.
+    // The row above holds whatever can be walked through from here: [ < LEFT ] and [ RIGHT > ] under the two
+    // doors ahead ([ ENTER ] under one that stands open), [ OPEN ] for a lone door, [ DESCEND ] over found stairs.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 16, `[ < ]  ${st.look || st.facing || "?"}  [ > ]`);
-    overlay(VH - 2, 20, "[  ^  ]");          // forward: through the door she faces, or down found stairs
-    if (v.end !== "dark") overlay(0, 21, "[U]P");
+    overlay(VH - 2, 20, "[  ^  ]");
+    if (v.look === "D" && v.stairs) overlay(VH - 3, 18, "[ DESCEND ]");
+    for (const x of (!v.look && v.doors) || []) {
+      if (x.state === "sealed") continue;
+      if (x.side === "C") overlay(VH - 3, 19, x.state === "open" ? "[ ENTER ]" : "[ OPEN ]".padEnd(9).slice(0, 8));
+      else if (x.state === "open") overlay(VH - 3, x.side === "L" ? 10 : 28, "[ ENTER ]");
+      else overlay(VH - 3, x.side === "L" ? 9 : 27, x.side === "L" ? "[ < LEFT ]" : "[ RIGHT > ]");
+    }
     const r = s => "|" + ljust(s, W - 2) + "|";
     const rc = s => "|" + center(s, W - 2) + "|";
     const S = headerLines(st.omenText, st.tz, now);
