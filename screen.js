@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.92.1";
+  const VERSION = "v0.93";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -409,6 +409,43 @@
   //   opts.lean                 -- { law, chaos } vote counts for the current epoch, or null if not loaded yet
   //   opts.cards                -- ordered array of single-line card strings for the sidebar ticker
   //   opts.cardOffset           -- which line of the (wrapped) card ticker is on top this frame
+  // THE LEVEL AS A BRANCHING LINE, for the title screen. The dashed line is this quarter's level, left to right;
+  // each number on it is a day of the lunar month (the same count as the EPOCH line), with today's in brackets,
+  // and a branch grows off every day, above and below in turn. The shape is the same for everyone: it is rolled
+  // from the lunar month and the quarter alone. It says nothing about the rooms (every day's wing is the same
+  // size); it is the level's own mark, different every quarter.
+  function levelBones(now) {
+    const ref = Date.UTC(2000, 0, 6, 18, 14), syn = 29.530588853, Q = quarterOf(now), q = Q.q, epoch = epochIndex(now);
+    const into = (now.getTime() - ref) / 86400000 - epoch * syn, today = Math.min(29, Math.floor(into) + 1);
+    const first = Math.ceil(q * syn / 4) + 1, last = Math.min(29, Math.ceil((q + 1) * syn / 4)), days = last - first + 1;
+    let a = (Math.imul(epoch + 1, 0x9e3779b1) ^ Math.imul(q + 7, 0x85ebca6b)) >>> 0;
+    const rand = () => { a = (a + 0x6d2b79f5) >>> 0; let x = a; x = Math.imul(x ^ (x >>> 15), x | 1); x ^= x + Math.imul(x ^ (x >>> 7), x | 61); return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+    const R = n => Math.floor(rand() * n);
+    const H = 7, y0 = 3, g = Array.from({ length: H }, () => Array(VW).fill(" "));
+    const put = (y, x, t) => [...t].forEach((c, k) => { if (y >= 0 && y < H && x + k >= 0 && x + k < VW && c !== " ") g[y][x + k] = c; });
+    const gap = Math.max(5, Math.floor((VW - 6) / days)), x0 = Math.max(3, Math.floor((VW - gap * (days - 1)) / 2) - 1);
+    let up = R(2) === 0;
+    for (let i = 0; i < days; i++) {
+      const x = x0 + i * gap, h = 1 + R(2), len = 1 + R(4), twig = R(3) === 0;
+      if (up) {
+        for (let k = 1; k <= h; k++) put(y0 - k, x + k, "/");
+        put(y0 - h - 1, x + h + 1, "_".repeat(len));
+        if (twig && h > 1) put(y0 - h, x + h + 1, "_".repeat(1 + R(2)));
+      } else {
+        for (let k = 1; k <= h; k++) put(y0 + k, x + k, "\\");
+        put(y0 + h, x + h + 1, "_".repeat(len));
+        if (twig && h < 2) { put(y0 + h + 1, x + h + 1 + len, "\\"); put(y0 + h + 1, x + h + 2 + len, "_".repeat(1 + R(2))); }
+      }
+      const n = String(first + i), isToday = first + i === today;
+      put(y0, x - (n.length > 1 ? 1 : 0) - (isToday ? 1 : 0), isToday ? `[${n}]` : n);
+      up = !up;
+    }
+    // The line itself: dashes between the day numbers, with a space either side of each number.
+    const lab = g[y0].map(c => c !== " ");
+    for (let x = x0 - 4; x <= x0 + gap * (days - 1) + 4; x++) if (x >= 1 && x < VW - 1 && !lab[x] && !lab[x - 1] && !lab[x + 1]) g[y0][x] = "-";
+    const level = `B${4 - q}F`, name = ["first", "second", "third", "last"][q];
+    return [center(`${level}  -  the moon's ${name} quarter`, VW), "", ...g.map(r => r.join("").replace(/\s+$/, ""))];
+  }
   function renderTitle(opts) {
     opts = opts || {};
     const now = opts.now || SMT_now();
@@ -416,9 +453,11 @@
     // 3D-view slot: a static centered wordmark standing in for the dungeon view (nothing to wire up).
     const view = Array.from({ length: VH }, () => " ".repeat(VW));
     const put = (row, text) => { view[row] = center(text.slice(0, VW), VW); };
-    put(6, "DAILY DIGITAL");
-    put(7, "DEMON DUNGEON");
-    put(9, "a daily dungeon crawl");
+    put(1, "DAILY DIGITAL");
+    put(2, "DEMON DUNGEON");
+    put(4, "a daily dungeon crawl");
+    // Under it, this quarter's level as a line of days with a branch off each (see levelBones).
+    levelBones(now).forEach((l, i) => { if (7 + i < VH) view[7 + i] = ljust(l, VW).slice(0, VW); });
     // Sidebar: a pinned "RUMORS AND SECRETS" header (never scrolls) over an auto-advancing card ticker.
     const PW = 29, rule = " " + "-".repeat(PW - 1);
     const cards = opts.cards && opts.cards.length ? opts.cards : ["..."];
