@@ -2,6 +2,19 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.72 - Left or Right - Oct 11 2026, 01:43 HST
+
+![v0.72](screenshots/v0.72.png)
+
+The choice, face on.
+
+- **Two doors, side by side.** The day's two doors now stand together in the wall ahead, with `[ < LEFT ]` and `[ RIGHT > ]` under them (or the A and D keys). Open one and it shows `[ ENTER ]`. Listening at the wall tries each door in turn and says which one you're hearing.
+- **Look up: the sky.** There's no ceiling any more, only the night and the real moon at tonight's phase. `[ ^ ]` or the up arrow looks up; again looks down; the down arrow looks straight down. Found stairs show `[ DESCEND ]`.
+- **Ask the moon.** Search her, once a night. The fuller she is, the likelier she answers. A new moon says nothing.
+- **The line under the map names what you're looking at**: a locked door, a bare wall, the moon. A room's own name is said once, as you step in.
+- **The map is your path of choices**: each room a step left or right of the last, with the door you didn't take beside it.
+- **Saves:** runs started on v0.70 start fresh.
+
 ## v0.70 - One Room - Oct 11 2026, 01:20 HST
 
 ![v0.70](screenshots/v0.70.png)
