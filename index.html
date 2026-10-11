@@ -266,7 +266,11 @@
   function draw() {
     if (atTitle) return drawTitle();               // a stray redraw (the clock, a closing box) must never paint the run over the title
     if (!save) return;
-    try { document.getElementById("screen").innerHTML = colorize(SMT.renderScreen(save, extraToShow())); }
+    try {
+      if (Date.now() < squeezeUntil) save.squeeze = true;      // (only for this frame: never saved)
+      const html = colorize(SMT.renderScreen(save, extraToShow())); delete save.squeeze;
+      document.getElementById("screen").innerHTML = html;
+    }
     catch (err) {                                  // never freeze on a bad frame: say so, and keep the keys working
       console.error(err);
       document.getElementById("screen").textContent = "The screen could not be drawn. [R] begins a new run, [P] restores a password.";
@@ -1424,6 +1428,8 @@
     return true;
   }
 
+  let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
+  const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
   let contWait = false;                         // a search result is on screen, waiting for a click or a key
   let searchWait = null, searchGo = false;      // the moment a wall search takes before its result shows
   function act(name) {
@@ -1441,6 +1447,14 @@
       if (save.look) name = "search"; else       // looking up, [^] asks the moon
       name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
     }
+    // Out of breath: the refusal shows at once, the bar is pressed, and the line waits for a click like any result.
+    if (name === "search" && save && !searchGo && !contWait && !save.encounter && !save.dead && !save.look && !save.question
+        && RULES.breath(save) < 1 && (!RULES.available(save).door[save.facing] || RULES.available(save).locked[save.facing])) {
+      squeeze();
+      searchGo = true; try { act("search"); } finally { searchGo = false; }
+      if (save && document.getElementById("found").hidden) { contWait = true; draw(); }
+      return;
+    }
     // Searching a bare wall, or listening at a locked door, takes a moment: "KURA is searching" (or "listening"),
     // a dot at a time, then the result. Nothing else can be pressed meanwhile. Only the log line changes: no
     // dimming or other visual effect, ever. (Not at an open door, not looking up, not when she is out of breath.)
@@ -1453,6 +1467,7 @@
       searchWait = setInterval(() => {
         if (++dots <= 3) return paint();
         clearInterval(searchWait); searchWait = null; save.log = was;
+        squeeze();
         searchGo = true; try { act("search"); } finally { searchGo = false; }
         // The result waits on the log's middle line with a blinking _ until a click or a key (unless something opened over it).
         if (save && !save.dead && !save.encounter && !save.question && document.getElementById("found").hidden) { contWait = true; draw(); }
