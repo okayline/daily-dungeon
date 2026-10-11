@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.61.1";
+  const VERSION = "v0.62";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -184,21 +184,14 @@
   ];
 
   const SMT_now = now;
-  function renderScreen(st, extra, now) {
-    now = now || SMT_now(); extra = extra || "";
-    const idx = moonIndex(now), when = hst(now, st.tz);
-    const v = st.view;
-    const view = renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
-    // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
-    // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
-    const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
-    overlay(VH - 1, 16, `[ < ]  ${st.facing || "?"}  [ > ]`);
-    overlay(VH - 2, 20, "[  ^  ]");          // the day's step: forward, the way KURA faces
+  // The top box: moon phase/date header. Shared by the in-run screen and the title screen,
+  // since both show the same moon/date strip — only what sits below it differs.
+  function headerLines(omenText, tz, now) {
+    now = now || SMT_now();
+    const idx = moonIndex(now), when = hst(now, tz);
     const moons = ["(     )", "(    ))", "(  ))))", "())))))", "(((O)))", "((((())", "((((  )", "((    )"];
     const names = ["NEW", "CRESC", "HALF", "GIBB", "FULL", "GIBB", "HALF", "CRESC"];
     const long = ["NEW", "WAX CRESC", "1ST QTR", "WAX GIBB", "FULL", "WANE GIBB", "LAST QTR", "WANE CRESC"];
-    const r = s => "|" + ljust(s, W - 2) + "|";
-    const rc = s => "|" + center(s, W - 2) + "|";
     // The block moon at the far left: 4 rows. Lit columns fill in from the right as it waxes and empty toward the left as it wanes (northern sky: waxing is lit on the right, waning on the left).
     const LIT = ["    ", "   ░", "  ▓▓", " ███", "████", "███ ", "▓▓  ", "░   "][idx];
     const box = [" ╭────╮ ", ` │${LIT}│ `, ` │${LIT}│ `, " ╰────╯ "];
@@ -215,7 +208,7 @@
     const marks = bar(moons.map((_, i) => center(i === idx ? "^^^" : "", 8)).join(""));
     // The marker row holds only the ^^^ (the moon's day and phase are a line 1 status report).
     // The day's omen, in quotes and left-justified: at the left edge when it clears the ^^^, otherwise just after it.
-    const omenT = st.omenText ? '"' + st.omenText.replace(/^> "?/, "").replace(/"$/, "").slice(0, 30) + '"' : "";
+    const omenT = omenText ? '"' + omenText.replace(/^> "?/, "").replace(/"$/, "").slice(0, 30) + '"' : "";
     let row = marks.split("");
     if (omenT) {
       const at = marks.indexOf("^^^");
@@ -224,6 +217,39 @@
     }
     S.push("|" + box[3] + row.join("") + "|");
     S.push("+" + "=".repeat(78) + "+");
+    return S;
+  }
+
+  // Width check counts CJK characters (the weekday kanji) as two columns, as they show on screen.
+  // A line that comes out the wrong width would break the borders. In tests that is an error; on the
+  // page the inside of the line is trimmed or padded so the frame stays straight (and the game keeps going).
+  // Shared by every frame builder (the in-run screen and the title screen) since both end the same way.
+  function finishFrame(S) {
+    const cols = t => [...t].reduce((n, ch) => n + (/[　-鿿＀-￯]/.test(ch) ? 2 : 1), 0);
+    const strict = typeof module !== "undefined" && module.exports;
+    for (let n = 0; n < S.length; n++) {
+      const w = cols(S[n]);
+      if (w === W) continue;
+      if (strict) throw new Error(`bad width ${w}: ${S[n]}`);
+      const line = S[n], inner = line.slice(1, -1);
+      S[n] = line[0] + (w > W ? inner.slice(0, Math.max(0, inner.length - (w - W))) : inner + " ".repeat(W - w)) + line.slice(-1);
+    }
+    return S.join("\n");
+  }
+
+  function renderScreen(st, extra, now) {
+    now = now || SMT_now(); extra = extra || "";
+    const idx = moonIndex(now);
+    const v = st.view;
+    const view = renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
+    // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
+    // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
+    const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
+    overlay(VH - 1, 16, `[ < ]  ${st.facing || "?"}  [ > ]`);
+    overlay(VH - 2, 20, "[  ^  ]");          // the day's step: forward, the way KURA faces
+    const r = s => "|" + ljust(s, W - 2) + "|";
+    const rc = s => "|" + center(s, W - 2) + "|";
+    const S = headerLines(st.omenText, st.tz, now);
     // Right panel is 29 characters wide: a leading space plus 28.
     const PW = 29, rule = " " + "-".repeat(PW - 1);
     // Name gets 9 columns, level 3, then HP and MP each as 3/3 digits, so high levels still fit.
@@ -298,22 +324,81 @@
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
     const status = st.unsaved ? " NOT SAVED " : st.saved ? ` SAVED ${st.saved} ` : "";
     S.push("+==" + status + "=".repeat(74 - status.length - sys.length) + sys + "==+");
-    // Width check counts CJK characters (the weekday kanji) as two columns, as they show on screen.
-    const cols = t => [...t].reduce((n, ch) => n + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 2 : 1), 0);
-    // A line that comes out the wrong width would break the borders. In tests that is an error; on the page the
-    // inside of the line is trimmed or padded so the frame stays straight (and the game keeps going).
-    const strict = typeof module !== "undefined" && module.exports;
-    for (let n = 0; n < S.length; n++) {
-      const w = cols(S[n]);
-      if (w === W) continue;
-      if (strict) throw new Error(`bad width ${w}: ${S[n]}`);
-      const line = S[n], inner = line.slice(1, -1);
-      S[n] = line[0] + (w > W ? inner.slice(0, Math.max(0, inner.length - (w - W))) : inner + " ".repeat(W - w)) + line.slice(-1);
-    }
-    return S.join("\n");
+    return finishFrame(S);
   }
 
-  const api = { VERSION, moonNote, renderView, renderScreen, moonIndex, epochIndex, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  // TITLE SCREEN: reuses the real in-game frame's five zones with new content in each (see Part 11
+  // of the design doc), rather than a layout of its own. `opts` is supplied entirely by the caller
+  // (index.html) -- this function only formats what it's given; it fetches and schedules nothing.
+  //   opts.tz, opts.now        -- same as renderScreen, drive the header and the WEEK/EPOCH math
+  //   opts.omenText             -- today's shared omen (RULES.omen(SMT.utcDay()).text), for the header strip
+  //   opts.lean                 -- { law, chaos } vote counts for the current epoch, or null if not loaded yet
+  //   opts.cards                -- ordered array of single-line card strings for the sidebar ticker
+  //   opts.cardOffset           -- which line of the (wrapped) card ticker is on top this frame
+  function renderTitle(opts) {
+    opts = opts || {};
+    const now = opts.now || SMT_now();
+    const S = headerLines(opts.omenText || "", opts.tz, now);
+    // 3D-view slot: a static centered wordmark standing in for the dungeon view (nothing to wire up).
+    const view = Array.from({ length: VH }, () => " ".repeat(VW));
+    const put = (row, text) => { view[row] = center(text.slice(0, VW), VW); };
+    put(6, "DAILY DIGITAL");
+    put(7, "DEMON DUNGEON");
+    put(9, "a daily dungeon crawl");
+    // Sidebar: a pinned "RUMORS AND SECRETS" header (never scrolls) over an auto-advancing card ticker.
+    const PW = 29, rule = " " + "-".repeat(PW - 1);
+    const cards = opts.cards && opts.cards.length ? opts.cards : ["..."];
+    // One blank line between every card (Part 11), so the ticker's real cycle length is 2x the card count.
+    const content = []; for (const c of cards) { content.push(ljust(" " + c, PW)); content.push(""); }
+    const off = ((opts.cardOffset || 0) % content.length + content.length) % content.length;
+    const windowH = VH - 2;        // the header + rule take the first two sidebar rows
+    const ticker = Array.from({ length: windowH }, (_, i) => content[(off + i) % content.length]);
+    const stat = [ljust(" RUMORS AND SECRETS", PW), rule, ...ticker];
+    for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
+    S.push("+" + "=".repeat(78) + "+");
+    // Log box repurposed as cold, stable facts (WEEK/EPOCH/LEAN) that hold until the day rolls over.
+    const r = s => "|" + ljust(s, W - 2) + "|";
+    const label = (t, s) => ljust(t, 10) + s;
+    for (const m of [" > " + label("WEEK", weekLine(now, opts.tz)), " > " + label("EPOCH", epochLine(now)),
+      " > " + label("LEAN", leanLine(opts.lean))]) S.push(r(m));
+    S.push("+" + "-".repeat(78) + "+");
+    // Menu bar: same bracket-letter convention as the real in-game action bar.
+    const menu = " [N]EW RUN   [C]ONTINUE   [B]OARD   [?] ABOUT";
+    S.push("|" + menu + " ".repeat(78 - menu.length) + "|");
+    S.push("+" + "=".repeat(78) + "+");
+    return finishFrame(S);
+  }
+
+  // This real week's floor, as everyone sees it (not a personal countdown to any one save's own
+  // deadline) -- a floor always closes the coming Sunday, so there's nothing but calendar math here.
+  function weekLine(now, tz) {
+    const WD = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+    const today = localDay(now, tz), wd = (today + 3) % 7, left = 6 - wd;
+    return `${WD[wd]}, day ${wd + 1} of 7  -  ${left} day${left === 1 ? "" : "s"} left, this floor closes SUN`;
+  }
+
+  // The current lunar epoch (same reference moonIndex/epochIndex use) and how far into its ~29.5
+  // real days we are. Display rounds the epoch length down to a steady 29 for a clean "day X of 29".
+  function epochLine(now) {
+    const ref = Date.UTC(2000, 0, 6, 18, 14), syn = 29.530588853;
+    const idx = epochIndex(now), into = (now.getTime() - ref) / 86400000 - idx * syn;
+    const total = Math.floor(syn), day = Math.min(total, Math.floor(into) + 1), left = Math.max(0, total - day);
+    return `epoch ${idx}, day ${day} of ${total}  -  new shape in ${left} day${left === 1 ? "" : "s"}`;
+  }
+
+  // The current epoch's LAW/CHAOS tally (Part 10's faction seasons), as a lean + a little bar.
+  // `lean` is { law, chaos } fetched from the /season endpoint by the caller, or null before/if that load fails.
+  function leanLine(lean) {
+    const law = (lean && lean.law) || 0, chaos = (lean && lean.chaos) || 0, total = law + chaos;
+    if (!total) return "no votes logged yet this epoch";
+    const lawPct = Math.round((law / total) * 100), chaosPct = 100 - lawPct;
+    const side = law === chaos ? "EVEN" : law > chaos ? "LAW" : "CHAOS";
+    const BAR = 17, lead = Math.max(lawPct, chaosPct), filled = Math.round((lead / 100) * BAR);
+    const bar = "|".repeat(filled) + ".".repeat(BAR - filled);
+    return `this week leans ${side}   [${bar}]  ${lawPct} / ${chaosPct}`;
+  }
+
+  const api = { VERSION, moonNote, renderView, renderScreen, renderTitle, moonIndex, epochIndex, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);

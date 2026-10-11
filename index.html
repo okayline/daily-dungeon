@@ -125,6 +125,9 @@
 <script>
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   let save = null;
+  // TITLE SCREEN: shown first on every load (even over a save in progress -- CONTINUE is the explicit
+  // resume). atTitle gates the click/keydown handlers over at the bottom of this file.
+  let atTitle = true, titleTimer = null, titleOffset = 0, titleCards = [], titleLean = null, titleDeep = null;
 
   // Color only the minimap rows (right panel) and the moon marker.
   function colorize(text) {
@@ -212,6 +215,30 @@
       // The ALIGN arrow (which way the last action pulled KURA) glows white.
       .replace(/&lt;( ?\[(?:LAW|NEU|CHA)\])/, '<span class="pull">&lt;</span>$1')
       .replace(/(\[(?:LAW|NEU|CHA)\] ?)&gt;/, '$1<span class="pull">&gt;</span>');
+  }
+  // The title screen's own colorizer: the header (rows 0-5) is identical to the in-run screen's and
+  // gets the same treatment; everything below it is new (no minimap, no party, no [Y]/[N] questions).
+  function colorizeTitle(text) {
+    const lines = text.split("\n");
+    const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);
+    return lines.map((line, i) => {
+      if (i === 1) return moonBox(esc(line)).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
+        .replace(/([日月火水木金土])/, '<span class="kanji"><span class="g">$1</span></span>');
+      if (i === 2 || i === 3) return moonBox(esc(line));
+      if (i === 4) return moonBox(esc(line)).replace("^^^", '<span class="moon">^^^</span>');
+      // WEEK / EPOCH / LEAN: the same three rows the in-run log box occupies.
+      if (i >= lines.length - 6 && i <= lines.length - 4) return `|<span class="logline">${esc(line.slice(1, -1))}</span>|`;
+      // The menu bar: [N]EW RUN [C]ONTINUE [B]OARD [?] ABOUT, same bracket convention as the real bar.
+      if (i === lines.length - 2) {
+        const b = (txt, act, ok) => `<span class="btn${ok ? "" : " off"}" data-act="${act}">${txt}</span>`;
+        return esc(line)
+          .replace("[N]EW RUN", b("[N]EW RUN", "title-new", true))
+          .replace("[C]ONTINUE", b("[C]ONTINUE", "title-continue", titleCanContinue()))
+          .replace("[B]OARD", b("[B]OARD", "title-board", !!LEADERBOARD_URL))
+          .replace("[?] ABOUT", b("[?] ABOUT", "title-about", true));
+      }
+      return esc(line);
+    }).join("\n");
   }
 
   // Line 3 (voices, flavor, clues) stays put for at least 2 actions and 2 seconds before the next one replaces it,
@@ -319,14 +346,89 @@
     const stash = suffix => { try { if (raw) localStorage.setItem(KEY + suffix, raw); } catch (e) {} };   // keep what we can't use, never just overwrite it
     try { raw = localStorage.getItem(KEY); s = JSON.parse(raw || "null"); } catch (e) { stash("-corrupt"); s = null; }
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.dispatchEvent(new Event("resize")));   // popups are placed by measuring the font
-    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 7 && s.party) {
-      try { save = s; tick(); flashStatus(); draw(); if (!nameBox()) { encounterBox(); altarBox(); } return; }
-      catch (err) { console.error(err); stash("-corrupt"); save = null; }
-    } else if (s) stash("-old");
-    save = RULES.reset({});
+    // The title screen shows first either way (CONTINUE is the explicit resume now); this only decides
+    // whether CONTINUE has anything to resume. tick()/draw() wait for that button, same for a fresh save.
+    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 7 && s.party) save = s;
+    else { if (s) stash("-old"); save = null; }
+    showTitle();
+  }
+
+  // TITLE SCREEN -----------------------------------------------------------------------------------
+  const titleCanContinue = () => !!(save && save.dungeon && save.dungeon.floor && save.dungeon.floor.v === 7 && save.party);
+  // The three hard-number cards that cost nothing new (Part 11, build-order note): today's shared omen
+  // needs no save at all, and the other two just read the leaderboard's existing endpoints.
+  function buildTitleCards() {
+    const cards = [];
+    if (titleLean) {
+      const total = titleLean.law + titleLean.chaos;
+      if (total) {
+        const chaosPct = Math.round((titleLean.chaos / total) * 100);
+        cards.push(`Faction lean: ${titleLean.chaos >= titleLean.law ? "CHAOS " + chaosPct : "LAW " + (100 - chaosPct)}%`);
+      }
+    }
+    if (titleDeep) cards.push(`Deepest floor: B${titleDeep}F`);
+    cards.push(RULES.omen(SMT.utcDay(SMT.now())).text.replace(/^> /, ""));
+    return cards;
+  }
+  async function loadTitleExtras() {
+    if (!LEADERBOARD_URL) return;
+    try {
+      const r = await fetch(`${LEADERBOARD_URL}/season`);
+      if (r.ok) { const d = await r.json(); if (typeof d.law === "number" && typeof d.chaos === "number") titleLean = { law: d.law, chaos: d.chaos }; }
+    } catch (e) {}
+    try {
+      const r = await fetch(`${LEADERBOARD_URL}/top?n=1`);
+      if (r.ok) { const d = await r.json(); if (d.rows && d.rows[0]) titleDeep = d.rows[0].floor; }
+    } catch (e) {}
+    if (atTitle) { titleCards = buildTitleCards(); drawTitle(); }
+  }
+  function showTitle() {
+    atTitle = true;
+    titleOffset = 0;
+    titleCards = buildTitleCards();     // today's omen needs no network; LEAN/deepest-floor fill in once loaded
+    loadTitleExtras();
+    drawTitle();
+    if (titleTimer) clearInterval(titleTimer);
+    // Medium/slow scroll, no pause-on-hover; the ticker just keeps advancing line by line.
+    titleTimer = setInterval(() => { titleOffset++; drawTitle(); }, 1400);
+  }
+  function leaveTitle() {
+    atTitle = false;
+    if (titleTimer) { clearInterval(titleTimer); titleTimer = null; }
+  }
+  function drawTitle() {
+    try {
+      document.getElementById("screen").innerHTML = colorizeTitle(SMT.renderTitle({
+        tz: SMT.zone(), now: SMT.now(), omenText: RULES.omen(SMT.utcDay(SMT.now())).text,
+        lean: titleLean, cards: titleCards, cardOffset: titleOffset,
+      }));
+    } catch (err) {
+      console.error(err);
+      document.getElementById("screen").textContent = "The title screen could not be drawn. Reload to try again.";
+    }
+    document.getElementById("ver").textContent = SMT.VERSION;
+  }
+  // NEW RUN with nothing to lose skips the confirm; CONTINUE only fires with something real to resume.
+  function freshRun() {
+    save = RULES.reset(save || {});
     save.history = [];
-    remember("");
-    persist(); draw(); nameBox();
+    remember(""); persist(); draw(); nameBox();
+  }
+  function titleAction(name) {
+    if (!atTitle) return;
+    if (name === "title-continue") {
+      if (!titleCanContinue()) return;
+      leaveTitle();
+      try { tick(); flashStatus(); draw(); if (!nameBox()) { encounterBox(); altarBox(); } }
+      catch (err) { console.error(err); try { localStorage.setItem(KEY + "-corrupt", localStorage.getItem(KEY)); } catch (e) {} save = null; freshRun(); }
+    } else if (name === "title-new") {
+      if (save) resetBox();           // something exists to lose: confirm first (answerConfirm -> act("reset") leaves the title)
+      else { leaveTitle(); freshRun(); }
+    } else if (name === "title-board") {
+      if (LEADERBOARD_URL) toggleBoard(true);
+    } else if (name === "title-about") {
+      showAbout(true);
+    }
   }
 
   // LOG: the run's adventure log, newest first. [C]LOSE, L or Escape closes it.
@@ -646,13 +748,15 @@
   function showAbout(open) {
     const box = document.getElementById("about");
     box.hidden = !open;
-    if (!open || !save) return;
-    const k = save.stats || {}, cx = RULES.codex(save);
+    if (!open) return;
+    // From the title screen, before any run exists, there's no THIS RUN or CODEX section to show yet.
+    const k = (save && save.stats) || {}, cx = save ? RULES.codex(save) : null;
     const count = list => { const all = list.flatMap(g => g.entries); return `${all.filter(e => e.known).length} / ${all.length}`; };
     const two = (a, b, c, d) => "  " + (a + " ").padEnd(16, ".") + " " + String(b).padEnd(10) + " " + (c + " ").padEnd(16, ".") + " " + d;
     const line = "-".repeat(71);
+    const head = save ? "{{CODEX}}   {{PASS}}" : "";
     const text = [
-      "DAILY DIGITAL DEMON DUNGEON   {{CODEX}}   {{PASS}}" + ("build " + SMT.VERSION).padStart(71 - 30 - 7 - 13), line,
+      "DAILY DIGITAL DEMON DUNGEON   " + head + ("build " + SMT.VERSION).padStart(71 - 30 - head.length), line,
       "A dungeon crawler you play one charge a day, on the real calendar.",
       "Each floor is four wings. Three times, two locked doors offer two",
       "rooms: take one and the other seals. Listen at the doors; dead ends",
@@ -660,12 +764,11 @@
       "The moon, the omens and the demons follow real time.", "",
       "Search as much as you like. Talk to demons, or fight them.",
       "Open your one new door. Come back tomorrow.", "",
-      "THIS RUN",
-      two("Floor", save.floor, "Day", save.day),
-      two("Turns", save.steps || 0, "Alignment", String(save.align).slice(0, 3)),
-      two("Demons met", k.met || 0, "Items found", k.items || 0), "",
-      "CODEX",
-      two("Demons", count(cx.demons), "Items", count(cx.items)), "",
+      ...(save ? ["THIS RUN",
+        two("Floor", save.floor, "Day", save.day),
+        two("Turns", save.steps || 0, "Alignment", String(save.align).slice(0, 3)),
+        two("Demons met", k.met || 0, "Items found", k.items || 0), ""] : []),
+      ...(cx ? ["CODEX", two("Demons", count(cx.demons), "Items", count(cx.items)), ""] : []),
       "KEYS",
       "  [^] / up arrow ..... go through the door KURA faces",
       "  [ < ] [ > ] / arrows ... turn (free)",
@@ -817,7 +920,9 @@
         } else { loadCode = null; draw(); restoreBoxes(); }
         return;
       }
-      if (yes) { if (kind === "hold") holdOK = true; else resetOK = true; act(kind); } else { draw(); restoreBoxes(); }
+      if (yes) { if (kind === "hold") holdOK = true; else resetOK = true; act(kind); }
+      else if (atTitle) drawTitle();          // NEW RUN asked from the title screen, then declined: back to the title
+      else { draw(); restoreBoxes(); }
       return;
     }
     const dir = armed;
@@ -1145,6 +1250,9 @@
   }
 
   function act(name) {
+    // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
+    // screen (resetBox() -> answerConfirm(true) -> act("reset")); that's the title's own exit into the game.
+    if (atTitle) leaveTitle();
     const okHold = holdOK, okReset = resetOK; holdOK = resetOK = false;      // a confirmation is good for this one call only
     if (replayTimer) finishReplay();
     prevDemonHp = save && save.encounter ? save.encounter.hp : null;
@@ -1248,6 +1356,11 @@
   document.getElementById("screen").addEventListener("click", e => {
     const fb = document.getElementById("found");
     if (!fb.hidden && fb.dataset.mode !== "encounter") return;   // a box waiting for its answer: the buttons behind it do nothing
+    if (atTitle) {
+      const b = e.target.closest(".btn");
+      if (b && !b.classList.contains("off")) titleAction(b.dataset.act);
+      return;
+    }
     const b = e.target.closest(".btn");
     if (!b || (b.classList.contains("off") && b.dataset.act !== "forward")) return;
     act(b.dataset.act);
@@ -1302,7 +1415,7 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
     if (e.target && e.target.tagName === "INPUT") { if (key === "enter") { e.preventDefault(); confirmName(); } return; }   // typing the name
-    if (needsName()) { const i = document.getElementById("playername"); if (i) i.focus(); if (key === "enter") confirmName(); return; }   // nothing else works until the run has a name
+    if (!atTitle && needsName()) { const i = document.getElementById("playername"); if (i) i.focus(); if (key === "enter") confirmName(); return; }   // nothing else works until the run has a name
     const fbox = document.getElementById("found");
     if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (key === "enter") introOK(); return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
@@ -1382,6 +1495,14 @@
       else if (key === "enter" || key === "p") { e.preventDefault(); submitScore(); }
       else if (key === "o") { e.preventDefault(); copyLog(document.querySelector("#log [data-copy]")); }
       else if (key === "d") { e.preventDefault(); downloadLog(); }
+      return;
+    }
+    if (atTitle) {
+      e.preventDefault();
+      if (key === "n") titleAction("title-new");
+      else if (key === "c") titleAction("title-continue");
+      else if (key === "b") titleAction("title-board");
+      else if (key === "?") titleAction("title-about");
       return;
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
