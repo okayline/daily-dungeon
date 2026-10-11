@@ -589,12 +589,18 @@
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
     if (save && (save.ichor || 0) > 0) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
       text: "Demon blood and old light. Heals demons. Not meant for KURA." });
-    // Hold Omen: STANDBY, moved into the bag. Enter asks to confirm (it spends the day), same as it always has.
-    if (save && RULES.available(save).hold) invList.unshift({ name: "Hold Omen", holdOmen: true, count: 1, tier: "OMEN",
-      text: "Stay put today and bank tonight's omen, to spend in place of a later day's own." });
-    // Release Omen (was THE HELD DAY): a banked omen, only ever present after a held day. Enter spends it in place of today's own.
-    if (save && save.bankedOmen !== undefined && !save.useBanked) invList.unshift({ name: "Release Omen", omen: true, count: 1, tier: "OMEN",
-      text: "A day kept back, on standby. Spend it in place of today's own." });
+    // Hold Omen / Release Omen: one morphing slot in the bag. Normally it's Hold Omen; once a day's
+    // held, it becomes Release Omen (was THE HELD DAY); releasing it starts a flat 7-real-day cooldown,
+    // during which the slot shows Hold Omen again but greyed out, with the days left to go.
+    if (save) {
+      const av = RULES.available(save);
+      if (save.bankedOmen !== undefined && !save.useBanked) invList.unshift({ name: "Release Omen", omen: true, count: 1, tier: "OMEN",
+        text: "A day kept back, on standby. Spend it in place of today's own." });
+      else if (av.hold) invList.unshift({ name: "Hold Omen", holdOmen: true, count: 1, tier: "OMEN",
+        text: "Stay put today and bank tonight's omen, to spend in place of a later day's own." });
+      else if (av.omenCoolingDown) invList.unshift({ name: "Hold Omen", holdOmen: true, cooling: true, count: 1, tier: "OMEN",
+        text: `Spent recently. ${av.omenCooldownDays} real day${av.omenCooldownDays === 1 ? "" : "s"} left before KURA can hold again.` });
+    }
     invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
     pre.innerHTML = "";
@@ -615,13 +621,14 @@
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
       `${i === invSel ? ">" : " "} ${i < 9 ? i + 1 : " "}  ${it.ichor ? `ICHOR  (${save.ichor})` : it.name + (it.count > 1 ? " x" + it.count : "")}`.replace(/^(.{42}).{4,}$/, "$1..."),
-      "btn", i));
+      it.cooling ? "btn off" : "btn", i));
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
     const it = invList[invSel];
     if (it) {
       add(" ");
       const tag = it.ichor ? `${save.ichor} in hand` : "";
       const lines = it.ichor ? [it.text, "Enter: choose who gets it."]
+        : it.cooling ? [it.text, "Not available yet."]
         : it.holdOmen ? [it.text, "[ENTER] asks to confirm."]
         : it.omen ? [it.text, "[ENTER] calls it back."]
         : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
@@ -673,6 +680,7 @@
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
       "    Hold Omen ......... make camp (uses the day's charge; restores the party; tonight's rest runs deeper)",
       "    Release Omen ...... only once a held day is banked: spend it in place of today's own",
+      "    (releasing greys Hold Omen out for 7 real days after)",
       "  [C]ODEX ............ every demon and item found, over all runs (press C on the main screen)",
       "  [L]OG .............. the adventure log",
       ...(LEADERBOARD_URL ? ["  {{BOARD}} ........... the leaderboard (post your score when a run ends)"] : []),
@@ -729,6 +737,7 @@
   function useInv(i, drink) {
     const it = invList[i];
     if (!it || !save) return;
+    if (it.cooling) return;   // greyed out during the post-release cooldown: not selectable
     // Hold Omen still asks to confirm first, same as STANDBY always did -- just reached from the bag now.
     if (it.holdOmen) { showInv(false); holdBox(); return; }
     const log = save.log;

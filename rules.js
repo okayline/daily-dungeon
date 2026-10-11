@@ -1325,16 +1325,23 @@
 
   // USE BANKED OMEN: spend a day STANDBY once set aside, in place of today's own omen. Free to call --
   // it doesn't cost the day's cell, it just picks which day's conditions govern the rest of today.
-  // One-shot: gone at the next sunrise either way, used or not.
+  // One-shot: gone at the next sunrise either way, used or not. Releasing it starts a flat 7-real-day
+  // cooldown on holding again (see onOmenCooldown) -- counted from release, not from the original hold,
+  // and always 7 real days regardless of the calendar week, so there's no "wait for Sunday" discount.
   function useBankedOmen(st) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.bankedOmen === undefined) { st.log = "> There is no held day to call back."; return show(st); }
     if (st.useBanked) { st.log = "> Today is already that held day."; return show(st); }
     st.useBanked = true;
+    st.omenCooldownDay = st.day;
     st.log = "> " + pick(["KURA calls back a held day.", "The remembered day settles over this one.", "KURA borrows a day from the dark."]);
     return show(st);
   }
+
+  // Flat 7-real-day cooldown on holding again, clocked from the day Release Omen was used (st.day
+  // already counts real days elapsed, skipped days included -- see sync()).
+  const onOmenCooldown = st => st.omenCooldownDay !== undefined && (st.day - st.omenCooldownDay) < 7;
 
   // FREESTEPS (hidden, key X): a testing cheat. Toggles infinite steps: the day's step is never spent.
   function freesteps(st) {
@@ -1357,7 +1364,7 @@
     const exs = w && w.exits.length ? "EXITS " + w.exits.map(j => fl.kinds[j] + (fl.rooms[j] ? "*" : fl.sealed && fl.sealed[j] ? "x" : "")).join("/") + " CLUE " + w.clueKind : null;
     const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/${fl.pairs + 2}`, stairs, exs];
     const row2 = [`CELL ${(st.today || {}).stepped ? "spent" : "ready"}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
-      `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`];
+      `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`, onOmenCooldown(st) ? `OMEN COOLDOWN ${7 - (st.day - st.omenCooldownDay)}d` : null];
     const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`,
       `OMEN ${omen(effectiveOmenDay(st)).key}${st.useBanked ? "(banked)" : ""}${st.bankedOmen !== undefined ? " +BANK" : ""}`,
       `BONUS ${st.bonusCount || 0}/2${fl.pendingBonus ? " +PEND" : ""}${fl.pendingAnti ? " +PEND(void)" : ""}`];
@@ -1388,8 +1395,13 @@
     const d = st.dungeon, t = st.today || {};
     const out = d && !st.dead ? exits(d).concat(d.floor.rooms[d.at].falseDoors || []) : [];
     // SEARCH works on the wall KURA faces; a door (or found stairs) can't be searched.
-    const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps),
-      useBankedOmen: !st.dead && st.bankedOmen !== undefined && !st.useBanked };   // a door can be searched too (it just says so)
+    const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps) && !onOmenCooldown(st),
+      useBankedOmen: !st.dead && st.bankedOmen !== undefined && !st.useBanked,
+      // For the bag's single Hold/Release Omen slot: whether it should show greyed-out, and the count to show.
+      // (Not while Release Omen itself is still showing -- that takes priority the same day it's released,
+      // before the next sync() clears bankedOmen.)
+      omenCoolingDown: !st.dead && !st.encounter && !(st.bankedOmen !== undefined && !st.useBanked) && onOmenCooldown(st),
+      omenCooldownDays: onOmenCooldown(st) ? 7 - (st.day - st.omenCooldownDay) : 0 };   // a door can be searched too (it just says so)
     const spent = !!t.stepped && !st.freeSteps;           // a locked door needs the day's key; open doors are always free
     res.locked = {}; res.door = {};
     for (const x of CW) {
@@ -1412,7 +1424,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "omenDay", "bankedOmen", "useBanked", "bonusEpoch", "bonusCount", "lastBonusDay"]) delete st[k];
+      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
