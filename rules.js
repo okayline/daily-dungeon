@@ -2886,13 +2886,32 @@
   // lean -- the game itself never talks to the counters table, it just reports what it already tracks.
   // stats: a few plain counts from the run, for the title screen's running totals (see the Worker's /stats). Nothing
   // here ranks anyone, and nothing names anyone.
+  // THE LEVEL, LAID OUT AS ITS DAYS, for the end-of-run screen: one column a day. [v] is where she woke, each < >
+  // a day's two doors, [?] the last day's lone door, [^] the way up. Under each: how many of that day's rooms
+  // she walked into (- for a wing she never reached), and what the two doors offered, by feel. A mark shows where the run ended.
+  const MAP_FEEL = { den: "warm", bay: "hum", relay: "signal", vault: "cold", forge: "ash", altar: "glow", archive: "lights", void: "bare" };
+  function levelMap(st) {
+    const d = st.dungeon; if (!d || !d.floor || !Array.isArray(d.floor.offers)) return [];
+    const f = d.floor, n = f.pairs + 1, W = 7, col = i => 7 + i * W, here = (f.rooms[d.at] || {}).wing;
+    const row = (label, cell) => { let s = label.padEnd(7); for (let i = 0; i < n; i++) s += String(cell(i)).padEnd(W); return s.replace(/\s+$/, ""); };
+    // (Every wing has three rooms, so a count of them says nothing: this row is how many of the three she walked into.)
+    const rooms = i => { let c = 0, v = 0; f.rooms.forEach((r, j) => { if (r && r.wing === i) { c++; if (RS(d, j).visited) v++; } }); return c ? `${v}/${c}` : "-"; };
+    let chain = " ".repeat(7);
+    for (let i = 0; i < n; i++) chain += (i === 0 ? "[v]" : i === n - 1 ? "[?]" : "< >") + (i < n - 1 ? "----" : "--[^]");
+    const left = d.deadline !== undefined && st.today ? d.deadline - st.today.date : null;
+    const out = [` ${st.floor}   the level the run ended on` + (left === null ? "" : left < 0 ? "        the dark took it" : `        ${left} day${left === 1 ? "" : "s"} were left`), "",
+      row(" day", i => i + 1), chain, row(" seen", rooms),
+      row(" offer", i => (i < f.pairs && MAP_FEEL[f.offers[i][0]]) || ""), row("", i => (i < f.pairs && MAP_FEEL[f.offers[i][1]]) || "")];
+    if (here !== undefined && here < n) out.push(" ".repeat(col(here)) + "^ here");
+    return out;
+  }
   const score = st => { const k = st.stats || {}, pacts = st.pacts || [];
     return { run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: k.beaten || 0, turns: st.steps || 0, align: String(st.align || "NEUTRAL").toUpperCase(),
       killer: st.killer || "",
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0,
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0 } }; };
-  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
+  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

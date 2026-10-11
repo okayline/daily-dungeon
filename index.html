@@ -713,8 +713,8 @@
         `${(save.log || "").replace(/^> (Day \d+\. )?/, "")}\n\n` +
         RULES.summary(save).map(([k, v]) => "  " + (k + " ").padEnd(15, ".") + " " + v).join("\n") +
         "\n\n" : "";
-      // THE PATH: the whole run as the choices made, floor by floor (the long view; see RULES.pathView).
-      let path = ""; try { const pv = save ? RULES.pathView(save) : []; if (pv.length) path = pv.join("\n") + "\n\n"; } catch (e) { console.error(e); }
+      // Once the run is over: the level she ended on, laid out as its days (see RULES.levelMap).
+      let path = ""; try { const pv = save && save.dead ? RULES.levelMap(save) : []; if (pv.length) path = pv.join("\n") + "\n\n"; } catch (e) { console.error(e); }
       // The CODEX opens from here: a button at the top of the log.
       const pre = box.querySelector("pre");
       logText = "DAILY DIGITAL DEMON DUNGEON " + SMT.VERSION + "  -  " + hstDate() + "\n\n" + end + path + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
@@ -1450,10 +1450,10 @@
     }
     // Searching a bare wall, or listening at a locked door, takes a moment: "KURA is searching" (or "listening"),
     // a dot at a time, then the result. Nothing else can be pressed meanwhile. Only the log line changes: no
-    // dimming or other visual effect, ever. (Not at an open door, not looking up, not when she is out of breath.)
+    // dimming or other visual effect, ever. (Every wall and every door, open or shut. Not looking up, and not when she is out of breath.)
     if (searchWait) return;
     if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.look && !save.question
-        && RULES.breath(save) >= 1 && (!RULES.available(save).door[save.facing] || RULES.available(save).locked[save.facing])) {
+        && RULES.breath(save) >= 1) {
       const was = save.log, doing = RULES.available(save).locked[save.facing] ? "listening" : "searching"; let dots = 0;
       const paint = () => { save.log = `> KURA is ${doing}` + " .".repeat(dots); draw(); };
       paint();

@@ -364,11 +364,11 @@
     // It closes around the middle of what is drawn (columns 5 to 21 of the 24: the new-moon end is blank), so both
     // sides shrink evenly: a column and a half a side for each breath spent, and nothing left at 0.
     const bar = PHASE.join(""), shut = Math.max(0, Math.min(9, Math.round((6 - (st.breathNow === undefined ? 6 : st.breathNow)) / 6 * 9))), lo = 5 + shut, hi = 22 - shut;
-    const phaseV = " ".repeat(3 + 3 * idx + DOT) + ".", top = Math.max(lo, hi);
+    const phaseV = " ".repeat(1 + 3 * idx + DOT) + ".", top = Math.max(lo, hi);
     // For a second after a search (st.squeeze, set by the page for that one frame), a > and a < press on what is
     // left of it from either side.
     const mark = st.squeeze ? "><" : "  ";
-    const phaseRow = "   " + (shut ? " ".repeat(lo - 1) + mark[0] + bar.slice(lo, top) + mark[1] + " ".repeat(24 - top - 1) : bar);
+    const phaseRow = " " + (shut ? " ".repeat(lo - 1) + mark[0] + bar.slice(lo, top) + mark[1] + " ".repeat(24 - top - 1) : bar);
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
       rule, money, mapHead, ...mp.map(m => " ".repeat(mapPad) + m), "", ...(mapRows === 4 ? [""] : []), rule, bottom];
     stat.splice(stat.length - 3, 3, phaseV, phaseRow, bottom);
