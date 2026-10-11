@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.84 - Searching . . . - Oct 11 2026, 06:18 HST
+
+![v0.83](screenshots/v0.83.png)
+
+- **A search takes a moment.** The log reads "KURA is searching", a dot at a time, and then what she found. Listening at a locked door does the same.
+- **Tired searches are slower.** The lower her breath, the longer that moment lasts.
+- Fixed a log line that could come out as "undefined" when looking through an open arch twice.
+
 ## v0.83 - Breath - Oct 11 2026, 05:46 HST
 
 ![v0.83](screenshots/v0.83.png)
