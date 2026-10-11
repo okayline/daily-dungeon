@@ -1485,23 +1485,45 @@
     if (!save || !save.dungeon) return [];
     const k = save.stats || {}, own = [], lvl = save.floor, n = (v, one, many) => `${v} ${v === 1 ? one : many}`;
     const party = (save.party || []).slice(1).filter(q => q.hp > 0).map(q => q.name);
-    own.push(`Day ${save.day || 1}, turn ${save.steps || 0}, ${lvl}`);
-    if (party.length) own.push(`With her: ${party.join(", ")}`); else own.push("She walks alone");
-    if (k.met) own.push(`${n(k.met, "demon", "demons")} met, ${k.beaten || 0} beaten, ${k.fled || 0} fled from`);
-    if (k.recruited) own.push(`${n(k.recruited, "pact", "pacts")} made this run`);
-    if (k.searches) own.push(`${n(k.searches, "search", "searches")} so far, ${k.items || 0} things found`);
-    if (k.unlocks) own.push(`${n(k.unlocks, "door", "doors")} unlocked`);
-    if (k.floors) own.push(`${n(k.floors, "level", "levels")} climbed`);
-    if (save.silver) own.push(`${save.silver} SILVER in hand`);
-    if (save.align && save.align !== "NEUTRAL") own.push(`She leans ${save.align}`);
+    // (Nothing the screen already shows beside it: no SILVER, no lean, no bare day and turn.)
+    const d = save.dungeon, rooms = (d.state || []).filter(r => r && r.visited).length, pacts = (save.pacts || []).filter(q => q.on);
+    const hurt = (save.party || []).filter(q => q.hp > 0 && q.hp < q.hpmax / 2).map(q => q.name), down = (save.party || []).slice(1).filter(q => q.hp <= 0).map(q => q.name);
+    const thin = (save.party || []).slice(1).filter(q => q.hp > 0 && q.patience !== undefined && q.patience <= 2).map(q => q.name);
+    const left = d.deadline !== undefined && save.today ? d.deadline - save.today.date : null, list = a => (a.length > 2 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a.join(" and "));
+    own.push(`${n(rooms, "room", "rooms")} of ${lvl} walked so far`);
+    if (left !== null) own.push(left <= 0 ? `The dark takes ${lvl} tonight` : `${n(left, "day", "days")} before the dark takes ${lvl}`);
+    own.push((save.today || {}).stepped ? "Today's key is spent. Another comes at dawn" : "Today's key is still in hand");
+    if (party.length) own.push(`${list(party)} ${party.length === 1 ? "walks" : "walk"} with her`); else own.push("She walks alone");
+    if (down.length) own.push(`${list(down)} ${down.length === 1 ? "has" : "have"} fallen and ${down.length === 1 ? "is" : "are"} carried`);
+    if (hurt.length) own.push(`${list(hurt)} ${hurt.length === 1 ? "is" : "are"} badly hurt`);
+    if (thin.length) own.push(`${list(thin)} ${thin.length === 1 ? "is" : "are"} running out of patience`);
+    if (pacts.length) own.push(`A pact holds with ${list(pacts.map(q => q.name))}`);
+    if (k.met) own.push(`${n(k.met, "demon", "demons")} met this run: ${k.beaten || 0} beaten, ${k.fled || 0} run from`);
+    if (k.demonTalks) own.push(`She has stopped to talk with a demon ${n(k.demonTalks, "time", "times")}`);
+    if (k.gifts) own.push(`${n(k.gifts, "gift", "gifts")} offered to demons, ${k.refused || 0} thrown back`);
+    if (k.silent) own.push(`Asked a question, she said nothing ${n(k.silent, "time", "times")}`);
+    if (k.partyTalks) own.push(`The party has had something to say ${n(k.partyTalks, "time", "times")}`);
+    if (k.confided) own.push(`${n(k.confided, "thing", "things")} confided to her in the dark`);
+    if (k.searches) own.push(`${n(k.searches, "search", "searches")} of the walls, ${k.items || 0} things found`);
+    if (k.maxWall >= 5) own.push(`Her longest stay at one wall: ${k.maxWall} searches`);
+    if (k.rare) own.push(`${n(k.rare, "rare thing", "rare things")} found this run`);
+    if (k.broken) own.push(`${n(k.broken, "thing", "things")} broken in her hands, ${k.insides || 0} with something inside`);
+    if (k.unlocks) own.push(`${n(k.unlocks, "door", "doors")} unlocked, ${n(k.steps || 0, "room", "rooms")} entered`);
+    if (k.floors) own.push(`${n(k.floors, "level", "levels")} climbed since she woke`);
+    if (k.standby) own.push(`${n(k.standby, "night", "nights")} spent on STANDBY`);
+    if (save.bankedOmen !== undefined) own.push("An omen is held in reserve");
+    if (k.fixtures) own.push(`${n(k.fixtures, "fixture", "fixtures")} put to use`);
+    if (k.offerings) own.push(`${n(k.offerings, "offering", "offerings")} made at a terminal`);
+    if (k.ichorDrunk) own.push(`ICHOR drunk ${n(k.ichorDrunk, "time", "times")}, ${k.trips || 0} bad`);
     if (k.moonAsked) own.push(`The moon asked ${n(k.moonAsked, "time", "times")}, answered ${k.moonAnswered || 0}`);
     if (k.breathOut) own.push(`Out of breath ${n(k.breathOut, "time", "times")}`);
+    if ((save.items || []).length) own.push(`${n(save.items.length, "thing", "things")} in the bag`);
     const here = ((titleStats && titleStats.here && titleStats.here.levels) || []).find(x => x.level === (save.height || 1));
     const others = rumorCards(save.height || 1);
     if (here && here.n > 1) others.unshift(`${n(here.n - 1, "other is", "others are")} on ${lvl} today`);
-    // One of hers, one of theirs, in turn.
-    const out = [];
-    for (let i = 0; i < Math.max(own.length, others.length); i++) { if (own[i]) out.push(own[i]); if (others[i]) out.push(others[i]); }
+    // Two of hers, then one of theirs (other players, the level), and round again. Whichever list is shorter repeats.
+    const out = [], turns = Math.max(Math.ceil(own.length / 2), others.length);
+    for (let i = 0; i < turns; i++) { out.push(own[(2 * i) % own.length], own[(2 * i + 1) % own.length]); if (others.length) out.push(others[i % others.length]); }
     return out;
   }
   // It is typed, not scrolled: a line appears a letter at a time, as if at a terminal, with a _ at the end; it
@@ -1525,7 +1547,7 @@
         wait = /[.,:;!?]/.test(ch) ? 520 : ch === " " ? 170 : 110 + Math.random() * 90;    // a slow hand: about six letters a second, a breath at punctuation
         if (typeN >= typeLine.length) { typeMode = "hold"; wait = 3200; }
       } else if (typeMode === "hold") { typeMode = "delete"; wait = 30; }
-      else if (typeMode === "delete") { typeN = Math.max(0, typeN - 2); wait = 18; if (typeN === 0) { typeMode = "gap"; wait = 500; } }
+      else if (typeMode === "delete") { typeN = Math.max(0, typeN - 1); wait = 45; if (typeN === 0) { typeMode = "gap"; wait = 700; } }   // one letter at a time, about twenty a second
       const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml();
     } catch (e) {}
     setTimeout(typeStep, wait);
