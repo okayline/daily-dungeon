@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.95 - The Locked Drawer - Oct 11 2026, 10:51 HST
+
+![v0.95](screenshots/v0.95.png)
+
+- **The developer's testing tools are behind a password now.** The hidden keys do nothing until it is given.
+- **A run that used one can't post a score,** and its last page says so.
+
 ## v0.94 - The Name in Lights - Oct 11 2026, 09:15 HST
 
 ![v0.94](screenshots/v0.94.png)
