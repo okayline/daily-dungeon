@@ -1486,6 +1486,7 @@
   function freesteps(st) {
     st = copy(st);
     st.freeSteps = !st.freeSteps;
+    if (st.freeSteps) st.cheated = true;   // a run that ever used a cheat can't post a score (see the page's submitScore)
     st.log = st.freeSteps ? "> (cheat) Infinite steps ON. The day's step is never spent." : "> (cheat) Infinite steps OFF.";
     return show(st);
   }
@@ -1517,6 +1518,7 @@
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
     st.clockOffset = (st.clockOffset || 0) + 1;
+    st.cheated = true;                     // jumping the clock marks the run, same as infinite steps
     sync(st);
     return show(st);
   }
@@ -1560,6 +1562,8 @@
     if (st.tz !== tz) { delete st.lastSeen; delete st.rewindNoted; }
     // A new run starts on the real calendar: the X testing cheat doesn't carry over.
     if (st.clockOffset) { delete st.clockOffset; delete st.lastSeen; delete st.rewindNoted; }
+    // A new run is clean, unless infinite steps (the one cheat that carries over) is still on.
+    delete st.cheated; if (st.freeSteps) st.cheated = true;
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",

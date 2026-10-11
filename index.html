@@ -337,7 +337,7 @@
   // Nothing personal, and nothing while the testing cheat is on.
   function pingHere() {
     try {
-      if (!LEADERBOARD_URL || !save || !save.dungeon || save.dead || save.freeSteps) return;
+      if (!LEADERBOARD_URL || !save || !save.dungeon || save.dead || save.freeSteps || save.cheated) return;
       const day = SMT.localISO(save.tz);
       if (localStorage.getItem("ddd.here") === day) return;
       let id = localStorage.getItem("ddd.device");
@@ -350,8 +350,35 @@
     pingHere();
     if (!save || !save.events || !save.events.length) return;
     const list = save.events; delete save.events;
-    if (!LEADERBOARD_URL || save.freeSteps) return;
+    if (!LEADERBOARD_URL || save.freeSteps || save.cheated) return;
     for (const e of list.slice(-4)) try { fetch(LEADERBOARD_URL + "/event", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify(e) }).catch(() => {}); } catch (err) {}
+  }
+  // TESTING CHEATS (X: infinite steps, Shift+X: a day ahead) first ask for the admin key. The Worker checks it
+  // (GET /admin); the page keeps a right key in localStorage ("dd-admin", the same one the board's delete uses) and
+  // asks the Worker again once per page load. A wrong or missing key leaves the keys doing nothing.
+  // A run that ever used a cheat is marked (`cheated`): it can't post a score and sends no events or presence.
+  let adminOK = false, gating = false;
+  async function adminGate() {
+    if (adminOK) return true;
+    if (!LEADERBOARD_URL) return false;
+    const ask = async k => { try { return (await fetch(LEADERBOARD_URL + "/admin", { headers: { "x-admin-key": k } })).ok; } catch (e) { return null; } };   // null: no answer
+    let key = ""; try { key = localStorage.getItem("dd-admin") || ""; } catch (e) {}
+    let ok = key ? await ask(key) : false;
+    if (ok === null) { alert("Could not reach the board."); return false; }
+    if (!ok) {
+      try { localStorage.removeItem("dd-admin"); } catch (e) {}
+      key = prompt("Admin key:") || ""; if (!key) return false;
+      ok = await ask(key);
+      if (ok === null) { alert("Could not reach the board."); return false; }
+      if (!ok) { alert("That key was not accepted."); return false; }
+      try { localStorage.setItem("dd-admin", key); } catch (e) {}
+    }
+    return adminOK = true;
+  }
+  function sweepCheats() {
+    if (!save || adminOK || !(save.freeSteps || save.clockOffset)) return;
+    if (save.freeSteps) delete save.freeSteps;          // left over from before: switch it off and mark the run
+    save.cheated = true; persist();
   }
   function persist() {
     flushEvents();
@@ -368,6 +395,7 @@
   // Catch up with the real date (a new day, or a missed deadline), then save.
   function tick() {
     if (!save) return;
+    sweepCheats();
     const before = JSON.stringify(save), log = save.log;
     save = RULES.tick(save);
     if (JSON.stringify(save) !== before) { remember(log); persist(); }
@@ -407,6 +435,7 @@
     // whether CONTINUE has anything to resume. tick()/draw() wait for that button, same for a fresh save.
     if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 11 && s.party) save = s;
     else { if (s) stash("-old"); save = null; }
+    sweepCheats();
     showTitle();
   }
 
@@ -670,6 +699,7 @@
   async function submitScore() {
     const msg = document.getElementById("scoremsg"), name = (save && save.playerName) || "";
     if (!LEADERBOARD_URL || !save || !save.dead || save.submitted || !msg) return;
+    if (save.cheated) { msg.textContent = "THIS RUN USED A TESTING CHEAT, SO IT CAN'T BE POSTED."; return; }
     if (!/^[A-Za-z0-9 _.\-]{3,10}$/.test(name)) { msg.textContent = "NO NAME ON THIS RUN."; return; }
     msg.textContent = "SENDING...";
     try {
@@ -762,6 +792,7 @@
         const row = document.createElement("div");
         row.className = "submitrow";
         if (save.submitted) row.append(`POSTED AS ${String(save.submitted.name).toUpperCase()}.  RANK ${save.submitted.rank}.  `, button("[B]OARD", "board"));
+        else if (save.cheated) row.append("THIS RUN USED A TESTING CHEAT AND CAN'T BE POSTED.  ", button("[B]OARD", "board"));
         else {
           row.append(button(`[P]OST YOUR HIGH SCORE AS ${String(save.playerName || "?").toUpperCase()}`, "submit"), document.createElement("br"), button("[B]OARD", "board"));
         }
@@ -1844,7 +1875,12 @@
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
       s: "search", g: "altar", m: "look", arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
-    if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
+    if (key === "x") {   // testing cheats, behind the admin key: X toggles infinite steps, Shift+X jumps a day
+      e.preventDefault(); if (gating) return;
+      const shift = e.shiftKey; gating = true;
+      adminGate().then(ok => { gating = false; if (ok) act(shift ? "next" : "freesteps"); }, () => { gating = false; });
+      return;
+    }
     if (k) { e.preventDefault(); act(k); }
   });
 
