@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.62 - Oct 10 2026, 21:48 HST
+
+![v0.62](screenshots/v0.62.png)
+
+- **Title screen.** The game now opens on a title screen every time, even with a run already in progress — CONTINUE is the explicit way back in. NEW RUN, BOARD, and ABOUT are all here too, and a scrolling sidebar now shows a few running facts (today's omen, the deepest floor reached, which way the season's leaning) while you look.
+
 ## v0.61.1 - Oct 10 2026, 21:15 HST
 
 ![v0.61.1](screenshots/v0.61.1.png)
