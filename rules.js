@@ -1086,6 +1086,12 @@
       if (p && FALSE_SAY[p.name]) st.extra = "> " + pick(FALSE_SAY[p.name]); else delete st.extra;
       return show(st);
     }
+    // Every step into another room (or up the stairs) takes a breath. Out of breath, she stays where she is --
+    // except when running from a demon, which is never refused. Unlocking a door is not a step.
+    if (!st.encounter && !locked && breathNow(st, true) < 1) {
+      st.facing = dir; st.log = "> " + pick(["KURA is out of breath. She stays where she is.", "Not yet. KURA catches her breath.", "KURA needs a moment before she moves on."].filter(l => "> " + l !== st.log));
+      return show(st);
+    }
     // With a demon in the way, stepping through a door is running: half the time the demon blocks it and strikes.
     // A locked door takes the day's charge only if she gets through it.
     if (st.encounter) {
@@ -1121,7 +1127,8 @@
       tally(st, "unlocks");
       return show(st);
     } else act(st, "go");
-    // Taking the stairs down is free, like any open door.
+    // Taking the stairs costs no key, like any open door.
+    if (breathNow(st, true) >= 1) spendBreath(st);          // the step itself
     if (toStairs) tally(st, "floors"); else tally(st, "steps");
     st.facing = dir;
     if (toStairs) {
