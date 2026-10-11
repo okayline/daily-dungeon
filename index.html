@@ -41,7 +41,7 @@
   /* The weekday kanji takes exactly two character cells, so the frame stays straight. */
   /* Like .cell: the box keeps the screen font so 2ch is two grid cells; only the glyph switches font. */
   .kanji { display: inline-block; width: 2ch; text-align: center; overflow: visible; white-space: nowrap; }
-  .kanji .g { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "MS Gothic", sans-serif; line-height: 0; }
+  .kanji .g { font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "MS Gothic", sans-serif; line-height: 0; font-size: 0.8em; }   /* a little smaller than the letters, still centered in its two cells */
   @keyframes blink { 50% { opacity: 0; } }   /* opacity (not visibility) so a blinking button still takes clicks while it is dark */
   .stairs { color: var(--moon); }
   .goal { color: var(--gold); text-shadow: 0 0 6px var(--gold); }
@@ -193,7 +193,7 @@
       // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
       const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);
       if (i === 1) return moonBox(esc(line)).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
-        .replace(/([日月火水木金土])/, '<span class="kanji"><span class="g">$1</span></span>');
+        .replace(/([一-鿿])/g, '<span class="kanji"><span class="g">$1</span></span>');
       if (i === 2 || i === 3) return moonBox(esc(line));
       if (i === 4) return moonBox(esc(line)).replace("^^^", '<span class="moon">^^^</span>');
       // The three log lines: their text sits in a box exactly 78 cells wide, so the right border stays
@@ -250,7 +250,7 @@
     const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);
     return lines.map((line, i) => {
       if (i === 1) return moonBox(esc(line)).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
-        .replace(/([日月火水木金土])/, '<span class="kanji"><span class="g">$1</span></span>');
+        .replace(/([一-鿿])/g, '<span class="kanji"><span class="g">$1</span></span>');
       if (i === 2 || i === 3) return moonBox(esc(line));
       if (i === 4) return moonBox(esc(line)).replace("^^^", '<span class="moon">^^^</span>');
       // The wordmark (rows 6 to 13): each block glyph boxed to one cell, like the moon's, so the letters hold their shape.
@@ -273,7 +273,7 @@
           .replace("[B]OARD", b("[B]OARD", "title-board", !!LEADERBOARD_URL))
           .replace("[?] ABOUT", b("[?] ABOUT", "title-about", true));
       }
-      return esc(line);
+      return esc(line).replace(/([一-鿿])/g, '<span class="kanji"><span class="g">$1</span></span>');      // (the level's heading carries the quarter's kanji)
     }).join("\n");
   }
 

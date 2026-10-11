@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.98";
+  const VERSION = "v0.99";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -261,10 +261,12 @@
     const box = [" ╭────╮ ", ` │${LIT}│ `, ` │${LIT}│ `, " ╰────╯ "];
     const BW = W - 2 - box[0].length;      // 70 columns to the right of the moon
     const bar = s => box[0] && center(s, BW);
-    const head = ` MOON  ${idx}/8  ${long[idx]}`;
+    // Today's phase of the moon in Japanese (new, crescent, first quarter, waxing gibbous, full, waning gibbous, last quarter, waning crescent), left of its English name.
+    const PKANJI = ["新月", "三日月", "上弦", "十三夜", "満月", "十六夜", "下弦", "有明月"], kj = PKANJI[idx];
+    const ed = epochDay(now), head = ` LUNAR DAY ${ed.day}/${ed.total}  ${kj} ${long[idx]}`;     // (the day of the lunar month, as the title says; the strip below shows the phase)
     // The Japanese weekday kanji sits left of the date. A kanji is two columns wide on screen.
     const tail = `${when.kanji} ${when.date}   ${when.time} ${when.zone}  `;
-    const S = ["+" + "=".repeat(78) + "+", "|" + box[0] + head + " ".repeat(BW - head.length - tail.length - 1) + tail + "|"];
+    const S = ["+" + "=".repeat(78) + "+", "|" + box[0] + head + " ".repeat(BW - head.length - tail.length - 1 - kj.length) + tail + "|"];
     S.push("|" + box[1] + bar(moons.map(m => center(m, 8)).join("")) + "|");
     S.push("|" + box[2] + bar(names.map(n => center(n, 8)).join("")) + "|");
     // The marker row also carries a short moon update ("The moon is day 25, waning crescent."),
@@ -417,6 +419,8 @@
   // and a branch grows off every day, above and below in turn. The shape is the same for everyone: it is rolled
   // from the lunar month and the quarter alone. It says nothing about the rooms (every day's wing is the same
   // size); it is the level's own mark, different every quarter.
+  // Columns a string takes on screen: a CJK character is two.
+  const colsOf = t => [...t].reduce((n, ch) => n + (/[　-鿿＀-￯]/.test(ch) ? 2 : 1), 0);
   function levelBones(now) {
     const ref = Date.UTC(2000, 0, 6, 18, 14), syn = 29.530588853, Q = quarterOf(now), q = Q.q, epoch = epochIndex(now);
     const into = (now.getTime() - ref) / 86400000 - epoch * syn, today = Math.min(29, Math.floor(into) + 1);
@@ -452,12 +456,15 @@
     for (let x = x0 - 4; x <= x0 + gap * (days - 1) + 4; x++) if (x >= 1 && x < VW - 1 && !lab[x] && !lab[x - 1] && !lab[x + 1]) g[y0][x] = "-";
     // Each quarter is named for the moon it opens with: the new moon, the first quarter (half, waxing), the full
     // moon, the last quarter (half, waning).
-    const level = `B${4 - q}F`, name = ["New Moon", "First Quarter", "Full Moon", "Last Quarter"][q];
+    const level = `B${4 - q}F`, name = ["New Moon", "First Quarter", "Full Moon", "Last Quarter"][q], kanji = ["新月", "上弦", "満月", "下弦"][q];
     // The drawing first, its heading underneath. (Blank rows at the foot of the drawing are dropped, so the
     // heading sits one row below the lowest branch.)
     const rows = g.map(r => r.join("").replace(/\s+$/, ""));
     while (rows.length > y0 + 1 && !rows[rows.length - 1]) rows.pop();
-    return [...rows, "", center(`${level} - ${name} - Lunar Days ${first}-${last}`, VW)];
+    // The heading is one fixed-width block (the name and the days are padded to their longest), centered, so the
+    // "- Lunar Days" part sits in the same place whichever quarter it is. (A kanji is two columns wide.)
+    const head = `${level} - ${kanji} ${name.padEnd(13)} - Lunar Days ${(first + "-" + last).padEnd(5)}`, pad = Math.max(0, VW - colsOf(head)), lead = Math.floor(pad / 2);
+    return [...rows, "", " ".repeat(lead) + head + " ".repeat(pad - lead)];
   }
   // The title's crescent moon: seven rows of block characters, thirteen columns wide. Only the shape lives here; the
   // page colors it (blue, the dotted block on the inner edge matches the lettering's dots).
@@ -481,7 +488,7 @@
     markBot.forEach((l, i) => { banner[5 + i] = " ".repeat(x0 + Math.floor((logoW - wide(markBot)) / 2)) + l; });
     CRESCENT.forEach((m, i) => { banner[CRES_ROW + i] = " ".repeat(gl) + m + ljust(banner[CRES_ROW + i], gl + CRES_W).slice(gl + CRES_W); });
     const view = Array.from({ length: VH }, () => " ".repeat(VW));
-    levelBones(now).forEach((l, i) => { if (TOP + i < VH) view[TOP + i] = ljust(l, VW).slice(0, VW); });
+    levelBones(now).forEach((l, i) => { if (TOP + i < VH) view[TOP + i] = colsOf(l) >= VW ? l.slice(0, VW) : l + " ".repeat(VW - colsOf(l)); });
     // Sidebar: a pinned "RUMORS AND SECRETS" header (never scrolls) over an auto-advancing card ticker.
     const PW = 29, rule = " " + "-".repeat(PW - 1);
     const cards = opts.cards && opts.cards.length ? opts.cards : ["..."];
@@ -499,7 +506,7 @@
     const ticker = Array.from({ length: windowH }, (_, i) => content[(off + i) % content.length]);
     const stat = [ljust(" RUMORS AND SECRETS", PW), rule, ...ticker];
     for (let i = 0; i < TOP; i++) S.push("|" + ljust(banner[i], W - 2) + "|");
-    for (let i = TOP; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i - TOP] || "", 30) + "|");
+    for (let i = TOP; i < VH; i++) S.push("|" + view[i] + " ".repeat(Math.max(0, 47 - colsOf(view[i]))) + "|" + ljust(stat[i - TOP] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");
     // Log box repurposed as cold, stable facts (WEEK/EPOCH/LEAN) that hold until the day rolls over.
     const r = s => "|" + ljust(s, W - 2) + "|";
@@ -526,10 +533,15 @@
   }
   // The current lunar epoch (same reference moonIndex/epochIndex use) and how far into its ~29.5
   // real days we are. Display rounds the epoch length down to a steady 29 for a clean "day X of 29".
-  function epochLine(now) {
+  // The day of the lunar month (1 to 29) and the month's length as shown (the 29.5 days, rounded down to a steady 29).
+  function epochDay(now) {
     const ref = Date.UTC(2000, 0, 6, 18, 14), syn = 29.530588853;
     const idx = epochIndex(now), into = (now.getTime() - ref) / 86400000 - idx * syn;
-    const total = Math.floor(syn), day = Math.min(total, Math.floor(into) + 1), left = Math.max(0, total - day);
+    const total = Math.floor(syn);
+    return { idx, total, day: Math.min(total, Math.floor(into) + 1) };
+  }
+  function epochLine(now) {
+    const { idx, total, day } = epochDay(now), left = Math.max(0, total - day);
     return `epoch ${idx}, day ${day} of ${total}  -  new shape in ${left} day${left === 1 ? "" : "s"}`;
   }
 

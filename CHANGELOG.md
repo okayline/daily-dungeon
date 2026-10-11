@@ -2,6 +2,15 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.99 - Moon in Kanji - Oct 11 2026, 13:00 HST
+
+![v0.99](screenshots/v0.99.png)
+
+- **The header counts the lunar day** ("LUNAR DAY 10/29"), the same day the title screen counts.
+- **Today's phase in Japanese** sits beside its English name in the header.
+- **The title's heading names its quarter in Japanese,** and "Lunar Days" now sits in the same place for every quarter.
+- **The kanji are a little smaller.**
+
 ## v0.98 - Short of Breath - Oct 11 2026, 12:40 HST
 
 ![v0.98](screenshots/v0.98.png)
