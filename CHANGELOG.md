@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.61.1 - Oct 10 2026, 21:15 HST
+
+![v0.61.1](screenshots/v0.61.1.png)
+
+- **Moved the Hold Omen / Release Omen button to the bottom of the bag**, next to [ENTER] use and [C]LOSE, and trimmed its text down to just the button itself.
+
 ## v0.61 - Oct 10 2026, 20:30 HST
 
 - **Hold Omen has its own button in the bag now.** It used to take up a numbered slot alongside whatever you'd found; now it's a fixed button (and an H key) above the list, so it's always in the same place and never bumps a found item down.
