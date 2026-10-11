@@ -269,7 +269,23 @@
   // AMBIENT EVENTS, for the title screen's rumor cards: when one of a handful of moments happens, a tag goes on
   // st.events ({ t: tag, v: a small number or absent }). The page sends them to the Worker and empties the list;
   // the rules never talk to the network. A tag says only THAT something happened, never who or where.
-  const ev = (st, t, v) => { st.events = (st.events || []).slice(-7); st.events.push(v === undefined ? { t } : { t, v }); };
+  // Each event also says where and who, in a few small fields (see the Worker's /event): lv the level's height,
+  // d the day on it, k the kind of room, a her lean, p who still stands with her, c levels into the run, dm the
+  // demon in the room, m the moon's phase, n the run's name.
+  const ev = (st, t, v) => {
+    const e = v === undefined ? { t } : { t, v }, d = st.dungeon;
+    try {
+      const room = d && d.floor.rooms[d.at];
+      e.lv = st.height || 1; e.c = st.climb || 1; e.m = moon();
+      if (d) e.d = Math.max(1, Math.min(9, clock(st) - (d.arrived ?? clock(st)) + 1));
+      if (room) e.k = room.kind || (room.hall ? "hall" : room.dead ? "dead" : "plain");
+      e.a = String(st.align || "NEUTRAL")[0];
+      e.p = (st.party || []).slice(1).filter(q => q.hp > 0).length;
+      if (st.encounter && st.encounter.name) e.dm = st.encounter.name;
+      if (st.playerName) e.n = st.playerName;
+    } catch (err) {}
+    st.events = (st.events || []).slice(-7); st.events.push(e);
+  };
   // Run stats for the end-of-run summary: counts kept in st.stats (steps, searches, demons, finds...).
   const tally = (st, k, n = 1) => { st.stats = st.stats || {}; st.stats[k] = (st.stats[k] || 0) + n; };
 

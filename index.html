@@ -413,14 +413,22 @@
     left: ["Someone walked out, and did not look back.", "A pact ended badly.", "One fewer set of footsteps, somewhere below."],
     fall: ["Someone fell. The dark closed over them.", "A light went out, somewhere below.", "A run ended tonight. The dungeon noticed."],
   };
-  function rumorCards() {
+  // `mine` (a level's height): the ticker's version, which puts news from that level first and says where each
+  // thing happened. The title's cards (no argument) stay as they were.
+  const LEVEL = h => (h <= 4 ? `B${5 - h}F` : `${h - 4}F`);
+  function rumorCards(mine) {
     const out = [], seen = new Set();
-    for (const e of titleEvents) {
+    const list = mine ? titleEvents.slice().sort((x, y) => (y.lv === mine) - (x.lv === mine)) : titleEvents;
+    for (const e of list) {
       let line = null;
       if (e.t === "words") { const w = RULES.lastWordsList[e.v]; if (w) line = `${["The dungeon whispered", "From below", "A voice, going out", "Somewhere, the last thing said"][(e.made || 0) % 4]}, "${w}"`; }
       else if (RUMORS[e.t]) line = RUMORS[e.t][((e.made || 0) + out.length) % RUMORS[e.t].length];   // which wording: steady for one event, varied across the feed
+      if (line && mine && e.lv) {
+        if (e.t === "fall" && e.dm) line = `${/^[AEIOU]/.test(e.dm) ? "An" : "A"} ${e.dm} struck a traveler down.`;
+        line = `${e.lv === mine ? "On this level" : "On " + LEVEL(e.lv)}${e.d ? ", day " + e.d : ""}: ${line}`;
+      }
       if (line && !seen.has(line)) { seen.add(line); out.push(line); }
-      if (out.length >= 8) break;
+      if (out.length >= (mine ? 12 : 8)) break;
     }
     return out;
   }
@@ -1477,7 +1485,7 @@
     if (k.moonAsked) own.push(`The moon asked ${n(k.moonAsked, "time", "times")}, answered ${k.moonAnswered || 0}`);
     if (k.breathOut) own.push(`Out of breath ${n(k.breathOut, "time", "times")}`);
     const here = ((titleStats && titleStats.here && titleStats.here.levels) || []).find(x => x.level === (save.height || 1));
-    const others = worldLines.slice();
+    const others = rumorCards(save.height || 1);
     if (here && here.n > 1) others.unshift(`${n(here.n - 1, "other is", "others are")} on ${lvl} today`);
     // One of hers, one of theirs, in turn.
     const out = [];

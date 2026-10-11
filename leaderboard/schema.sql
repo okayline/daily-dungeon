@@ -57,3 +57,18 @@ CREATE TABLE IF NOT EXISTS present (
   who   TEXT                          -- hash of the sender, for the rate limit only
 );
 CREATE INDEX IF NOT EXISTS present_at_idx ON present (at);
+
+-- NEWS (v0.90): the ambient events again, now with where and who. x is a small JSON object of checked fields:
+-- lv (level height), d (day on the level), k (room kind), a (L/N/C), p (party size), c (levels into the run),
+-- dm (the demon involved), m (moon phase 0-7), n (the player's name: kept for later, never sent out by /feed).
+-- The older `events` table is left as it is and only read from while this one fills.
+CREATE TABLE IF NOT EXISTS news (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL,
+  v    INTEGER,
+  made INTEGER NOT NULL,
+  who  TEXT,
+  x    TEXT
+);
+CREATE INDEX IF NOT EXISTS news_type_idx ON news (type, id);
+CREATE INDEX IF NOT EXISTS news_who_idx ON news (who, made);

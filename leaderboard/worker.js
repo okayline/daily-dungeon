@@ -3,7 +3,7 @@
 //   GET  /top?n=20&run=ID                                      -> {rows: [...], you: {...} | null}
 //   GET  /season                                               -> {epoch, law, chaos}
 //   GET  /stats                                                -> {epoch, counts: {...}, lastFall}
-//   POST /event   {t, v?}                                      -> {ok}        (an anonymous "this happened" ping)
+//   POST /event   {t, v?, lv, d, k, a, p, c, dm, m, n}         -> {ok}        (a "this happened" ping: a tag, and where and who)
 //   POST /here    {id, level}                                  -> {ok}        (a daily "someone is here" ping)
 //   GET  /feed                                                 -> everything the title screen shows, in one read
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
@@ -69,6 +69,7 @@ async function tallyStats(db, b, turns, who) {
 // AMBIENT EVENTS, for the title screen's rumor cards: a tag from a fixed list, an optional small number, and
 // the time. No name, no run, no free text, so nothing here can carry a message or a spoiler. The newest 20 of
 // each tag are kept. Forging one is cheap and harmless: nothing ranks on these or rewards them.
+const EVENT_KINDS = ["den", "bay", "relay", "vault", "forge", "altar", "archive", "void", "hall", "dead", "plain"];
 const EVENT_TAGS = ["out", "refused", "asked", "restored", "trickster", "altar", "joined", "silent", "deep", "left", "fall", "words"];
 async function titleFeed(db) {
   const epoch = epochIndex(), counts = {}, tally = { LAW: 0, CHAOS: 0 };
@@ -88,7 +89,15 @@ async function titleFeed(db) {
   for (const r of await quiet(async () => (await db.prepare(`SELECT side, count FROM faction_season WHERE epoch = ?1`).bind(epoch).all()).results, [])) if (r.side in tally) tally[r.side] = r.count;
   const last = await quiet(() => db.prepare(`SELECT MAX(made) AS made FROM scores`).first(), null);
   const top = await quiet(() => db.prepare(`SELECT floor FROM scores ORDER BY floor DESC, days DESC, made ASC LIMIT 1`).first(), null);
-  const events = await quiet(async () => (await db.prepare(`SELECT type AS t, v, made FROM events ORDER BY id DESC LIMIT 40`).all()).results, []);
+  // The latest events, with where and who (never the name). Since v0.90 they live in `news`; while that is still
+  // filling, the older `events` rows (tag and number only) top the list up.
+  const events = [];
+  for (const r of await quiet(async () => (await db.prepare(`SELECT type AS t, v, made, x FROM news ORDER BY id DESC LIMIT 40`).all()).results, [])) {
+    let x = {}; try { x = JSON.parse(r.x || "{}") || {}; } catch (e) {}
+    delete x.n;
+    events.push({ t: r.t, v: r.v, made: r.made, ...x });
+  }
+  if (events.length < 40) for (const r of await quiet(async () => (await db.prepare(`SELECT type AS t, v, made FROM events ORDER BY id DESC LIMIT ?1`).bind(40 - events.length).all()).results, [])) events.push(r);
   return { epoch, law: tally.LAW, chaos: tally.CHAOS, counts, lastFall: (last && last.made) || null, deepest: (top && top.floor) || null, events, here, names, deadliest };
 }
 const cors = () => ({ "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
@@ -166,12 +175,21 @@ export default {
       let b; try { b = await req.json(); } catch (e) { return json({ error: "json" }, 400, allow); }
       const t = String(b.t || ""), v = b.v === undefined || b.v === null ? null : Number(b.v);
       if (!EVENT_TAGS.includes(t) || (v !== null && (!Number.isInteger(v) || v < 0 || v > 199))) return json({ error: "invalid" }, 400, allow);
+      // WHERE AND WHO, in a few small fields. Each is checked against a fixed shape and dropped if it doesn't fit;
+      // a bad one never fails the event. The name is kept for later and is never sent back out by /feed.
+      const x = {}, int = (k, lo, hi) => { const n = Number(b[k]); if (Number.isInteger(n) && n >= lo && n <= hi) x[k] = n; };
+      int("lv", 1, 60); int("d", 1, 9); int("p", 0, 4); int("c", 1, 60); int("m", 0, 7);
+      if (EVENT_KINDS.includes(b.k)) x.k = b.k;
+      if (["L", "N", "C"].includes(b.a)) x.a = b.a;
+      if (/^[A-Z][A-Z0-9 .\-]{1,19}$/.test(String(b.dm || ""))) x.dm = String(b.dm);
+      const name = String(b.n || "").trim(), words = String(env.BLOCKLIST || "").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
+      if (/^[A-Za-z0-9 _.\-]{3,10}$/.test(name) && !words.some(q => name.toLowerCase().includes(q))) x.n = name;
       const who = await hash((req.headers.get("cf-connecting-ip") || "?") + "daily-dungeon"), now = Math.floor(Date.now() / 1000);
-      const recent = await env.DB.prepare(`SELECT COUNT(*) AS n FROM events WHERE who = ?1 AND made > ?2`).bind(who, now - 3600).first();
+      const recent = await env.DB.prepare(`SELECT COUNT(*) AS n FROM news WHERE who = ?1 AND made > ?2`).bind(who, now - 3600).first();
       if (recent.n >= 30) return json({ error: "slow down" }, 429, allow);
-      await env.DB.prepare(`INSERT INTO events (type, v, made, who) VALUES (?1, ?2, ?3, ?4)`).bind(t, v, now, who).run();
+      await env.DB.prepare(`INSERT INTO news (type, v, made, who, x) VALUES (?1, ?2, ?3, ?4, ?5)`).bind(t, v, now, who, JSON.stringify(x)).run();
       // Keep the newest 20 of this tag. Rows from the last hour stay regardless, so the rate limit above can count them.
-      await env.DB.prepare(`DELETE FROM events WHERE type = ?1 AND made <= ?2 AND id NOT IN (SELECT id FROM events WHERE type = ?1 ORDER BY id DESC LIMIT 20)`).bind(t, now - 3600).run();
+      await env.DB.prepare(`DELETE FROM news WHERE type = ?1 AND made <= ?2 AND id NOT IN (SELECT id FROM news WHERE type = ?1 ORDER BY id DESC LIMIT 20)`).bind(t, now - 3600).run();
       return json({ ok: true }, 200, allow);
     }
 
