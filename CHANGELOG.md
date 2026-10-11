@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.99.3 - Room Below the Moon - Oct 11 2026, 13:40 HST
+
+![v0.99.3](screenshots/v0.99.3.png)
+
+- **The title's heading has a blank row under it,** so it no longer sits against the line below. To make room, the branches under the line of days are now one row deep.
+
 ## v0.99.2 - Two Lines for the Moon - Oct 11 2026, 13:35 HST
 
 ![v0.99.2](screenshots/v0.99.2.png)
