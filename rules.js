@@ -1603,6 +1603,10 @@
     if (!ensureFloor(st)) return show(st);
     const i = (st.items || []).indexOf(name);
     if (i < 0) return show(st);
+    // Using a thing from the bag takes a breath. Out of breath, she can't -- except in a fight, where it is never
+    // refused (it still takes a breath if she has one).
+    if (breathNow(st, true) < 1 && !st.encounter) { st.log = "> " + pick(["KURA is out of breath. The bag can wait.", "Not yet. KURA catches her breath.", "KURA needs a moment before she tries that."].filter(l => "> " + l !== st.log)); return show(st); }
+    if (breathNow(st, true) >= 1) spendBreath(st);
     const info = ITEM_INFO[name] || {};
     // Most things can't be used (yet). Trying anyway can break it: every try is a roll, so one battery
     // survives a dozen tries and the next snaps on the first. Rarer things are sturdier; MOON things never break.
