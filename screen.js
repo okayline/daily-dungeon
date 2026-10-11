@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.88.2";
+  const VERSION = "v0.89";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -383,10 +383,12 @@
     // Line 1 is the day's omen when the rules provide one; otherwise the moon line.
     // Line 1 is the status report when the rules provide one; otherwise the moon line.
     const moonLine = st.status || "> " + lines[realDay % lines.length];
-    // A question's [Y]ES [N]O sit at the right end of line 3, beside the question.
+    // THE THREE LOG LINES, top to bottom: the flavor line (what the place and the party say, and a question with its
+    // [Y]ES [N]O at the right end); what KURA just did; and the status report, which the page turns into a ticker
+    // that scrolls right to left along the bottom.
     const answers = "[Y]ES  [N]O  [S]ILENT";
     const line3 = st.question ? ljust(" " + extra.slice(0, 77 - answers.length - 1), 77 - answers.length) + answers + " " : " " + extra;
-    for (const m of [" " + moonLine, " " + (st.log || ""), line3]) S.push(r(m));
+    for (const m of [line3, " " + (st.log || ""), " " + moonLine]) S.push(r(m));
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step is the [^] button in
     // the 3D view, and HOLD/RELEASE now live in INVOKE with everything else that isn't always available.

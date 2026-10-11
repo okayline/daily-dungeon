@@ -871,8 +871,7 @@
       `${name}. ${party}. Today's key ${(st.today || {}).stepped ? "spent" : "in hand"}.`,
       TIME.moonNote(TIME.now()).replace(/\.$/, "") + ".",          // "The moon is day 26, waning crescent."
     ];
-    // Now and then, word of everyone else: a line from the title screen's feed (st.world, set by the page).
-    if (left > 1 && kind !== "news" && Array.isArray(st.world) && st.world.length && Math.random() < 0.25) return "> " + String(pick(st.world)).slice(0, 75);
+    // (Word of everyone else is no longer mixed in here: the page's ticker carries it along the bottom line.)
     return "> " + (left <= 1 ? news[pick([0, 1])] : pick(news));
   }
   function status(st) {
