@@ -2,6 +2,19 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.80 - Back to the Wings - Oct 11 2026, 05:06 HST
+
+![v0.80](screenshots/v0.80.png)
+
+The one-room experiment is over. The wide floors are back, under the open sky. Runs in progress end with this release.
+
+- **Wings again.** Each level is rooms to walk between, with two locked doors a day to choose from, as before. `[ ^ ]` walks forward.
+- **The room map is back,** and the compass with it.
+- **Still a climb.** You wake in the pit, the stairs lead up, and the dark takes a level each quarter of the moon.
+- **Still the sky.** `LOOK_[U]P` shows it from any room, and the moon can still be asked. There is no floor to look at any more.
+- **Old rooms return.** Some rare ones that had gone missing can turn up again.
+- Gone with the one-room version: the two doors on one wall, the action words on the button, and THE PATH in the log.
+
 ## v0.78 - A Word on the Button - Oct 11 2026, 04:52 HST
 
 ![v0.78](screenshots/v0.78.png)
