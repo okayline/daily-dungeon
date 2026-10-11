@@ -1387,13 +1387,14 @@
       if (save.look) name = "search"; else       // looking up, [^] asks the moon
       name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
     }
-    // Searching a bare wall takes a moment: "KURA is searching", a dot at a time, then what she found.
-    // Nothing else can be pressed meanwhile. (Not at a door, not looking up, and not when she is out of breath.)
+    // Searching a bare wall, or listening at a locked door, takes a moment: "KURA is searching" (or "listening"),
+    // a dot at a time, then the result. Nothing else can be pressed meanwhile. Only the log line changes: no
+    // dimming or other visual effect, ever. (Not at an open door, not looking up, not when she is out of breath.)
     if (searchWait) return;
     if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.look && !save.question
-        && !RULES.available(save).door[save.facing] && RULES.breath(save) >= 1) {
-      const was = save.log; let dots = 0;
-      const paint = () => { save.log = "> KURA is searching" + " .".repeat(dots); draw(); };
+        && RULES.breath(save) >= 1 && (!RULES.available(save).door[save.facing] || RULES.available(save).locked[save.facing])) {
+      const was = save.log, doing = RULES.available(save).locked[save.facing] ? "listening" : "searching"; let dots = 0;
+      const paint = () => { save.log = `> KURA is ${doing}` + " .".repeat(dots); draw(); };
       paint();
       searchWait = setInterval(() => {
         if (++dots <= 3) return paint();
