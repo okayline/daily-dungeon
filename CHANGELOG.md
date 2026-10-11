@@ -2,6 +2,18 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.83 - Breath - Oct 11 2026, 05:46 HST
+
+![v0.83](screenshots/v0.83.png)
+
+KURA gets tired now, and the moon shows it.
+
+- **Searching takes breath.** A handful of quick searches and she is out of it, and has to wait.
+- **The moon strip under the map is her breath.** It closes as she tires and opens again by itself. The emptier it got, the slower it comes back.
+- **It is hers, not the room's.** Walking somewhere else doesn't bring it back any sooner.
+- **Asking the moon takes a breath too,** and nothing else.
+- Searches are instant again: the slow searching in worn rooms is gone, and rooms settle overnight as they used to.
+
 ## v0.82 - The Key - Oct 11 2026, 05:34 HST
 
 ![v0.82](screenshots/v0.82.png)
