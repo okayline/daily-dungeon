@@ -78,6 +78,7 @@
   .logview .dim { color: var(--trail); }
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
+  .logline.gold { color: var(--gold); }
   #ticker { display: inline-block; width: 76ch; overflow: hidden; white-space: pre; vertical-align: top; }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
@@ -189,7 +190,7 @@
       // straight even if a glyph in the font (an apostrophe, say) isn't exactly one cell wide.
       // Line 2 glows gold right after using an item.
       if (i >= lines.length - 6 && i <= lines.length - 4) {
-        let inner = esc(line.slice(1, -1)); const gold = false;
+        let inner = esc(line.slice(1, -1)); const gold = resultGold && i === lines.length - 6;
         // A party member's question: [Y]ES and [N]O sit at the right end of the top line and answer it.
         // The bottom line is the ticker: the status report, this run's news and word of everyone else, typed out a line at a time.
         if (i === lines.length - 4) return `|<span class="logline"> <span id="ticker">${tickerHtml()}</span> </span>|`;
@@ -277,7 +278,15 @@
       if (typeof bn === "number") { if ((seenBreath !== null && bn < seenBreath) || refused) squeeze(); seenBreath = bn; }
       seenLog = save.log;
       if (Date.now() < squeezeUntil) save.squeeze = true;      // (only for this frame: never saved)
-      const html = colorize(SMT.renderScreen(save, extraToShow())); delete save.squeeze;
+      // A search's result goes on its own line: the middle line keeps "KURA searches the WEST wall." and what came
+      // of it shows on the top line, in gold when it is something found. (Only on screen: the saved log is whole.)
+      let top = extraToShow(), whole = null; resultGold = false;
+      if (!save.dead && !save.question && !searchBeat) {
+        const m = /^(> KURA (?:searches|scries) the [^.]+\.) (.+)$/.exec(save.log || "");
+        if (m) { whole = save.log; save.log = m[1]; top = "> " + m[2]; resultGold = /^(KURA finds|A locker holds|Coins in the rubble|Deep in the stone)/.test(m[2]); }
+      }
+      const html = colorize(SMT.renderScreen(save, top)); delete save.squeeze;
+      if (whole !== null) save.log = whole;
       document.getElementById("screen").innerHTML = html;
     }
     catch (err) {                                  // never freeze on a bad frame: say so, and keep the keys working
@@ -1476,7 +1485,7 @@
     if (!save || !save.dungeon) return [];
     const k = save.stats || {}, own = [], lvl = save.floor, n = (v, one, many) => `${v} ${v === 1 ? one : many}`;
     const party = (save.party || []).slice(1).filter(q => q.hp > 0).map(q => q.name);
-    own.push(`${save.playerName || "KURA"}: day ${save.day || 1}, turn ${save.steps || 0}, ${lvl}`);
+    own.push(`Day ${save.day || 1}, turn ${save.steps || 0}, ${lvl}`);
     if (party.length) own.push(`With her: ${party.join(", ")}`); else own.push("She walks alone");
     if (k.met) own.push(`${n(k.met, "demon", "demons")} met, ${k.beaten || 0} beaten, ${k.fled || 0} fled from`);
     if (k.recruited) own.push(`${n(k.recruited, "pact", "pacts")} made this run`);
@@ -1499,20 +1508,21 @@
   // holds for a few seconds with the _ blinking; it is deleted back to nothing; the next one is typed. The run's
   // own status report goes next whenever a new one is waiting. Only the line's own span is rewritten.
   // (var and a function declaration, not let/const: the first frame is drawn before this point in the script is reached.)
-  var TYPE_W = 74, typeLine = "", typeN = 0, typeMode = "gap", typeNext = 0, typeStatus = null;
-  function tickerHtml() { return esc((typeLine || "").slice(0, typeN || 0)) + (typeMode === "hold" ? '<span class="wait">_</span>' : "_"); }
+  var TYPE_W = 72, typeLine = "", typeN = 0, typeMode = "gap", typeNext = 0, typeStatus = null;
+  function tickerHtml() { return "&gt; " + esc((typeLine || "").slice(0, typeN || 0)) + (typeMode === "hold" ? '<span class="wait">_</span>' : "_"); }   // the > is always there
   function typeStep() {
     let wait = 300;
     try {
       if (atTitle || !save || !save.dungeon) { wait = 500; }
       else if (typeMode === "gap") {
-        const status = String(save.status || "").replace(/^> /, "").trim(), feed = tickerFeed();
+        // (This line never says KURA: that name belongs to the line above, where she acts.)
+        const status = String(save.status || "").replace(/^> /, "").replace(/KURA is/g, "She is").replace(/\bKURA\b/g, "she").trim(), feed = tickerFeed();
         typeLine = (status && status !== typeStatus ? (typeStatus = status) : feed.length ? feed[typeNext++ % feed.length] : status || "").slice(0, TYPE_W);
         typeN = 0; typeMode = typeLine ? "type" : "gap"; wait = 350;
       } else if (typeMode === "type") {
         typeN++;
         const ch = typeLine[typeN - 1];
-        wait = /[.,:;!?]/.test(ch) ? 260 : ch === " " ? 70 : 35 + Math.random() * 55;      // a cadence: quick letters, a breath at punctuation
+        wait = /[.,:;!?]/.test(ch) ? 520 : ch === " " ? 170 : 110 + Math.random() * 90;    // a slow hand: about six letters a second, a breath at punctuation
         if (typeN >= typeLine.length) { typeMode = "hold"; wait = 3200; }
       } else if (typeMode === "hold") { typeMode = "delete"; wait = 30; }
       else if (typeMode === "delete") { typeN = Math.max(0, typeN - 2); wait = 18; if (typeN === 0) { typeMode = "gap"; wait = 500; } }
@@ -1524,6 +1534,7 @@
   let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent
   let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
   const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
+  var resultGold = false;                       // the top line is a find: drawn in gold
   let searchBeat = null;                        // the beat between a search and its result box
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   function act(name) {
