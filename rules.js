@@ -93,6 +93,7 @@
     st.items = (st.items || []).concat(it);
     note(st, "items", it, "found");
     tally(st, "items");
+    if (["RARE", "MYTHIC", "MOON"].some(t => names(t).includes(it))) tally(st, "rare");
     const a = itemAlign(it);
     if (a && a !== "NEUTRAL") lean(st, "find" + a, lines);
   }
@@ -352,7 +353,9 @@
     const fl = d.floor, shut = j => !fl.rooms[j] && !(fl.sealed && fl.sealed[j]) && MOON_SAYS[fl.kinds[j]];
     let kinds = Object.values(fl.rooms[d.at].doors).filter(shut).map(j => fl.kinds[j]);
     if (!kinds.length) fl.rooms.forEach((r, i) => { if (r && RS(d, i).visited) for (const j of Object.values(r.doors)) if (shut(j)) kinds.push(fl.kinds[j]); });
-    st.extra = "> " + (kinds.length && Math.random() < MOON_ANSWER[m] ? MOON_SAYS[pick(kinds)] : pick(MOON_QUIET));
+    const told = kinds.length && Math.random() < MOON_ANSWER[m];
+    if (told) tally(st, "moonAnswered");
+    st.extra = "> " + (told ? MOON_SAYS[pick(kinds)] : pick(MOON_QUIET));
     delete st.tell;
     return show(st);
   }
@@ -855,6 +858,8 @@
       `${name}. ${party}. Today's key ${(st.today || {}).stepped ? "spent" : "in hand"}.`,
       TIME.moonNote(TIME.now()).replace(/\.$/, "") + ".",          // "The moon is day 26, waning crescent."
     ];
+    // Now and then, word of everyone else: a line from the title screen's feed (st.world, set by the page).
+    if (left > 1 && kind !== "news" && Array.isArray(st.world) && st.world.length && Math.random() < 0.25) return "> " + String(pick(st.world)).slice(0, 75);
     return "> " + (left <= 1 ? news[pick([0, 1])] : pick(news));
   }
   function status(st) {
@@ -935,7 +940,7 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
-    if (breathNow(st, true) < 1) { st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
+    if (breathNow(st, true) < 1) { if (!/breath|needs a moment/.test(st.log || "")) tally(st, "breathOut"); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
     if (st.look === "U") return askMoon(st);              // looking up, SEARCH asks the moon
     spendBreath(st);
     const d = st.dungeon, room = d.floor.rooms[d.at], found = RS(d).found, dir = st.facing;
@@ -1523,7 +1528,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events", "path", "height", "climb", "breath"]) delete st[k];
+      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
@@ -1687,7 +1692,7 @@
     if (st.party[0].hp <= 0) {
       st.dead = true;
       st.party = st.party.map(p => ({ ...p, hp: 0 }));
-      lines.push("KURA falls. The run is over."); ev(st, "fall");
+      lines.push("KURA falls. The run is over."); ev(st, "fall"); st.killer = e.name;
       st.log = `> ${THE(e.name)} strikes KURA down.`;
       st.encounter = null;
       st.round = lines;
@@ -2883,7 +2888,10 @@
   // here ranks anyone, and nothing names anyone.
   const score = st => { const k = st.stats || {}, pacts = st.pacts || [];
     return { run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: k.beaten || 0, turns: st.steps || 0, align: String(st.align || "NEUTRAL").toUpperCase(),
-      stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0 } }; };
+      killer: st.killer || "",
+      stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0,
+        beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
+        moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0 } }; };
   const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;

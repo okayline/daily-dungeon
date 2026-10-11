@@ -4,6 +4,7 @@
 //   GET  /season                                               -> {epoch, law, chaos}
 //   GET  /stats                                                -> {epoch, counts: {...}, lastFall}
 //   POST /event   {t, v?}                                      -> {ok}        (an anonymous "this happened" ping)
+//   POST /here    {id, level}                                  -> {ok}        (a daily "someone is here" ping)
 //   GET  /feed                                                 -> everything the title screen shows, in one read
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
@@ -42,7 +43,10 @@ async function tallyFaction(db, align, floorPts) {
 // numbers each finished run reports with its score. One row per (epoch, key); "wall" keeps the longest,
 // everything else adds. "players" counts distinct senders, through the seen table (never a table scan).
 // Each value is capped per run, so one forged post can't swing a total by much. None of this ranks anyone.
-const STAT_CAPS = { pacts: 30, ended: 30, broken: 200, trips: 50, refused: 200, silent: 500 };
+const STAT_CAPS = { pacts: 30, ended: 30, broken: 200, trips: 50, refused: 200, silent: 500,
+  beaten: 300, talks: 500, joined: 30, unlocks: 400, standby: 400, climbs: 20, moon: 400, moonYes: 400, breath: 2000, silver: 100000, rare: 100 };
+// The instant the current lunar epoch began, in unix seconds.
+const epochStart = () => Math.floor((EPOCH_REF + epochIndex() * EPOCH_SYN * 86400000) / 1000);
 async function tallyStats(db, b, turns, who) {
   const epoch = epochIndex(), s = (b && typeof b.stats === "object" && b.stats) || {};
   const add = (key, n) => db.prepare(`INSERT INTO counters (period, key, count) VALUES (?1, ?2, ?3)
@@ -56,6 +60,9 @@ async function tallyStats(db, b, turns, who) {
   const wall = Math.floor(Number(s.wall));
   if (Number.isFinite(wall) && wall > 0) await db.prepare(`INSERT INTO counters (period, key, count) VALUES (?1, 'wall', ?2)
     ON CONFLICT (period, key) DO UPDATE SET count = MAX(count, ?2)`).bind(epoch, Math.min(wall, 9999)).run();
+  // What struck the run down, if anything did: one counter a demon ("k:NAME"), for the title's "Most falls".
+  const killer = String((b && b.killer) || "").toUpperCase();
+  if (/^[A-Z][A-Z0-9 .\-]{1,19}$/.test(killer)) await add("k:" + killer, 1);
   const seen = await db.prepare(`INSERT OR IGNORE INTO seen (period, who) VALUES (?1, ?2)`).bind(epoch, who).run();
   if (seen.meta && seen.meta.changes) await add("players", 1);
 }
@@ -66,12 +73,23 @@ const EVENT_TAGS = ["out", "refused", "asked", "restored", "trickster", "altar",
 async function titleFeed(db) {
   const epoch = epochIndex(), counts = {}, tally = { LAW: 0, CHAOS: 0 };
   const quiet = async (fn, fallback) => { try { return await fn(); } catch (e) { return fallback; } };   // a table missing on an old database just leaves its part empty
-  for (const r of await quiet(async () => (await db.prepare(`SELECT key, count FROM counters WHERE period = ?1 LIMIT 40`).bind(epoch).all()).results, [])) counts[r.key] = r.count;
+  for (const r of await quiet(async () => (await db.prepare(`SELECT key, count FROM counters WHERE period = ?1 LIMIT 400`).bind(epoch).all()).results, [])) counts[r.key] = r.count;
+  // The demon most runs fell to this epoch (its "k:" counters are folded into one answer, not sent one by one).
+  let deadliest = null;
+  for (const key of Object.keys(counts)) if (key.startsWith("k:")) { if (!deadliest || counts[key] > deadliest.n) deadliest = { name: key.slice(2), n: counts[key] }; delete counts[key]; }
+  // WHO IS HERE: one row a device (a random id, nothing personal), kept fresh by one ping a day while a run is alive.
+  const since = epochStart(), dayAgo = Math.floor(Date.now() / 1000) - 86400;
+  const here = { month: 0, today: 0, levels: [] };
+  await quiet(async () => {
+    here.month = (await db.prepare(`SELECT COUNT(*) AS n FROM present WHERE at > ?1`).bind(since).first()).n;
+    for (const r of (await db.prepare(`SELECT level, COUNT(*) AS n FROM present WHERE at > ?1 GROUP BY level ORDER BY level LIMIT 30`).bind(dayAgo).all()).results) { here.levels.push({ level: r.level, n: r.n }); here.today += r.n; }
+  });
+  const names = await quiet(async () => (await db.prepare(`SELECT COUNT(DISTINCT name) AS n FROM scores WHERE made > ?1`).bind(since).first()).n, 0);
   for (const r of await quiet(async () => (await db.prepare(`SELECT side, count FROM faction_season WHERE epoch = ?1`).bind(epoch).all()).results, [])) if (r.side in tally) tally[r.side] = r.count;
   const last = await quiet(() => db.prepare(`SELECT MAX(made) AS made FROM scores`).first(), null);
   const top = await quiet(() => db.prepare(`SELECT floor FROM scores ORDER BY floor DESC, days DESC, made ASC LIMIT 1`).first(), null);
   const events = await quiet(async () => (await db.prepare(`SELECT type AS t, v, made FROM events ORDER BY id DESC LIMIT 40`).all()).results, []);
-  return { epoch, law: tally.LAW, chaos: tally.CHAOS, counts, lastFall: (last && last.made) || null, deepest: (top && top.floor) || null, events };
+  return { epoch, law: tally.LAW, chaos: tally.CHAOS, counts, lastFall: (last && last.made) || null, deepest: (top && top.floor) || null, events, here, names, deadliest };
 }
 const cors = () => ({ "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   "access-control-allow-headers": "content-type, x-admin-key", "access-control-max-age": "86400" });
@@ -125,6 +143,22 @@ export default {
 
     // One read for the whole title screen: season, totals, deepest floor, and the latest ambient events.
     if (url.pathname === "/feed" && req.method === "GET") return json(await titleFeed(env.DB), 200, allow);
+
+    // "Someone is here": one ping a day from each device with a living run. { id: a random id the game made, level }.
+    // One row a device, overwritten. A sender may keep at most 40 ids fresh in a day (the bots share one sender).
+    if (url.pathname === "/here" && req.method === "POST") {
+      if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
+      let b; try { b = await req.json(); } catch (e) { return json({ error: "json" }, 400, allow); }
+      const id = String(b.id || ""), level = Number(b.level);
+      if (!/^[a-z0-9]{12,40}$/.test(id) || !Number.isInteger(level) || level < 1 || level > 60) return json({ error: "invalid" }, 400, allow);
+      const who = await hash((req.headers.get("cf-connecting-ip") || "?") + "daily-dungeon"), now = Math.floor(Date.now() / 1000);
+      const mine = await env.DB.prepare(`SELECT COUNT(*) AS n FROM present WHERE who = ?1 AND at > ?2 AND id != ?3`).bind(who, now - 86400, id).first();
+      if (mine.n >= 40) return json({ error: "slow down" }, 429, allow);
+      await env.DB.prepare(`INSERT INTO present (id, level, at, who) VALUES (?1, ?2, ?3, ?4)
+        ON CONFLICT (id) DO UPDATE SET level = ?2, at = ?3, who = ?4`).bind(id, level, now, who).run();
+      await env.DB.prepare(`DELETE FROM present WHERE at < ?1`).bind(now - 60 * 86400).run();
+      return json({ ok: true }, 200, allow);
+    }
 
     // An ambient event: a tag (and maybe a small number). Thirty an hour per sender is plenty for real play.
     if (url.pathname === "/event" && req.method === "POST") {

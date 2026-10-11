@@ -47,3 +47,13 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_type_idx ON events (type, id);
 CREATE INDEX IF NOT EXISTS events_who_idx ON events (who, made);
+
+-- WHO IS HERE: one row a device with a living run (a random id the game makes; nothing personal), refreshed by
+-- one ping a day. "Players seen" counts rows since the epoch began; "in the pit today" counts the last 24 hours.
+CREATE TABLE IF NOT EXISTS present (
+  id    TEXT PRIMARY KEY,
+  level INTEGER NOT NULL,             -- height in the pit: 1 = B4F ... 4 = B1F, 5 = 1F
+  at    INTEGER NOT NULL,             -- unix seconds of the last ping
+  who   TEXT                          -- hash of the sender, for the rate limit only
+);
+CREATE INDEX IF NOT EXISTS present_at_idx ON present (at);

@@ -129,6 +129,7 @@
   let save = null;
   // TITLE SCREEN: shown first on every load (even over a save in progress -- CONTINUE is the explicit
   // resume). atTitle gates the click/keydown handlers over at the bottom of this file.
+  let worldLines = [];                 // the title feed's lines, lent to the run's status line now and then (see RULES report)
   let atTitle = true, titleTimer = null, titleOffset = 0, titleCards = [], titleLean = null, titleDeep = null, titleStats = null, titleEvents = [];
 
   // Color only the minimap rows (right panel) and the moon marker.
@@ -303,7 +304,21 @@
 
   // AMBIENT EVENTS: the rules leave tags on save.events (see rules.js); each is sent to the Worker once, quietly,
   // and forgotten whether or not it arrives. Never while the testing cheat is on.
+  // SOMEONE IS HERE: once a day, a device with a living run tells the Worker so (a random id, and the level).
+  // Nothing personal, and nothing while the testing cheat is on.
+  function pingHere() {
+    try {
+      if (!LEADERBOARD_URL || !save || !save.dungeon || save.dead || save.freeSteps) return;
+      const day = SMT.localISO(save.tz);
+      if (localStorage.getItem("ddd.here") === day) return;
+      let id = localStorage.getItem("ddd.device");
+      if (!id) { id = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join(""); localStorage.setItem("ddd.device", id); }
+      localStorage.setItem("ddd.here", day);
+      fetch(LEADERBOARD_URL + "/here", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify({ id, level: save.height || 1 }) }).catch(() => {});
+    } catch (e) {}
+  }
   function flushEvents() {
+    pingHere();
     if (!save || !save.events || !save.events.length) return;
     const list = save.events; delete save.events;
     if (!LEADERBOARD_URL || save.freeSteps) return;
@@ -399,6 +414,9 @@
   // Numbers and rumors share the feed: never more than two of one kind in a row while both last.
   function buildTitleCards() {
     const nums = numberCards(), rum = rumorCards(), cards = [];
+    // The same lines are lent to the run's own log line 1: the moon's as they are, everyone else's news marked as such.
+    worldLines = nums.concat(rum).filter(l => !/^Faction lean|^"/.test(l))
+      .map(l => (/^(The moon is|The dark takes|Full moon|LAW omens|CHAOS omens)/.test(l) ? l : "Elsewhere: " + l)).filter(l => l.length <= 74).slice(0, 40);
     while (nums.length || rum.length) { cards.push(...nums.splice(0, rum.length ? 2 : nums.length)); if (rum.length) cards.push(rum.shift()); }
     return cards;
   }
@@ -423,9 +441,27 @@
         cards.push(`Last fall: ${ago}`);
       }
       if (n("runs")) cards.push(`Runs ended: ${num(n("runs"))}`);
-      if (n("players")) cards.push(`Players seen: ${num(n("players"))}`);
+      // Who is here: devices with a living run (a daily ping), this moon and in the last day. Nothing shows at zero.
+      const here = titleStats.here || {}, lvl = h => (h <= 4 ? `B${5 - h}F` : `${h - 4}F`);
+      if (here.month) cards.push(`Players seen: ${num(here.month)}`);
+      if (here.today) cards.push(`In the pit today: ${num(here.today)}`);
+      for (const x of (here.levels || []).slice(0, 4)) if (x.n) cards.push(`On ${lvl(x.level)} today: ${num(x.n)}`);
+      if (titleStats.names) cards.push(`Names carved on the board: ${num(titleStats.names)}`);
       if (n("turns")) cards.push(`Turns logged: ${num(n("turns"))}`);
       if (n("pacts")) cards.push(`Pacts: ${num(n("pacts"))} made, ${num(n("ended"))} ended`);
+      if (n("pacts")) cards.push(`Pacts that lasted: ${Math.round(100 * Math.max(0, n("pacts") - n("ended")) / n("pacts"))}%`);
+      if (n("beaten")) cards.push(`Demons beaten: ${num(n("beaten"))}`);
+      if (n("talks")) cards.push(`Demons spoken to: ${num(n("talks"))}`);
+      if (n("joined")) cards.push(`Demons joined: ${num(n("joined"))}`);
+      if (titleStats.deadliest && titleStats.deadliest.name) cards.push(`Most falls: ${titleStats.deadliest.name}`);
+      if (n("unlocks")) cards.push(`Doors unlocked: ${num(n("unlocks"))}`);
+      if (n("standby")) cards.push(`STANDBY nights: ${num(n("standby"))}`);
+      if (n("climbs")) cards.push(`Levels climbed: ${num(n("climbs"))}`);
+      if (n("moon")) cards.push(`The moon was asked: ${num(n("moon"))}x`);
+      if (n("moon")) cards.push(`The moon answered: ${num(n("moonYes"))}x`);
+      if (n("breath")) cards.push(`Out of breath: ${num(n("breath"))}x`);
+      if (n("silver")) cards.push(`SILVER found: ${num(n("silver"))}`);
+      if (n("rare")) cards.push(`Rare finds: ${num(n("rare"))}`);
       if (n("broken")) cards.push(`Items broken: ${num(n("broken"))}`);
       if (n("trips")) cards.push(`TRIPs reported: ${num(n("trips"))}`);
       if (n("wall")) cards.push(`Longest wall search: ${num(n("wall"))}x`);
@@ -433,6 +469,19 @@
       if (n("silent")) cards.push(`Answered [S]ILENT: ${num(n("silent"))}x`);
     }
     cards.push(RULES.omen(SMT.utcDay(SMT.now())).text.replace(/^> /, ""));
+    // THE MOON, which needs no network: her quarter and the next one, the full moon, the level the dark is taking.
+    try {
+      const now = SMT.now(), Q = SMT.quarterOf(now), tz = SMT.zone(), days = d => Math.max(0, SMT.localDay(d, tz) - SMT.localDay(now, tz)), s = k => (k === 1 ? "" : "s");   // whole calendar days, as the LEVEL line counts them
+      const left = days(Q.end);
+      cards.push(`The moon is in her ${["first", "second", "third", "last"][Q.q]} quarter. ${left ? `The next in ${left} day${s(left)}.` : "The next comes tonight."}`);
+      cards.push(left ? `The dark takes B${4 - Q.q}F in ${left} day${s(left)}.` : `The dark takes B${4 - Q.q}F tonight.`);
+      let m = Q.n; while (SMT.quarter(m).q !== 1) m++;
+      const full = days(SMT.quarter(m).end);
+      cards.push(full ? `Full moon in ${full} day${s(full)}.` : "The moon is full tonight.");
+      if (SMT.moonIndex(now) === 0) cards.push("The moon is new. She answers no one tonight.");
+      const streak = RULES.omenStreak(SMT.utcDay(now));
+      if (streak) cards.push(`${streak} omens, three days running.`);
+    } catch (e) {}
     return cards;
   }
   async function loadTitleExtras() {
@@ -1377,6 +1426,7 @@
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
     // screen (resetBox() -> answerConfirm(true) -> act("reset")); that's the title's own exit into the game.
     if (atTitle) leaveTitle();
+    if (save && worldLines.length) save.world = worldLines;      // word of everyone else, for the status line
     const okHold = holdOK, okReset = resetOK; holdOK = resetOK = false;      // a confirmation is good for this one call only
     if (replayTimer) finishReplay();
     prevDemonHp = save && save.encounter ? save.encounter.hp : null;
