@@ -1204,9 +1204,9 @@
     return true;
   }
 
-  let introAt = 0;
+  let introAt = 0, introTimer = null, introSeen = null;      // the fight's opening unfolds a beat at a time too, a little quicker than its ending
   function introOK() {
-    if (Date.now() - introAt < 700 || !save || !save.encounter) return;      // a quick tap or a held key can't dismiss it
+    if (introTimer || Date.now() - introAt < 400 || !save || !save.encounter) return;      // a quick tap or a held key can't dismiss it
     save.encounter.seen = true; persist();
     encounterBox(false);
   }
@@ -1268,15 +1268,24 @@
       pre.innerHTML = "";
       box.dataset.mode = "intro";
       introAt = Date.now();
+      if (introTimer) { clearTimeout(introTimer); introTimer = null; }
+      const groups = [], grp = fn => { const at = pre.children.length; fn(); groups.push([...pre.children].slice(at)); };
       const said = [save.extra && save.extra.includes(e.name) ? save.extra : null, ...lines].filter(Boolean).map(l => String(l).replace(/^> /, ""));
       const iRows = said.reduce((n, l) => n + wrapText(l, COLS).length + 1, 0);
       const iArt = Math.min(5, ROWS - 2 - iRows - 1);          // title, blank, text (+ a blank after each), [ OK ]
-      if (iArt >= 3) artSlot(iArt);
-      add(`${e.name} APPEARS`, "demon");
-      add(" ");
-      for (const l of said) { for (const w of wrapText(l, COLS)) add(w); add(" "); }
-      const row = document.createElement("div"), ok = document.createElement("span");
-      ok.textContent = "[ OK ]"; ok.className = "btn"; ok.dataset.intro = "1"; row.append(ok); pre.appendChild(row);
+      if (iArt >= 3) grp(() => artSlot(iArt));
+      grp(() => { add(`${e.name} APPEARS`, "demon"); add(" "); });
+      for (const l of said) grp(() => { for (const w of wrapText(l, COLS)) add(w); add(" "); });
+      grp(() => { const row = document.createElement("div"), ok = document.createElement("span");
+        ok.textContent = "[ OK ]"; ok.className = "btn"; ok.dataset.intro = "1"; row.append(ok); pre.appendChild(row); });
+      // Only the first showing unfolds; a redraw shows it whole. Nothing skips it: [ OK ] works once it is on screen.
+      const ikey = save.runId + ":" + (save.steps || 0) + ":" + e.name;
+      if (introSeen !== ikey && groups.length > 1) {
+        introSeen = ikey;
+        const hide = groups.slice(1); hide.forEach(g => g.forEach(n => { n.style.visibility = "hidden"; }));
+        const step = () => { const g = hide.shift(); if (g) g.forEach(n => { n.style.visibility = ""; }); if (hide.length) introTimer = setTimeout(step, 450); else { introTimer = null; introAt = Date.now() - 300; } };
+        introTimer = setTimeout(step, 450);
+      }
       return true;
     }
     const barOf = (hp, max) => { const f = Math.max(0, Math.min(10, Math.round(10 * hp / max))); return `[${"#".repeat(f)}${"-".repeat(10 - f)}]`; };
