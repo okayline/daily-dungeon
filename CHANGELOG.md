@@ -2,6 +2,19 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.62.1 - Oct 11 2026, 00:04 HST
+
+![v0.62.1](screenshots/v0.62.1.png)
+
+Fixes, mostly to the new title screen.
+
+- **Title screen:** a run in progress no longer flashes over it once a minute, long omens wrap onto a second line instead of being cut off, and the browser's own keys (reload, Tab) work there again. A tied season now reads EVEN in both places.
+- **Straight borders.** Some letter pairs were being squeezed into one space, pulling that row's right edge in by a column. Fixed everywhere.
+- **Passwords load again.** [P]ASSWORD had been refusing every current run. It's also reachable from the title screen's ABOUT now, so a run can be brought over from another device without starting a new one first.
+- **The bag's bottom buttons stay put** when the list is long enough to scroll.
+- **Selecting text in the log** no longer closes it.
+- **Dissonance:** days spent away now count toward a tense party's wear, not only the last day played.
+
 ## v0.62 - Oct 10 2026, 21:48 HST
 
 ![v0.62](screenshots/v0.62.png)
@@ -16,15 +29,21 @@ Changes to the game itself, newest first, with the time each went live (Honolulu
 
 ## v0.61 - Oct 10 2026, 20:30 HST
 
+![v0.61](screenshots/v0.61.png)
+
 - **Hold Omen has its own button in the bag now.** It used to take up a numbered slot alongside whatever you'd found; now it's a fixed button (and an H key) above the list, so it's always in the same place and never bumps a found item down.
 - **The ? help menu's key list is alphabetical now**, easier to scan for a specific key.
 - **Every popup (About, Log, Invoke, Codex, the Leaderboard) closes with a click anywhere on it**, not just its [C]LOSE button.
 
-## v0.60 - Oct 10 2026, 20:30 HST
+## v0.60 - Oct 10 2026, 20:09 HST
 
-- **Faction seasons.** Every finished run now nudges a month-long, server-side tally toward LAW or CHAOS, deeper runs counting for more. A NEUTRAL run doesn't get its own side — its point goes to whichever of LAW/CHAOS is currently behind, so one side can't run away with a season. Nothing visible in the game yet; this just lays the groundwork the title screen will read from.
+![v0.60](screenshots/v0.60.png)
 
-## v0.59 - Oct 10 2026, 20:05 HST
+- **Faction seasons.** Every finished run now nudges a month-long, server-side tally toward LAW or CHAOS, deeper runs counting for more. A NEUTRAL run doesn't get its own side — its point goes to whichever of LAW/CHAOS is currently behind, so one side can't run away with a season. Nothing visible in the game yet; this just lays the groundwork the title screen will read from. (The in-game build number wasn't raised for v0.59 or v0.60, so their screenshots still read v0.58.)
+
+## v0.59 - Oct 10 2026, 20:02 HST
+
+![v0.59](screenshots/v0.59.png)
 
 - **Dissonance.** Mixed-alignment parties wear on each other now — fighting, lingering too long in a dangerous room, and skipping a day all chip at a tense member's patience a little faster, worse the bigger the alignment gap between them. No new meter: it's the same patience number as always, just worn down from a second direction, with its own line when a member's at zero over the others rather than over talking.
 
