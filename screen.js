@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.99";
+  const VERSION = "v0.99.1";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -262,7 +262,7 @@
     const BW = W - 2 - box[0].length;      // 70 columns to the right of the moon
     const bar = s => box[0] && center(s, BW);
     // Today's phase of the moon in Japanese (new, crescent, first quarter, waxing gibbous, full, waning gibbous, last quarter, waning crescent), left of its English name.
-    const PKANJI = ["新月", "三日月", "上弦", "十三夜", "満月", "十六夜", "下弦", "有明月"], kj = PKANJI[idx];
+    const PKANJI = ["新月", "三日月", "上弦", "十三夜", "満月", "十六夜", "下弦", "二十六夜"], kj = PKANJI[idx];
     const ed = epochDay(now), head = ` LUNAR DAY ${ed.day}/${ed.total}  ${kj} ${long[idx]}`;     // (the day of the lunar month, as the title says; the strip below shows the phase)
     // The Japanese weekday kanji sits left of the date. A kanji is two columns wide on screen.
     const tail = `${when.kanji} ${when.date}   ${when.time} ${when.zone}  `;

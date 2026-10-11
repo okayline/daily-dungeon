@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.99.1 - The Twenty-Sixth Night - Oct 11 2026, 13:10 HST
+
+![v0.99.1](screenshots/v0.99.1.png)
+
+- **The waning crescent's Japanese name is now 二十六夜,** the traditional "twenty-sixth night," in place of a word that isn't in the dictionary.
+
 ## v0.99 - Moon in Kanji - Oct 11 2026, 13:00 HST
 
 ![v0.99](screenshots/v0.99.png)
