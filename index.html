@@ -78,11 +78,12 @@
   .logview .dim { color: var(--trail); }
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
-  .logline.q-plain { color: var(--trail); }
-  .logline.q-silver { color: #cfd8e3; }     /* SILVER found: a cool, bright silver */
-  .logline.q-rare { color: #7fcf8f; }       /* a rare thing: a soft terminal green, clear of the silver and the moon blue */
-  .logline.q-mythic { color: var(--gold); }
-  .logline.q-moon { color: var(--moon); }
+  /* A search result's color, by what it turned up. No glow on any of them. */
+  .logline.q-plain { color: var(--trail); }   /* nothing, or a common or uncommon thing: grey */
+  .logline.q-silver { color: #d6e8ff; }       /* SILVER: cooler and brighter than the log's own off-white */
+  .logline.q-rare { color: #6aa6e8; }         /* rare: blue */
+  .logline.q-mythic { color: #f5c542; }       /* mythic, and the deep find: a bright gold */
+  .logline.q-moon { color: #c9b6ff; }         /* a moon thing: lavender */
   #ticker { display: inline-block; width: 76ch; overflow: hidden; white-space: pre; vertical-align: top; }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
