@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.74 - Whispers - Oct 11 2026, 02:12 HST
+
+![v0.74](screenshots/v0.74.png)
+
+- **Rumors on the title screen.** Mixed in with the numbers now: short, vague lines about things that have happened in other people's runs. No names, no places. Now and then, something's last words.
+- **One button for the obvious thing.** `[ ^ ]` (or the up arrow) acts on whatever KURA is facing: search a wall, listen at the doors, consult the moon, step through, go down. The word between `[ < ]` and `[ > ]` says what it will do.
+- **Looking has its own button** beside the turn buttons: `[ UP ]`, then `[ DOWN ]`, then `[ AHEAD ]`.
+- **The end of a fight unfolds a beat at a time** instead of all at once. A click or Enter shows the rest.
+- **The title screen's WEEK line** now says when a new run would start on next week's floor.
+
 ## v0.73 - Rumors and Numbers - Oct 11 2026, 01:51 HST
 
 ![v0.73](screenshots/v0.73.png)
