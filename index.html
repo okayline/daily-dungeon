@@ -427,9 +427,7 @@
   // Numbers and rumors share the feed: never more than two of one kind in a row while both last.
   function buildTitleCards() {
     const nums = numberCards(), rum = rumorCards(), cards = [];
-    // The same lines are lent to the run's own log line 1: the moon's as they are, everyone else's news marked as such.
-    worldLines = nums.concat(rum).filter(l => !/^Faction lean|^"/.test(l))
-      .map(l => (/^(The moon is|The dark takes|Full moon|LAW omens|CHAOS omens)/.test(l) ? l : "Elsewhere: " + l)).filter(l => l.length <= 74).slice(0, 40);
+    worldLines = rum.slice();           // the rumors (what other players' runs left behind) also ride the in-game ticker
     while (nums.length || rum.length) { cards.push(...nums.splice(0, rum.length ? 2 : nums.length)); if (rum.length) cards.push(rum.shift()); }
     return cards;
   }
@@ -1460,13 +1458,39 @@
   // THE TICKER along the bottom log line: one long tape of news, moved a character at a time, right to left.
   // It carries the run's own status report (each new one joins the tape as it comes) and the title feed's lines
   // (the numbers, the rumors, the moon), in turn. Only its own span is rewritten: the screen is not redrawn for it.
+  // What rides the tape besides the status report: news of this run (from its own counts), the rumors other
+  // players' runs left behind, and how many are on her level today. No month totals and no calendar: those stay
+  // on the title screen.
+  function tickerFeed() {
+    if (!save || !save.dungeon) return [];
+    const k = save.stats || {}, own = [], lvl = save.floor, n = (v, one, many) => `${v} ${v === 1 ? one : many}`;
+    const party = (save.party || []).slice(1).filter(q => q.hp > 0).map(q => q.name);
+    own.push(`${save.playerName || "KURA"}: day ${save.day || 1}, turn ${save.steps || 0}, ${lvl}`);
+    if (party.length) own.push(`With her: ${party.join(", ")}`); else own.push("She walks alone");
+    if (k.met) own.push(`${n(k.met, "demon", "demons")} met, ${k.beaten || 0} beaten, ${k.fled || 0} fled from`);
+    if (k.recruited) own.push(`${n(k.recruited, "pact", "pacts")} made this run`);
+    if (k.searches) own.push(`${n(k.searches, "search", "searches")} so far, ${k.items || 0} things found`);
+    if (k.unlocks) own.push(`${n(k.unlocks, "door", "doors")} unlocked`);
+    if (k.floors) own.push(`${n(k.floors, "level", "levels")} climbed`);
+    if (save.silver) own.push(`${save.silver} SILVER in hand`);
+    if (save.align && save.align !== "NEUTRAL") own.push(`She leans ${save.align}`);
+    if (k.moonAsked) own.push(`The moon asked ${n(k.moonAsked, "time", "times")}, answered ${k.moonAnswered || 0}`);
+    if (k.breathOut) own.push(`Out of breath ${n(k.breathOut, "time", "times")}`);
+    const here = ((titleStats && titleStats.here && titleStats.here.levels) || []).find(x => x.level === (save.height || 1));
+    const others = worldLines.slice();
+    if (here && here.n > 1) others.unshift(`${n(here.n - 1, "other is", "others are")} on ${lvl} today`);
+    // One of hers, one of theirs, in turn.
+    const out = [];
+    for (let i = 0; i < Math.max(own.length, others.length); i++) { if (own[i]) out.push(own[i]); if (others[i]) out.push(others[i]); }
+    return out;
+  }
   const TICK_W = 76, TICK_GAP = "   //   ";
   let tape = " ".repeat(TICK_W), tapeAt = 0, tapeNext = 0, tapeStatus = null;
   function tickerText(status) {
     status = String(status || "").replace(/^> /, "").trim();
     let guard = 0;
     while (tape.length - tapeAt < TICK_W + 1 && guard++ < 50) {
-      const feed = worldLines.map(l => l.replace(/^Elsewhere: /, ""));
+      const feed = tickerFeed();
       let item = status && status !== tapeStatus ? (tapeStatus = status) : feed.length ? feed[tapeNext++ % feed.length] : status;
       if (!item) { tape += " ".repeat(TICK_W); break; }
       tape += item + TICK_GAP;
@@ -1479,7 +1503,7 @@
     if (!el || atTitle || !save || !save.dungeon) return;
     tapeAt++;
     el.textContent = tickerText(save.status);
-  }, 140);
+  }, 200);
   let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent
   let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
   const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
