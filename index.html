@@ -1474,12 +1474,12 @@
     const thin = (save.party || []).slice(1).filter(q => q.hp > 0 && q.patience !== undefined && q.patience <= 2).map(q => q.name);
     const left = d.deadline !== undefined && save.today ? d.deadline - save.today.date : null, list = a => (a.length > 2 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a.join(" and "));
     own.push(`${n(rooms, "room", "rooms")} of ${lvl} walked so far`);
-    if (left !== null) own.push(left <= 0 ? `The dark takes ${lvl} tonight` : `${n(left, "day", "days")} before the dark takes ${lvl}`);
+    if (left !== null) own.push(left <= 0 ? `The dark takes ${lvl} tonight . . .` : `${n(left, "day", "days")} before the dark takes ${lvl} . . .`);
     own.push((save.today || {}).stepped ? "Today's key is spent. Another comes at dawn" : "Today's key is still in hand");
-    if (party.length) own.push(`${list(party)} ${party.length === 1 ? "walks" : "walk"} with her`); else own.push("She walks alone");
-    if (down.length) own.push(`${list(down)} ${down.length === 1 ? "has" : "have"} fallen and ${down.length === 1 ? "is" : "are"} carried`);
-    if (hurt.length) own.push(`${list(hurt)} ${hurt.length === 1 ? "is" : "are"} badly hurt`);
-    if (thin.length) own.push(`${list(thin)} ${thin.length === 1 ? "is" : "are"} running out of patience`);
+    if (party.length) own.push(`${list(party)} ${party.length === 1 ? "walks" : "walk"} with her`); else own.push("She walks alone . . .");
+    if (down.length) own.push(`${list(down)} ${down.length === 1 ? "has" : "have"} fallen and ${down.length === 1 ? "is" : "are"} carried . . .`);
+    if (hurt.length) own.push(`${list(hurt)} ${hurt.length === 1 ? "is" : "are"} badly hurt . . .`);
+    if (thin.length) own.push(`${list(thin)} ${thin.length === 1 ? "is" : "are"} running out of patience . . .`);
     if (pacts.length) own.push(`A pact holds with ${list(pacts.map(q => q.name))}`);
     if (k.met) own.push(`${n(k.met, "demon", "demons")} met this run: ${k.beaten || 0} beaten, ${k.fled || 0} run from`);
     if (k.demonTalks) own.push(`She has stopped to talk with a demon ${n(k.demonTalks, "time", "times")}`);
@@ -1494,7 +1494,7 @@
     if (k.unlocks) own.push(`${n(k.unlocks, "door", "doors")} unlocked, ${n(k.steps || 0, "room", "rooms")} entered`);
     if (k.floors) own.push(`${n(k.floors, "level", "levels")} climbed since she woke`);
     if (k.standby) own.push(`${n(k.standby, "night", "nights")} spent on STANDBY`);
-    if (save.bankedOmen !== undefined) own.push("An omen is held in reserve");
+    if (save.bankedOmen !== undefined) own.push("An omen is held in reserve . . .");
     if (k.fixtures) own.push(`${n(k.fixtures, "fixture", "fixtures")} put to use`);
     if (k.offerings) own.push(`${n(k.offerings, "offering", "offerings")} made at a terminal`);
     if (k.ichorDrunk) own.push(`ICHOR drunk ${n(k.ichorDrunk, "time", "times")}, ${k.trips || 0} bad`);
@@ -1507,7 +1507,8 @@
     // Two of hers, then one of theirs (other players, the level), and round again. Whichever list is shorter repeats.
     const out = [], turns = Math.max(Math.ceil(own.length / 2), others.length);
     for (let i = 0; i < turns; i++) { out.push(own[(2 * i) % own.length], own[(2 * i + 1) % own.length]); if (others.length) out.push(others[i % others.length]); }
-    return out;
+    // Every line ends properly: a full stop, unless it already ends in one, in a quote, or trails off ( . . . ).
+    return out.map(l => (/[.!?"]$/.test(l) ? l : l + "."));
   }
   // It is typed, not scrolled: a line appears a letter at a time, as if at a terminal, with a _ at the end; it
   // holds for a few seconds with the _ blinking; it is deleted back to nothing; the bare > waits two seconds with
@@ -1529,7 +1530,7 @@
         typeN++;
         const ch = typeLine[typeN - 1];
         wait = /[.,:;!?]/.test(ch) ? 420 : ch === " " ? 120 : 80 + Math.random() * 70;     // an unhurried hand: about eight letters a second, a breath at punctuation
-        if (typeN >= typeLine.length) { typeMode = "hold"; wait = 3200; }
+        if (typeN >= typeLine.length) { typeMode = "hold"; wait = 6000; }   // a finished line stays six seconds
       } else if (typeMode === "hold") { typeMode = "delete"; wait = 30; }
       else if (typeMode === "delete") { typeN = Math.max(0, typeN - 1); wait = 45; if (typeN === 0) { typeMode = "gap"; wait = 2200; } }   // one letter at a time, about twenty a second
       const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml();
