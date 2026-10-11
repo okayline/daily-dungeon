@@ -6,6 +6,7 @@
 //   POST /event   {t, v?, lv, d, k, a, p, c, dm, m, n}         -> {ok}        (a "this happened" ping: a tag, and where and who)
 //   POST /here    {id, level}                                  -> {ok}        (a daily "someone is here" ping)
 //   GET  /feed                                                 -> everything the title screen shows, in one read
+//   GET  /admin   (header x-admin-key)                         -> {ok} if the key is right, else 403 (the game's X menu asks this)
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
 const MAX = { floor: 20, days: 400 };
@@ -193,6 +194,14 @@ export default {
       await env.DB.prepare(`INSERT INTO news (type, v, made, who, x) VALUES (?1, ?2, ?3, ?4, ?5)`).bind(t, v, now, who, JSON.stringify(x)).run();
       // Keep the newest 20 of this tag. Rows from the last hour stay regardless, so the rate limit above can count them.
       await env.DB.prepare(`DELETE FROM news WHERE type = ?1 AND made <= ?2 AND id NOT IN (SELECT id FROM news WHERE type = ?1 ORDER BY id DESC LIMIT 20)`).bind(t, now - 3600).run();
+      return json({ ok: true }, 200, allow);
+    }
+
+    // ADMIN CHECK: lets the game ask "is this the admin key?" without changing anything (the X testing menu asks it
+    // before it unlocks). 200 {ok} or 403. The key is the same Worker secret ADMIN_KEY; use a long one.
+    if (url.pathname === "/admin" && req.method === "GET") {
+      if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
+      if (!env.ADMIN_KEY || req.headers.get("x-admin-key") !== env.ADMIN_KEY) return json({ error: "forbidden" }, 403, allow);
       return json({ ok: true }, 200, allow);
     }
 
