@@ -85,7 +85,7 @@ async function titleFeed(db) {
     here.month = (await db.prepare(`SELECT COUNT(*) AS n FROM present WHERE at > ?1`).bind(since).first()).n;
     for (const r of (await db.prepare(`SELECT level, COUNT(*) AS n FROM present WHERE at > ?1 GROUP BY level ORDER BY level LIMIT 30`).bind(dayAgo).all()).results) { here.levels.push({ level: r.level, n: r.n }); here.today += r.n; }
   });
-  const names = await quiet(async () => (await db.prepare(`SELECT COUNT(DISTINCT name) AS n FROM scores WHERE made > ?1`).bind(since).first()).n, 0);
+  const names = await quiet(async () => (await db.prepare(`SELECT COUNT(DISTINCT name) AS n FROM scores WHERE ${NOT_BOT} AND made > ?1`).bind(since).first()).n, 0);
   for (const r of await quiet(async () => (await db.prepare(`SELECT side, count FROM faction_season WHERE epoch = ?1`).bind(epoch).all()).results, [])) if (r.side in tally) tally[r.side] = r.count;
   const last = await quiet(() => db.prepare(`SELECT MAX(made) AS made FROM scores`).first(), null);
   const top = await quiet(() => db.prepare(`SELECT floor FROM scores ORDER BY floor DESC, days DESC, made ASC LIMIT 1`).first(), null);
@@ -105,8 +105,11 @@ const cors = () => ({ "access-control-allow-origin": "*", "access-control-allow-
 const json = (data, status, origin) => new Response(JSON.stringify(data), { status: status || 200, headers: { "content-type": "application/json", ...cors() } });
 const hash = async s => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].slice(0, 8).map(b => b.toString(16).padStart(2, "0")).join("");
 
+// BOTS: the scripted players' names end in "-bot". Their scores are stored and counted in every feed total (season, counters,
+// deepest, last fall) but kept off the board and out of everyone's rank. A person who names themselves "...-bot" only hides themselves.
+const NOT_BOT = `name NOT LIKE '%-bot'`;
 async function rankOf(db, row) {
-  const r = await db.prepare(`SELECT COUNT(*) AS n FROM scores WHERE floor > ?1 OR (floor = ?1 AND days > ?2) OR (floor = ?1 AND days = ?2 AND made < ?3)`)
+  const r = await db.prepare(`SELECT COUNT(*) AS n FROM scores WHERE ${NOT_BOT} AND (floor > ?1 OR (floor = ?1 AND days > ?2) OR (floor = ?1 AND days = ?2 AND made < ?3))`)
     .bind(row.floor, row.days, row.made).first();
   return r.n + 1;
 }
@@ -121,7 +124,7 @@ export default {
 
     if (url.pathname === "/top" && req.method === "GET") {
       const n = Math.max(1, Math.min(50, Number(url.searchParams.get("n")) || 20)), run = url.searchParams.get("run") || "";
-      const top = await env.DB.prepare(`SELECT rowid AS id, run, name, floor, days, demons, turns FROM scores ORDER BY floor DESC, days DESC, made ASC LIMIT ?1`).bind(n).all();
+      const top = await env.DB.prepare(`SELECT rowid AS id, run, name, floor, days, demons, turns FROM scores WHERE ${NOT_BOT} ORDER BY floor DESC, days DESC, made ASC LIMIT ?1`).bind(n).all();
       const rows = top.results.map(r => ({ id: r.id, name: r.name, floor: r.floor, days: r.days, demons: r.demons, turns: r.turns, you: r.run === run }));
       let you = null;
       if (run && !rows.some(r => r.you)) {
