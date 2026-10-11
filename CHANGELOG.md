@@ -2,6 +2,21 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.70 - One Room - Oct 11 2026, 01:20 HST
+
+![v0.70](screenshots/v0.70.png)
+
+The dungeon is rebuilt around a single room a day.
+
+- **One room a day.** Every room has two locked doors. Open one and the other seals for good; step through and the door shuts behind you. There is no going back.
+- **Look up, look down.** The ceiling and the floor can be searched now, along with the walls. `[U]P` (or U) looks up; again looks down; again looks ahead.
+- **The way down** is under the floor of the week's last room. Look down at it and go forward.
+- **Doors always tell you something.** Listening at a locked door never comes up empty now.
+- **The map shows the path you took**, one room at a time: `#` for a locked door, `x` for one sealed for good.
+- **Running:** a demon that blocks a run through a locked door no longer costs you the day's charge as well.
+- **Gone for now:** the bonus room and THE VOID are resting until they have a place in the new floors.
+- **Saves:** this one breaks old saves. Every run in progress starts fresh.
+
 ## v0.62.2 - A Shorter Sentence - Oct 11 2026, 00:22 HST
 
 ![v0.62.2](screenshots/v0.62.2.png)
