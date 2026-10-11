@@ -1530,7 +1530,7 @@
         typeN++;
         const ch = typeLine[typeN - 1];
         wait = /[.,:;!?]/.test(ch) ? 420 : ch === " " ? 120 : 80 + Math.random() * 70;     // an unhurried hand: about eight letters a second, a breath at punctuation
-        if (typeN >= typeLine.length) { typeMode = "hold"; wait = 6000; }   // a finished line stays six seconds
+        if (typeN >= typeLine.length) { typeMode = "hold"; wait = 5000; }   // a finished line stays five seconds
       } else if (typeMode === "hold") { typeMode = "delete"; wait = 30; }
       else if (typeMode === "delete") { typeN = Math.max(0, typeN - 1); wait = 45; if (typeN === 0) { typeMode = "gap"; wait = 2200; } }   // one letter at a time, about twenty a second
       const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml();
