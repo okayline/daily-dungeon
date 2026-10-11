@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.85 - Word From Elsewhere - Oct 11 2026, 06:47 HST
+
+![v0.85](screenshots/v0.85.png)
+
+The title screen knows more, and some of it follows you in.
+
+- **Who is here.** The title now counts the players actually in the pit, this moon and today, and how many are on each level. Finished runs are counted separately, as names carved on the board.
+- **More numbers:** demons beaten, spoken to and joined; doors unlocked; nights on STANDBY; levels climbed; how often the moon was asked and how often she answered; times someone ran out of breath; SILVER and rare finds; and which demon has ended the most runs.
+- **More of the moon:** which quarter she is in and when the next comes, when the dark takes the current level, and how long until she is full.
+- **Word from elsewhere.** Now and then the top line of the log carries one of these, marked "Elsewhere".
+
 ## v0.84 - Searching . . . - Oct 11 2026, 06:18 HST
 
 ![v0.83](screenshots/v0.83.png)
