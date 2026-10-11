@@ -181,7 +181,7 @@
         const b = (txt, act, ok) => `<span class="btn${ok && !fight ? "" : " off"}" data-act="${act}">${txt}</span>`;
         const open = Object.keys(can.doors || {}).find(k => can.doors[k].state === "open");
         const ok = k => !!(can.doors[k] && can.doors[k].can);
-        return esc(line.slice(0, 48)).replace(/\b(LISTEN|OPEN|ENTER|SEARCH|USE|OFFER|CONSULT|DESCEND)\b/, w => b(w, "do", true))   // the word for what [ ^ ] does
+        return esc(line.slice(0, 48)).replace(/\b(LISTEN|OPEN|ENTER|SEARCH|USE|OFFER|CONSULT|CLIMB)\b/, w => b(w, "do", true))   // the word for what [ ^ ] does
           .replace("[ &lt; LEFT ]", b("[ &lt; LEFT ]", "go-L", ok("L"))).replace("[ RIGHT &gt; ]", b("[ RIGHT &gt; ]", "go-R", ok("R")));
       })() + esc(line.slice(48)).replace(/\./, `<span class="cell" style="position:relative;left:${[2, 6].includes(SMT.moonIndex(SMT.now())) ? ".65ch" : ".15ch"}">.</span>`);
       // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
@@ -370,18 +370,19 @@
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.dispatchEvent(new Event("resize")));   // popups are placed by measuring the font
     // The title screen shows first either way (CONTINUE is the explicit resume now); this only decides
     // whether CONTINUE has anything to resume. tick()/draw() wait for that button, same for a fresh save.
-    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 9 && s.party) save = s;
+    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 10 && s.party) save = s;
     else { if (s) stash("-old"); save = null; }
     showTitle();
   }
 
   // TITLE SCREEN -----------------------------------------------------------------------------------
-  const titleCanContinue = () => !!(save && save.dungeon && save.dungeon.floor && save.dungeon.floor.v === 9 && save.party);
+  const titleCanContinue = () => !!(save && save.dungeon && save.dungeon.floor && save.dungeon.floor.v === 10 && save.party);
   // The three hard-number cards that cost nothing new (Part 11, build-order note): today's shared omen
   // needs no save at all, and the other two just read the leaderboard's existing endpoints.
   // RUMOR CARDS: each ambient event the Worker has kept becomes one vague line. It refers to a moment without
   // quoting the game's own text, except a demon's last words, which are quoted and never attributed.
   const RUMORS = {
+    out: ["Someone climbed out, into open air.", "Someone reached the surface tonight."],
     refused: ["A demon rejected a traveler's paltry gift.", "A gift was thrown back.", "Something was offered. It was not enough.", "A demon looked at a gift, and laughed."],
     asked: ["Someone was asked if they trust the dark.", "A demon asked a question, and waited.", "A question was put to a traveler, in the dark.", "Something wanted an honest answer."],
     restored: ["A corrupted voice turned, and was made whole again.", "A broken name was mended tonight.", "Something damaged was talked back to itself."],
@@ -420,7 +421,7 @@
           : `Faction lean: ${titleLean.chaos > titleLean.law ? "CHAOS " + chaosPct : "LAW " + (100 - chaosPct)}%`);
       }
     }
-    if (titleDeep) cards.push(`Deepest floor: B${titleDeep}F`);
+    if (titleDeep) cards.push(`Most levels climbed: ${titleDeep}`);
     // The running totals for this lunar epoch (the Worker's /stats): exact counts, nobody named. A card only
     // shows once its number is above zero, so a quiet epoch has a short feed, not a wall of zeroes.
     if (titleStats) {
@@ -618,8 +619,8 @@
   }
   function renderBoard() {
     const pre = document.querySelector("#board pre"), d = boardData, admin = !!(save && save.freeSteps);
-    const row = (rank, x, sel) => `${sel ? ">" : x.you ? (admin ? "*" : ">") : " "} ${String(rank).padStart(3)}  ${x.name.toUpperCase().padEnd(10)}  ${("B" + x.floor + "F").padEnd(5)} ${String(x.days).padStart(4)}  ${String(x.demons).padStart(6)}  ${String(x.turns).padStart(6)}`;
-    const lines = ["", "  RANK  NAME        FLOOR  DAYS  DEMONS   TURNS", ""];
+    const row = (rank, x, sel) => `${sel ? ">" : x.you ? (admin ? "*" : ">") : " "} ${String(rank).padStart(3)}  ${x.name.toUpperCase().padEnd(10)}  ${String(x.floor).padEnd(5)} ${String(x.days).padStart(4)}  ${String(x.demons).padStart(6)}  ${String(x.turns).padStart(6)}`;
+    const lines = ["", "  RANK  NAME        LEVELS DAYS  DEMONS   TURNS", ""];
     d.rows.forEach((x, i) => lines.push(row(i + 1, x, admin && i === boardSel)));
     if (!d.rows.length) lines.push("  Nobody yet.");
     if (d.you) lines.push("  ...", row(d.you.rank, { ...d.you, you: true }));
@@ -638,7 +639,7 @@
     if (!x || !save || !save.freeSteps) return;
     let key = ""; try { key = localStorage.getItem("dd-admin") || ""; } catch (e) {}
     if (!key) { key = prompt("Admin key:") || ""; if (!key) return; }
-    if (!confirm(`Delete ${x.name} (B${x.floor}F, ${x.days} days) from the board?`)) return;
+    if (!confirm(`Delete ${x.name} (${x.floor} levels, ${x.days} days) from the board?`)) return;
     try {
       const r = await fetch(`${LEADERBOARD_URL}/score?id=${x.id}`, { method: "DELETE", headers: { "x-admin-key": key } });
       if (r.status === 403) { try { localStorage.removeItem("dd-admin"); } catch (e) {} alert("That key was not accepted."); return; }
@@ -736,7 +737,7 @@
       if (!got || (code && got === code)) { msg.textContent = got ? "That is this run already." : "Paste a password first."; return; }
       try {
         const s = JSON.parse(decodeURIComponent(escape(atob(got))));
-        if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 9) throw new Error("not a run");   // the same shape start() accepts
+        if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 10) throw new Error("not a run");   // the same shape start() accepts
         const trial = JSON.parse(JSON.stringify(s)); RULES.tick(trial); SMT.renderScreen(trial, "");      // it must really run, not just parse
         loadCode = s;
         if (save) askBox("load", "REPLACE THIS RUN?", ["The run in the password takes this one's place."]);
@@ -858,7 +859,8 @@
       "One room a day. Two locked doors, side by side: open one and the",
       "other seals for good. Step through and the door shuts behind you.",
       "Listen at the doors, search the walls and the floor, and ask the moon.",
-      "The week's last room hides the way down. It closes at the end of Sunday.",
+      "A level's last room hides the way up. The dark takes a level each",
+      "quarter of the moon: at the half, the full, the half, and the new.",
       "The moon, the omens and the demons follow real time.", "",
       "Search as much as you like. Talk to demons, or fight them.",
       "Open your one door. Come back tomorrow.", "",
@@ -868,11 +870,11 @@
         two("Demons met", k.met || 0, "Items found", k.items || 0), ""] : []),
       ...(cx ? ["CODEX", two("Demons", count(cx.demons), "Items", count(cx.items)), ""] : []),
       "KEYS",
-      "  [^] / up arrow ..... act on what KURA faces: search it, consult the moon, enter, descend",
+      "  [^] / up arrow ..... act on what KURA faces: search it, consult the moon, enter, climb",
       "  LOOK_[U]P .......... look up at the sky; again (or [D]), down at the floor; again, level",
       "  [ < ] [ > ] / arrows ... turn (free)",
       "  [Q] [E] ............ the left door, the right door (asks first: it takes the day's charge)",
-      "  [ENTER] / [W] ...... through an open door, or down found stairs",
+      "  [ENTER] / [W] ...... through an open door, or up found stairs",
       "  + .................. a door that wants a charge",
       "  x .................. a sealed door: the one not taken, or the one behind you",
       "  1-8 ................ pick a gift when a demon asks for one",
@@ -1041,7 +1043,7 @@
     const lines = [];
     for (const it of newItems) lines.push({ text: it, tier: RULES.tierOf(it) });
     if (silver > 0 && /Coins/.test(save.log)) lines.push(silver + " SILVER");
-    if (/Stairs lead down/.test(save.log)) lines.push("the stairs down");
+    if (/Stairs lead up/.test(save.log)) lines.push("the stairs up");
     const box = document.getElementById("found");
     const pre = box.querySelector("pre");
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
@@ -1383,12 +1385,12 @@
     // which listens at locked doors, consults the moon, and wakes a terminal.
     if (name === "do" && save) {
       const can = RULES.available(save), open = Object.keys(can.doors).find(k => can.doors[k].state === "open");
-      name = can.look === "D" && can.stairs ? "go-D" : can.facingDoors && open ? "go-" + open : can.facingDoors && can.doors.C && can.doors.C.can ? "go-C" : "search";
+      name = can.atStairs ? "go-D" : can.facingDoors && open ? "go-" + open : can.facingDoors && can.doors.C && can.doors.C.can ? "go-C" : "search";
     }
     // "enter" (Enter or W): whatever stands open from here: an open arch, the lone door, or found stairs underfoot.
     if (name === "enter" && save) {
       const can = RULES.available(save), open = Object.keys(can.doors).find(k => can.doors[k].state === "open");
-      name = can.look === "D" && can.stairs ? "go-D" : open ? "go-" + open : can.doors.C ? "go-C" : null;
+      name = can.atStairs ? "go-D" : open ? "go-" + open : can.doors.C ? "go-C" : null;
       if (!name) return;
     }
     if (save && save.encounter && (name === "left" || name === "right" || name === "look" || name === "lookdown" || name === "do" || name.startsWith("go-"))) return;      // no looking around mid-fight; running is the fight box's [R]UN

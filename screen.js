@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.75";
+  const VERSION = "v0.77";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -195,6 +195,16 @@
     const ref = Date.UTC(2000, 0, 6, 18, 14), syn = 29.530588853;
     return Math.floor((date.getTime() - ref) / 86400000 / syn);
   }
+
+  // MOON QUARTERS: the month in four equal parts, counted without end from the same new moon as everything
+  // else. A quarter is { n: its number since the reference, q: 0-3 within its month, epoch, end: the instant it
+  // gives way to the next }. Each LEVEL of the pit belongs to one quarter: q 0 is the bottom (B4F), q 3 the last
+  // level under the surface (B1F), and the dark takes a level when its quarter ends.
+  const QREF = Date.UTC(2000, 0, 6, 18, 14), QLEN = 29.530588853 / 4 * 86400000;
+  function quarterOf(date) { const n = Math.floor((date.getTime() - QREF) / QLEN); return quarter(n); }
+  function quarter(n) { return { n, q: ((n % 4) + 4) % 4, epoch: Math.floor(n / 4), end: new Date(QREF + (n + 1) * QLEN) }; }
+  // What the moon is doing when each quarter of the month ends.
+  const QUARTER_END = ["the half moon", "the full moon", "the waning half moon", "the new moon"];
 
   // UTC-DAY: a whole-number calendar day, in UTC only (no timezone), so it is the same for every
   // player at every instant. The one thing players can locally differ on is WHEN they last checked it
@@ -427,7 +437,7 @@
     // Log box repurposed as cold, stable facts (WEEK/EPOCH/LEAN) that hold until the day rolls over.
     const r = s => "|" + ljust(s, W - 2) + "|";
     const label = (t, s) => ljust(t, 10) + s;
-    for (const m of [" > " + label("WEEK", weekLine(now, opts.tz)), " > " + label("EPOCH", epochLine(now)),
+    for (const m of [" > " + label("LEVEL", weekLine(now, opts.tz)), " > " + label("EPOCH", epochLine(now)),
       " > " + label("LEAN", leanLine(opts.lean))]) S.push(r(m));
     S.push("+" + "-".repeat(78) + "+");
     // Menu bar: same bracket-letter convention as the real in-game action bar.
@@ -440,14 +450,13 @@
   // This real week's floor, as everyone sees it (not a personal countdown to any one save's own
   // deadline) -- a floor always closes the coming Sunday, so there's nothing but calendar math here.
   function weekLine(now, tz) {
-    const WD = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
-    const today = localDay(now, tz), wd = (today + 3) % 7, left = 6 - wd;
-    // With under two days left, a run that starts now is given next week's floor instead (see firstDeadline
-    // in rules.js), so the line says so: otherwise the title and a fresh run's own countdown disagree.
-    if (left < 2) return `${WD[wd]}, day ${wd + 1} of 7  -  closes ${left ? "tomorrow" : "tonight"}. New runs get next week's.`;
-    return `${WD[wd]}, day ${wd + 1} of 7  -  ${left} day${left === 1 ? "" : "s"} left, this floor closes SUN`;
+    // The level the dark has reached, and when it takes it: the day this quarter of the moon ends.
+    const Q = quarterOf(now), left = localDay(Q.end, tz) - localDay(now, tz), DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    const when = `${DAYS[wall(Q.end, tz).getUTCDay()]}, at ${QUARTER_END[Q.q]}`;
+    // With under two days left, a run that starts now wakes one level up instead (see startSlot in rules.js).
+    if (left < 2) return `B${4 - Q.q}F  -  closes ${left ? "tomorrow" : "tonight"}. New runs wake a level higher.`;
+    return `B${4 - Q.q}F  -  ${left} days left, closes ${when}`;
   }
-
   // The current lunar epoch (same reference moonIndex/epochIndex use) and how far into its ~29.5
   // real days we are. Display rounds the epoch length down to a steady 29 for a clean "day X of 29".
   function epochLine(now) {
@@ -469,7 +478,7 @@
     return `this season leans ${side}   [${bar}]  ${lawPct} / ${chaosPct}`;
   }
 
-  const api = { VERSION, moonNote, renderView, renderScreen, renderTitle, moonIndex, epochIndex, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  const api = { VERSION, moonNote, renderView, renderScreen, renderTitle, moonIndex, epochIndex, quarterOf, quarter, QUARTER_END, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);

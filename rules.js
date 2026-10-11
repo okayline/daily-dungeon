@@ -140,7 +140,7 @@
   }
   const GLITCH = { A: "@", E: "3", I: "!", O: "0", U: "#" };
   const glitch = n => n.replace(/[AEIOU]/, c => GLITCH[c]);
-  const LADDER = [                                      // family weights by floor (B1F, B2F, B3F, B4F and deeper)
+  const LADDER = [                                      // family weights by how many levels into the run she is (first, second, third, fourth and beyond)
     { data: 7, hardware: 3, hybrid: 0, folklore: 0 },
     { data: 4, hardware: 5, hybrid: 1, folklore: 0 },
     { data: 1, hardware: 3, hybrid: 5, folklore: 2 },
@@ -249,7 +249,12 @@
   // A stub of black candle calms the room it's lit in.
   function calm(st) { const d = st.dungeon; if (d) RS(d).heat = Math.max(0, RS(d).heat - 8); }
 
-  const floorNum = st => parseInt(String(st.floor).replace(/\D/g, ""), 10) || 1;
+  // How far into the run she is: 1 on the level she woke on, +1 for each climbed. This (not the level's name)
+  // sets how hard the demons hit and what the board counts, so a late start, which wakes higher up, isn't
+  // thrown in at the deep end.
+  const floorNum = st => st.climb || parseInt(String(st.floor).replace(/\D/g, ""), 10) || 1;
+  // A level's name by its height: 1-4 are under the surface (B4F at the bottom, B1F the last one), 5 up are above it.
+  const levelName = h => (h <= 4 ? `B${5 - h}F` : `${h - 4}F`);
   // Log lines only name a direction when stating a character's action ("KURA goes WEST"), never for hints or doors.
   const doorList = room => ["No door onward.", "A single door ahead.", "Two doors ahead."][Math.min(2, room.exits.length)];
   // The third log line. About half the time it carries a faint clue about the room KURA is in
@@ -280,7 +285,7 @@
   function drift(st) {
     const d = st.dungeon;
     if (st.dead || !d) return;
-    if (d.deadline !== undefined && clock(st) === d.deadline) { st.extra = "> The air grows heavy. The way down closes tonight."; return; }
+    if (d.deadline !== undefined && clock(st) === d.deadline) { st.extra = "> The air grows heavy. The way up closes tonight."; return; }
     // Taint plays tricks: from 3 drinks KURA sometimes sees things; tripping, most of the time.
     if ((st.taint || 0) >= ODD_AT && Math.random() < (tripping(st) ? 0.5 : 0.2)) { st.extra = "> " + pick(TRIP_LINES); return; }
     if (Math.random() < 0.3) st.extra = atmosphere(st);
@@ -318,7 +323,7 @@
       "A warped door in its frame.", "A door, its handle worn smooth."],
     terminal: ["A terminal, set into the wall. Its screen waits.", "A dead screen in the stone. Someone is awake.",
       "A terminal in the wall. The cursor blinks."],
-    stairs: ["The stairs drop into the dark.", "Steps lead down. They do not end.",
+    stairs: ["The stairs climb into the dark.", "Steps lead up. They do not end.",
       "The stairs wait."],
     arch: ["An open arch. The dark goes on beyond it.", "A bare archway, and the way through.", "An opening in the stone, the dark past it.",
       "An arch, empty, with a draft coming through."],
@@ -329,7 +334,7 @@
   };
   function sight(st) {
     if (st.look === "U") return pick(SEE.sky) + " " + MOON_SEEN[moon()];
-    if (st.look === "D") return st.dungeon && RS(st.dungeon).found.includes("stairs") ? pick(SEE.stairs) : pick(SEE.floor);
+    if (st.look === "D") return st.dungeon && atStairs(st) ? pick(SEE.stairs) : pick(SEE.floor);
     const v = st.dungeon ? (show(st), st.view.end) : "wall";
     if (v === "doors") return doorStates(st.dungeon).some(x => x.state === "open") ? pick(SEE.arch) : "Two doors, side by side.";
     if (v === "door" && st.dungeon && rm(st.dungeon).back === st.facing) return pick(SEE.sealed);
@@ -503,8 +508,8 @@
       "Dark room", "Pale room", "Wide room"],
   };
   function roomName(d, i) {
-    if (i === 0) return "Stairs up";
-    if (allRooms(d)[i] && allRooms(d)[i].found.includes("stairs")) return "Stairs down";
+    if (i === 0) return "The way in";
+    if (allRooms(d)[i] && allRooms(d)[i].found.includes("stairs")) return "Stairs up";
     const rs = RS(d, i);
     if (rs.name) return rs.name;
     const rm = d.floor.rooms[i], used = new Set(allRooms(d).map(x => x.name).filter(Boolean));
@@ -515,6 +520,11 @@
     }
     return (rs.name = NAMES_BY_KIND.plain[h % NAMES_BY_KIND.plain.length]);
   }
+  // THE WAY UP. The stairs to the next floor are hidden in one of the last room's bare walls (rs.walls.stairsDir).
+  // Once found, she is "at the stairs" whenever she faces that wall. (A room laid out before v0.76 kept them
+  // under its floor: there, looking down is facing them.)
+  const stairsAt = d => (RS(d).walls && RS(d).walls.stairsDir) || "D";
+  const atStairs = st => { const d = st.dungeon; return !!d && !st.dead && RS(d).found.includes("stairs") && face(st) === stairsAt(d); };
   // WHAT SHE IS LOOKING AT, for the slot under the map (11 characters at most). Never a room's type: a fixture
   // only gets its name once it has been found.
   const FIXTURE_LABEL = { den: "GEAR HEAP", bay: "CABLES", relay: "DISH", vault: "DRAWERS", forge: "WORKBENCH" };
@@ -522,7 +532,8 @@
     const d = st.dungeon, rm = d.floor.rooms[d.at], f = st.facing;
     if (st.dead) return "";
     if (st.look === "U") return moon() === 0 ? "THE SKY" : "THE MOON";
-    if (st.look === "D") return RS(d).found.includes("stairs") ? "STAIRS DOWN" : "FLOOR";
+    if (atStairs(st)) return "STAIRS UP";
+    if (st.look === "D") return "FLOOR";
     if (rm.back === f) return "WAY BACK";
     if (doorWall(rm, f)) { const ds = doorStates(d); return ds.some(x => x.state === "open") ? "OPEN ARCH" : ds.length > 1 ? "TWO DOORS" : "LOCKED DOOR"; }
     if (facingAltar(st)) return "TERMINAL";
@@ -534,7 +545,8 @@
     const d = st.dungeon, rm = d.floor.rooms[d.at], f = st.facing;
     if (st.dead || st.encounter) return "";
     if (st.look === "U") return moon() === 0 ? "SEARCH" : "CONSULT";
-    if (st.look === "D") return RS(d).found.includes("stairs") ? "DESCEND" : "SEARCH";
+    if (atStairs(st)) return "CLIMB";
+    if (st.look === "D") return "SEARCH";
     if (f === rm.ahead && rm.exits.length) { const ds = doorStates(d); return ds.some(x => x.state === "open") ? "ENTER" : ds.length === 1 ? "OPEN" : "LISTEN"; }
     if (facingAltar(st)) return "OFFER";
     if (RS(d).found.includes("fixture") && RS(d).walls && RS(d).walls.fixtureDir === f && RS(d).fixtureDay !== st.day) return "USE";
@@ -563,12 +575,12 @@
       return st;
     }
     // Looking up or down: the sky, or the floor (with the stairs in it once they've been found).
-    if (st.look) { st.view = { look: st.look, stairs: st.look === "D" && RS(d).found.includes("stairs") }; return st; }
+    if (st.look) { st.view = { look: st.look, stairs: st.look === "D" && atStairs(st) }; return st; }
     // The wall ahead: two doors side by side (view.doors), or the last room's lone door. Behind: the shut way back.
     const ahead = st.facing === room.ahead && room.exits.length > 0, ds = ahead ? doorStates(d) : [];
     st.view = {
       left: [!door(LEFT[st.facing]), true], right: [!door(RIGHT[st.facing]), true],
-      end: ds.length > 1 ? "doors" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : "wall",
+      end: atStairs(st) ? "stairs" : ds.length > 1 ? "doors" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : "wall",
       lock: ds.length === 1 ? (ds[0].state === "locked" ? "+" : ds[0].state === "sealed" ? "x" : null) : room.back === st.facing ? "x" : null,    // the knob: + asks for the charge, x is sealed
     };
     if (ds.length) st.view.doors = ds;
@@ -595,13 +607,24 @@
   const WD = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
   const MO = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
   const fmt = n => { const d = new Date(n * 86400000); return `${WD[d.getUTCDay()]} ${MO[d.getUTCMonth()]} ${d.getUTCDate()}`; };
-  // A new run's first floor closes this Sunday, unless that leaves fewer than 3 days; then next Sunday.
-  const firstDeadline = t => (sundayOf(t) - t >= 2 ? sundayOf(t) : sundayOf(t) + 7);
+  // THE DARK RISES BY THE MOON. Each level belongs to one quarter of the lunar month and is lost when that
+  // quarter ends: its last day is the day the moon reaches the half, the full, the waning half, or the new.
+  // The clock here is the game's own (it follows the X testing cheat).
+  const nowMs = st => TIME.now().getTime() + (st.clockOffset || 0) * 86400000;
+  const quarterDeadline = (st, n) => TIME.localDay(TIME.quarter(n).end, st.tz);
+  // Where a new run wakes: the level the dark has reached, which is this quarter's -- unless fewer than two
+  // days of it are left, when she wakes one level higher with the whole next quarter ahead of her.
+  function startSlot(st) {
+    let n = TIME.quarterOf(new Date(nowMs(st))).n;
+    if (quarterDeadline(st, n) - clock(st) < 2) n++;
+    return { n, height: TIME.quarter(n).q + 1, deadline: quarterDeadline(st, n) };
+  }
 
   // Mix two numbers into one well-spread 32-bit seed (never just adding or XORing them raw).
   const seedFrom = (a, b) => hash((hash(a >>> 0) ^ Math.imul((b >>> 0) + 1, 0x9e3779b1)) >>> 0);
 
-  // KURA arrives on a fresh floor. Its way down closes at the end of `deadline` (a Sunday).
+  // KURA arrives on a fresh level, `height` levels up from the bottom of the pit, in moon quarter `n`. Its way
+  // up closes at the end of the day that quarter ends.
   // The floor's OFFERS (which two kinds are paired, day by day) are seeded off (this epoch, this floor
   // depth) -- shared: every player who reaches this same depth during this same real lunar month faces
   // the same pairs. Its CONTENTS (which door is which, which wall each door is on, where things are
@@ -609,14 +632,16 @@
   // shared, re-rolled every floor.
   // The epoch itself is stamped here and held for the rest of the time on this floor (see screen.js's
   // epochIndex): a lunar-month rollover mid-floor must never reshuffle a floor out from under a player.
-  function arrive(st, num, deadline) {
-    st.floorEpoch = epochNow();
-    const shared = seedFrom(st.floorEpoch, num), priv = seedFrom(st.pseed || 0, num);
+  function arrive(st, height, n) {
+    const Q = TIME.quarter(n), deadline = quarterDeadline(st, n);
+    st.floorEpoch = Q.epoch;                             // the month this level's quarter belongs to: everyone on it shares its offers
+    st.height = height;
+    const shared = seedFrom(st.floorEpoch, height), priv = seedFrom(st.pseed || 0, height);
     const floor = FLOOR.generate(shared, priv, { days: Math.min(7, deadline - clock(st) + 1) });
     const a = FLOOR.arrive(floor);
-    st.floor = `B${num}F`;
+    st.floor = levelName(height);
     st.facing = a.facing; delete st.look;
-    st.dungeon = { seed: floor.seed, floor, at: a.at, deadline, arrived: clock(st),
+    st.dungeon = { seed: floor.seed, floor, at: a.at, deadline, quarter: n, arrived: clock(st),
       state: [{ ...freshRoom(), visited: true }] };
     st.statusIn = 0;                                   // a fresh floor gets a fresh report
     return floor;
@@ -636,7 +661,7 @@
     delete st.rewindNoted;
     if (st.today && st.today.date > real) st.today = { date: real, stepped: !!st.today.stepped };
     if (st.startDay > real) st.startDay = real;
-    if (st.dungeon && st.dungeon.deadline > sundayOf(real) + 7) st.dungeon.deadline = sundayOf(real) + 7;
+    if (st.dungeon && st.dungeon.deadline > real + 16) st.dungeon.deadline = real + 16;   // never further out than two quarters
     st.extra = "> The calendar shudders and settles on today.";
   }
   const STANDBY_LINES = ["> KURA kept still all day. The party sleeps deeper tonight.", "> A quiet day. Everyone wakes lighter.",
@@ -649,7 +674,7 @@
     st.lastSeen = t;
     if (st.startDay === undefined) st.startDay = t - ((st.day || 1) - 1);
     if (!st.today || st.today.date === undefined) st.today = { date: t, stepped: !!(st.today && st.today.stepped) };
-    if (st.dungeon && st.dungeon.deadline === undefined) st.dungeon.deadline = firstDeadline(t);
+    if (st.dungeon && st.dungeon.deadline === undefined) st.dungeon.deadline = startSlot(st).deadline;
     const newDay = st.today.date !== t;
     st.day = t - st.startDay + 1;
     // The omen is stamped once, right here, at KURA's own midnight -- never recomputed mid-day, and
@@ -735,7 +760,7 @@
     }
     st.log = `> KURA wakes on ${st.floor}.` + (st.campNote ? " " + st.campNote : "");
     delete st.campNote;
-    st.extra = d && t === d.deadline ? "> The air grows heavy. The way down closes tonight."
+    st.extra = d && t === d.deadline ? "> The air grows heavy. The way up closes tonight."
       : held ? (st.restedDay = t, `> In the dark, a voice: "${omen(st.omenDay + 1).text.replace(/^> "|"$/g, "")}"`) : settled ? "> The room settles." : atmosphere(st);
     return st;
   }
@@ -764,7 +789,7 @@
   function reveal(st, thing) {
     const silver = st.silver ?? st.macca ?? 0, ichor = st.ichor ?? st.mag ?? 0;
     switch (thing) {
-      case "stairs": return "A floor stone shifts. Stairs lead down.";
+      case "stairs": return "The stones slide apart. Stairs lead up.";
       case "fixture": return FIXTURE[st.dungeon.floor.rooms[st.dungeon.at].kind] + " It can be used.";
       // The ? is a hidden locker. For now it holds a rare item (shops and special rooms come later).
       // The ? is a hidden locker: usually a RARE, sometimes MYTHIC; under a full moon, half the time a MOON item.
@@ -829,7 +854,7 @@
   // the party's state, today's step. Otherwise a detached conditions readout: the air (this is the
   // room's heat, as temperature), a smell, a sound or the light. It changes every 5-10 actions, and
   // right away when the heat changes, on a new day, on a new floor, and on the last day.
-  const FLOOR_NAME = ["", "First floor", "Second floor", "Third floor", "Fourth floor"];
+  const QUARTER_END = TIME.QUARTER_END;
   const AIR = [["cool, still", "chilly", "cold, still"], ["mild", "mild, stirring"], ["humid", "warm, close"],
     ["hot, stifling", "hot, thick"]];
   const SMELL = ["Odor of wet stone", "Odor of mold", "Old pipes", "Rust", "Cheap incense", "Damp paper",
@@ -838,9 +863,10 @@
     "Pipes ticking", "Footsteps? None"];
   function report(st, kind) {
     const d = st.dungeon, t = clock(st), n = floorNum(st);
-    const name = FLOOR_NAME[n] || st.floor, left = d.deadline - t, onFloor = Math.max(1, t - (d.arrived ?? t) + 1);
-    const closes = left <= 0 ? "The way down closes tonight" : left === 1 ? "The way down closes tomorrow"
-      : pick([`${left} days until the way down closes`, `The way down closes ${fmt(d.deadline)}`]);
+    const name = st.floor, left = d.deadline - t, onFloor = Math.max(1, t - (d.arrived ?? t) + 1);
+    const closes = left <= 0 ? "The way up closes tonight" : left === 1 ? "The way up closes tomorrow"
+      : pick([`${left} days until the way up closes`, `The way up closes ${fmt(d.deadline)}`,
+        ...(d.quarter !== undefined ? [`The dark takes this level at ${QUARTER_END[TIME.quarter(d.quarter).q]}`] : [])]);
     if (kind === "air" || (kind !== "news" && Math.random() < 0.3)) {
       const tier = heatTier(RS(d).heat);
       // A fight or a break leaves a smell in the room for a while; otherwise each room has its own.
@@ -876,7 +902,7 @@
   function ensureFloor(st) {
     sync(st);
     if (st.dungeon) return true;
-    arrive(st, floorNum(st), firstDeadline(clock(st)));
+    { const s = startSlot(st); st.climb = st.climb || 1; arrive(st, st.height || s.height, s.n); }
     st.log = `> KURA enters ${st.floor}.`;
     st.extra = floorArrivalLine(st);
     st.unsaved = true;
@@ -903,7 +929,7 @@
     "A drain, long dry.", "Scuff marks, not KURA's.", "Cold comes up through the stone.", "A coin-shaped stain. No coin."];
   const moon = () => (root.SMT || require("./screen.js")).moonIndex((root.SMT || require("./screen.js")).now());
   // Each room hides its things in the walls with no door on them and in its floor ("D"). (Overhead is the open
-  // sky: nothing hides there, see THE MOON.) The stairs are always under the floor; a fixture is always in a wall;
+  // sky: nothing hides there, see THE MOON.) The stairs up are always in a bare wall; a fixture is always in a wall;
   // everything else is spread over those faces, fixed by the floor's seed.
   function walls(d, i) {
     const rs = RS(d, i);
@@ -924,7 +950,8 @@
     let k = (d.floor.pseed + i * 31) >>> 0;
     const next = () => { k = (Math.imul(k, 1103515245) + 12345) >>> 0; return k >>> 8; };
     for (const thing of room.hidden) if (thing !== "stairs") w[free[next() % free.length]].push(thing);
-    if (room.hidden.includes("stairs")) w.D.unshift("stairs");      // always the first thing the floor gives up: the last day is never a long dig
+    // The way up is in a bare wall, and always the first thing that wall gives up: the last day is never a long dig.
+    if (room.hidden.includes("stairs")) { const sd = bare.length ? bare[next() % bare.length] : "D"; w[sd].unshift("stairs"); w.stairsDir = sd; }
     // Rooms with an effect hide a fixture in a wall. Finding it takes searching, like any find; using it is a SEARCH of that wall.
     if (FIXTURE[room.kind] && bare.length) { const fd = bare[next() % bare.length]; w[fd].unshift("fixture"); w.fixtureDir = fd; }
     // Nothing turns up on a first look. Each thing needs 5 to 10 points (half again more for each find already made on that face) of searching (rolled now, hidden from the
@@ -972,7 +999,7 @@
       st.altar = altarUsed(st) ? { open: true, used: true } : { open: true, used: false, script: altarScript(st), page: 0 };
       return show(st);
     }
-    if (found.includes("stairs") && dir === "D") { act(st, "stairs"); st.log = "> The stairs wait, under the lifted stone."; return show(st); }
+    if (atStairs(st)) { act(st, "stairs"); st.log = "> The stairs wait, behind the parted stone."; return show(st); }
     // A found fixture is used by searching its wall again: once a day per room.
     if (found.includes("fixture") && walls(d, d.at).fixtureDir === dir && RS(d).fixtureDay !== st.day) {
       act(st, `fixture:${d.at}`); RS(d).fixtureDay = st.day;
@@ -1055,7 +1082,7 @@
     if (!ensureFloor(st)) return show(st);
     const d = st.dungeon;
     if (!exits(d).includes(dir)) {
-      st.log = dir === "D" ? "> Only the floor. If there is a way down, it is still hidden." : "> No way through there.";
+      st.log = dir === "D" ? "> No way up from here. If there is one, it is still hidden." : "> No way through there.";
       if (st.encounter) st.round = ["No way out there."];
       return show(st);
     }
@@ -1075,7 +1102,7 @@
     // With a demon in the way, stepping through a door (or down the stairs) is running: half the time the demon
     // blocks it and strikes. A locked door takes the day's charge only if she gets through it: in a room whose
     // every way out is locked, a blocked run must not also cost the day.
-    const way = toStairs ? "for the stairs" : `for the ${SIDE_LC[dir]}door`;
+    const way = toStairs ? "up the stairs" : `for the ${SIDE_LC[dir]}door`;
     if (st.encounter) {
       const e = st.encounter, lines = [];
       if (e.ranTried) { st.round = ["KURA already tried to run. There is no running now."]; return show(st); }
@@ -1110,11 +1137,13 @@
     // Taking the stairs down is free, like any open door.
     if (toStairs) tally(st, "floors"); else tally(st, "steps");
     if (toStairs) {
-      // Bonus days: the next floor belongs to next week, so going down early banks the rest of this one.
-      const deadline = sundayOf(clock(st)) + 7;
+      // The next level belongs to the next quarter of the moon, so climbing early banks the rest of this one.
+      const nextQ = (d.quarter !== undefined ? d.quarter : TIME.quarterOf(new Date(nowMs(st))).n) + 1, surfaced = (st.height || 1) === 4;
       (st.path = st.path || []).push({ f: st.floor, a: d.arrived, e: d.deadline, left: clock(st), rooms: floorPath(d) });   // the floor she is leaving, for THE PATH
-      arrive(st, floorNum(st) + 1, deadline);
-      st.log = `> KURA takes the stairs and descends to ${st.floor}.`;
+      st.climb = floorNum(st) + 1;
+      arrive(st, (st.height || 1) + 1, nextQ);
+      st.log = surfaced ? `> KURA climbs out of the pit, into open air. ${st.floor}.` : `> KURA takes the stairs and climbs to ${st.floor}.`;
+      if (surfaced) ev(st, "out");
       st.extra = floorArrivalLine(st);   // line 3 is flavor only: the deadline already shows on the status line
       return show(st);
     }
@@ -1474,7 +1503,7 @@
     const d = st.dungeon, t = st.today || {};
     const out = d && !st.dead ? exits(d) : [];
     // SEARCH works on the face KURA is looking at; a door (or found stairs) can't be searched.
-    const res = { search: !!d && !st.dead, stairs: out.includes("D"), look: st.look || null, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps) && !onOmenCooldown(st),
+    const res = { search: !!d && !st.dead, stairs: out.includes("D"), atStairs: atStairs(st), look: st.look || null, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps) && !onOmenCooldown(st),
       useBankedOmen: !st.dead && st.bankedOmen !== undefined && !st.useBanked,
       // For the bag's single Hold/Release Omen slot: whether it should show greyed-out, and the count to show.
       // (Not while Release Omen itself is still showing -- that takes priority the same day it's released,
@@ -1506,7 +1535,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events", "path"]) delete st[k];
+      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events", "path", "height", "climb"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
@@ -1532,9 +1561,10 @@
     const luck = Math.random(), lucky = luck < 0.005 ? "MYTHIC" : luck < 0.03 ? "RARE" : null;
     if (lucky) gain(st, pick(names(lucky)));
     st.stats = {};                                     // the starting bag doesn't count as finds
-    const deadline = firstDeadline(t);
-    arrive(st, 1, deadline);
-    st.log = `> KURA descends into B1F.${lucky ? " Her bag feels heavier than it should." : ""}`;
+    const slot = startSlot(st);
+    st.climb = 1;
+    arrive(st, slot.height, slot.n);
+    st.log = `> KURA wakes ${slot.height === 1 ? "at the bottom" : "in the dark"}. ${st.floor}.${lucky ? " Her bag feels heavier than it should." : ""}`;
     st.extra = floorArrivalLine(st);   // line 3 is flavor only: the deadline already shows on the status line
     st.unsaved = true;
     return show(st);
@@ -2835,7 +2865,7 @@
     const TIER = ["calm", "uneasy", "nervous", "wrong"];
     const fixed = n => (n > 0 ? "+" : "") + (Math.round((n || 0) * 10) / 10);
     return [
-      ["Reached", `${st.floor}  (${k.floors || 0} floor${k.floors === 1 ? "" : "s"} descended)`],
+      ["Reached", `${st.floor}  (${k.floors || 0} floor${k.floors === 1 ? "" : "s"} climbed)`],
       ["Days", st.day], ["Turns", st.steps || 0], ["Steps walked", k.steps || 0], ["Searches", k.searches || 0],
       ["Alignment", `${st.align}  (lean ${fixed(st.alignScore)}, LAW - / CHAOS +)`],
       ["Heat here", `${Math.round(heat)}  (${TIER[heatTier(heat)]})`], ["Hottest room", Math.round(k.maxHeat || 0)],
@@ -2875,7 +2905,7 @@
         const cells = []; let c = 0;
         fl.rooms.forEach((r, n) => {
           const from = c; c += STEP[r.s] || 0;
-          const last = n === fl.rooms.length - 1, mark = n === 0 ? "^" : last && fl.here ? "@" : last ? "v" : PATH_MARK[r.k] || " ";
+          const last = n === fl.rooms.length - 1, mark = last && fl.here ? "@" : n === 0 ? "v" : last ? "^" : PATH_MARK[r.k] || " ";
           if (n > 0 && !last && r.k) used.add(r.k);
           cells.push({ row: 2 * n, c, room: mark });
           if (r.s === "L" || r.s === "R") {
@@ -2898,7 +2928,7 @@
       for (let n = Math.max(...cols.map(c => c.height)) - 1; n >= 0; n--) out.push(cols.map(c => c.rows(n)).join("").replace(/\s+$/, ""));
     }
     const legend = Object.keys(PATH_MARK).filter(k => used.has(k)).map(k => `${PATH_MARK[k]} ${PATH_SENSE[k]}`);
-    out.push("", "[^] came down   [@] here   [v] went down   x the door not taken");
+    out.push("", "[v] came up   [@] here   [^] went up   x the door not taken");
     if (legend.length) out.push(legend.join("   "));
     return out;
   }

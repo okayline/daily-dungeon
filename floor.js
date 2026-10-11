@@ -4,7 +4,7 @@
 // two rooms. She opens one (the day's one charge), the other SEALS for good, and once she steps through, the door
 // shuts behind her: there is no going back. The six room kinds are dealt out over the floor's offers.
 // A room has the door wall ahead (north), the way back behind, two bare walls and a floor to search, and the sky.
-// The floor's last offer room hides the stairs down under its floor. It also has one more door, the WILDCARD:
+// The floor's last offer room hides the stairs up in one of its bare walls. It also has one more door, the WILDCARD:
 // one extra room for anyone with a day to spare, with stairs of its own.
 // A room is built the moment its door is unlocked, so nothing past the next offer exists yet.
 // Everything is rolled from the floor's two seeds, so a floor can be rolled again from them.
@@ -51,7 +51,7 @@
     }
     const offers = Array.from({ length: pairs }, (_, i) => [deck[(2 * i) % 12], deck[(2 * i + 1) % 12]]);
     offers.push([KINDS[Math.floor(prand() * KINDS.length)]]);      // the wildcard door: private, per account -- never drawn from the shared deck
-    const floor = { v: 9, seed, pseed, days, pairs, rooms: [], start: 0, lure: -1, kinds: [],
+    const floor = { v: 10, seed, pseed, days, pairs, rooms: [], start: 0, lure: -1, kinds: [],
       offers,                                                                  // the kinds offered, room by room (shared)
       lureStage: prand() < 0.6 ? 1 + Math.floor(prand() * pairs) : -1,         // which room hides the locker (?), if any (private)
       exits: {}, sealed: {}, count: 0 };
@@ -119,7 +119,7 @@
   // The map: the choices KURA has made on this floor, as a path climbing the panel. Her room is on the middle
   // row; the rooms behind her run down from it, each one step left or right of the next (the door she took);
   // the doors ahead of her sit on the top row, with a row between for the mark of which way she is turned.
-  //   [@] KURA   [^] where she came down   [ ] a room behind her
+  //   [@] KURA   [v] where she came up from   [ ] a room behind her
   //   #  a locked door   x  a door sealed for good   '  a door standing open
   // state: { at: room index, facing: the wall she faces (N ahead, S behind, W left, E right), or null }
   function minimap(floor, state) {
@@ -136,7 +136,7 @@
     let i = state.at, col = mid;
     for (let row = ME; row < H && i !== undefined; row++) {
       const room = floor.rooms[i];
-      put(row, col - 1, "[" + (i === state.at ? "@" : i === floor.start ? "^" : " ") + "]");
+      put(row, col - 1, "[" + (i === state.at ? "@" : i === floor.start ? "v" : " ") + "]");
       if (room.from === undefined) break;
       const step = STEP[room.side];
       if (step) put(row, col - 2 * step, "x");               // where the other room would have been

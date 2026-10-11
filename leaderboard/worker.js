@@ -62,7 +62,7 @@ async function tallyStats(db, b, turns, who) {
 // AMBIENT EVENTS, for the title screen's rumor cards: a tag from a fixed list, an optional small number, and
 // the time. No name, no run, no free text, so nothing here can carry a message or a spoiler. The newest 20 of
 // each tag are kept. Forging one is cheap and harmless: nothing ranks on these or rewards them.
-const EVENT_TAGS = ["refused", "asked", "restored", "trickster", "altar", "joined", "silent", "deep", "left", "fall", "words"];
+const EVENT_TAGS = ["out", "refused", "asked", "restored", "trickster", "altar", "joined", "silent", "deep", "left", "fall", "words"];
 async function titleFeed(db) {
   const epoch = epochIndex(), counts = {}, tally = { LAW: 0, CHAOS: 0 };
   const quiet = async (fn, fallback) => { try { return await fn(); } catch (e) { return fallback; } };   // a table missing on an old database just leaves its part empty
