@@ -552,7 +552,7 @@
 
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
-  let invList = [], invSel = 0, logGlow = false, ichorPick = -1;   // ichorPick: who the picker is on (-1: closed)
+  let invList = [], invSel = 0, logGlow = false, ichorPick = -1, holdBtn = null;   // ichorPick: who the picker is on (-1: closed); holdBtn: Hold/Release Omen's own button, not a numbered slot
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
   function textBox(title, tag, lines, W = 70) {
     const out = ["+" + "-".repeat(W + 2) + "+"];
@@ -589,17 +589,20 @@
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
     if (save && (save.ichor || 0) > 0) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
       text: "Demon blood and old light. Heals demons. Not meant for KURA." });
-    // Hold Omen / Release Omen: one morphing slot in the bag. Normally it's Hold Omen; once a day's
-    // held, it becomes Release Omen (was THE HELD DAY); releasing it starts a flat 7-real-day cooldown,
-    // during which the slot shows Hold Omen again but greyed out, with the days left to go.
+    // Hold Omen / Release Omen: its own button on the INVOKE header now, not a slot in the numbered
+    // list -- it's a standing action always in the same place, not something to dig for among found
+    // items. One morphing control: normally Hold Omen; once a day's held, it becomes Release Omen (was
+    // THE HELD DAY); releasing it starts a flat 7-real-day cooldown, during which it shows Hold Omen
+    // again but greyed out and inert, with the days left to go.
+    holdBtn = null;
     if (save) {
       const av = RULES.available(save);
-      if (save.bankedOmen !== undefined && !save.useBanked) invList.unshift({ name: "Release Omen", omen: true, count: 1, tier: "OMEN",
-        text: "A day kept back, on standby. Spend it in place of today's own." });
-      else if (av.hold) invList.unshift({ name: "Hold Omen", holdOmen: true, count: 1, tier: "OMEN",
-        text: "Stay put today and bank tonight's omen, to spend in place of a later day's own." });
-      else if (av.omenCoolingDown) invList.unshift({ name: "Hold Omen", holdOmen: true, cooling: true, count: 1, tier: "OMEN",
-        text: `Spent recently. ${av.omenCooldownDays} real day${av.omenCooldownDays === 1 ? "" : "s"} left before KURA can hold again.` });
+      if (save.bankedOmen !== undefined && !save.useBanked) holdBtn = { label: "Release Omen", action: "release",
+        caption: "A day kept back, on standby. [H] spends it in place of today's own." };
+      else if (av.hold) holdBtn = { label: "Hold Omen", action: "hold",
+        caption: "[H] stays put today and banks tonight's omen, to spend in place of a later day's own." };
+      else if (av.omenCoolingDown) holdBtn = { label: "Hold Omen", action: "hold", cooling: true,
+        caption: `Spent recently. ${av.omenCooldownDays} real day${av.omenCooldownDays === 1 ? "" : "s"} left before KURA can hold again.` };
     }
     invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
@@ -616,21 +619,26 @@
       return;
     }
     if (ichorPick >= 0) ichorPick = -1;
-    add("INVOKE", "");
+    const head = add("INVOKE", "");
+    if (holdBtn) {
+      const sp = document.createElement("span");
+      sp.textContent = "[H] " + holdBtn.label;
+      sp.className = "btn" + (holdBtn.cooling ? " off" : "");
+      sp.dataset.hold = "1";
+      head.append("   ", sp);
+    }
+    if (holdBtn) add(holdBtn.caption);
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
       `${i === invSel ? ">" : " "} ${i < 9 ? i + 1 : " "}  ${it.ichor ? `ICHOR  (${save.ichor})` : it.name + (it.count > 1 ? " x" + it.count : "")}`.replace(/^(.{42}).{4,}$/, "$1..."),
-      it.cooling ? "btn off" : "btn", i));
+      "btn", i));
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
     const it = invList[invSel];
     if (it) {
       add(" ");
       const tag = it.ichor ? `${save.ichor} in hand` : "";
       const lines = it.ichor ? [it.text, "Enter: choose who gets it."]
-        : it.cooling ? [it.text, "Not available yet."]
-        : it.holdOmen ? [it.text, "[ENTER] asks to confirm."]
-        : it.omen ? [it.text, "[ENTER] calls it back."]
         : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
       textBox(it.name, tag, lines, 41).forEach(l => add(l, ""));
     }
@@ -669,35 +677,36 @@
       "  [ < ] [ > ] / arrows ... turn (free)",
       "  + .................. a door that wants a charge (or is only paint)",
       "  x .................. a door sealed for good (its pair was opened)",
-      "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
-      "  [G]IVE ............. facing a terminal in the wall: make an offering (SEARCH it works too)",
-      "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
-      "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
-      "  [R]UN in a fight ... run through any open door (a locked one uses the charge; it may block you)",
-      "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
-      "  [S]ILENT ........... a third answer: say nothing",
       "  1-8 ................ pick a gift when a demon asks for one",
-      "  [I]NVOKE ........... the bag: 1-9 or arrows choose, Enter uses",
-      "    Hold Omen ......... make camp (uses the day's charge; restores the party; tonight's rest runs deeper)",
-      "    Release Omen ...... only once a held day is banked: spend it in place of today's own",
-      "    (releasing greys Hold Omen out for 7 real days after)",
-      "  [C]ODEX ............ every demon and item found, over all runs (press C on the main screen)",
-      "  [L]OG .............. the adventure log",
       ...(LEADERBOARD_URL ? ["  {{BOARD}} ........... the leaderboard (post your score when a run ends)"] : []),
+      "  [C]ODEX ............ every demon and item found, over all runs (press C on the main screen)",
+      "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
+      "  [G]IVE ............. facing a terminal in the wall: make an offering (SEARCH it works too)",
+      "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
+      "  [I]NVOKE ........... the bag: 1-9 or arrows choose an item, Enter uses",
+      "    [H] .............. its own button, not a numbered slot. Hold Omen: make camp (uses the day's",
+      "                        charge; restores the party; tonight's rest runs deeper)",
+      "                        Once a day's held, the same button/key becomes Release Omen: spend it in",
+      "                        place of today's own (releasing greys it out for 7 real days after)",
+      "  [L]OG .............. the adventure log",
       "  [P]ASSWORD ......... this run's password: copy it to keep or move the run,",
       "                       or paste one in to continue that run",
       "  [R]ESET ............ start a new run       [?] this page",
+      "  [R]UN in a fight ... run through any open door (a locked one uses the charge; it may block you)",
+      "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
+      "  [S]ILENT ........... a third answer: say nothing",
+      "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "",
       "Made by okayline.   [?] or {{CLOSE}}",
     ].join("\n");
     box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{PASS}}", '<span class="btn" data-pass>[P]ASSWORD</span>').replace("{{BOARD}}", '<span class="btn" data-board>[B]OARD</span>').replace("{{CLOSE}}", '<span class="btn" data-close>[ESC] CLOSE</span>');
   }
   document.getElementById("about").addEventListener("click", e => {
-    // Only its own buttons do anything; a click elsewhere on the page leaves it open.
-    if (e.target.closest("[data-close]")) return showAbout(false);
+    // Its own buttons do their own thing; any other click on the page closes it, same as [ESC] CLOSE.
     if (e.target.closest("[data-codex]")) { showAbout(false); codexSel = -1; showCodex(true); }   // the link in the help page
     else if (e.target.closest("[data-pass]")) { showAbout(false); backup(); }                      // PASS lives here now
     else if (e.target.closest("[data-board]")) { showAbout(false); toggleBoard(true); }
+    else showAbout(false);
   });
 
   // CODEX: every demon met and item found, over all runs. Unknown ones show as ???.
@@ -737,18 +746,26 @@
   function useInv(i, drink) {
     const it = invList[i];
     if (!it || !save) return;
-    if (it.cooling) return;   // greyed out during the post-release cooldown: not selectable
-    // Hold Omen still asks to confirm first, same as STANDBY always did -- just reached from the bag now.
-    if (it.holdOmen) { showInv(false); holdBox(); return; }
     const log = save.log;
     if (it.ichor && !drink) { ichorPick = 0; return showInv(true); }
-    save = it.ichor ? RULES.giveIchor(save, Number(drink) || 0) : it.omen ? RULES.useBankedOmen(save) : RULES.useItem(save, it.name);
+    save = it.ichor ? RULES.giveIchor(save, Number(drink) || 0) : RULES.useItem(save, it.name);
     ichorPick = -1;
     logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
     // Something broke: a popup says so (and what was inside, if anything). It waits for its [ OK ], like a find.
     if (!it.ichor && /comes apart in KURA/.test(save.log)) { showInv(false); breakBox(it, /Something was inside/.test(save.log)); return; }
     if (save.encounter) { showInv(false); encounterBox(); return; }   // mid-fight: back to the fight box
+    showInv(true);
+  }
+  // Hold Omen / Release Omen's own action, off the header button or the H key -- not routed through
+  // useInv/invList/invSel at all now, since it's no longer a numbered item in that list.
+  function holdAction() {
+    if (!save || !holdBtn || holdBtn.cooling) return;   // greyed out during the post-release cooldown: inert
+    if (holdBtn.action === "hold") { showInv(false); holdBox(); return; }   // still asks to confirm first, same as STANDBY always did
+    const log = save.log;
+    save = RULES.useBankedOmen(save);
+    logGlow = true; remember(log); persist(); draw();
+    if (save.encounter) { showInv(false); encounterBox(); return; }
     showInv(true);
   }
 
@@ -1250,9 +1267,9 @@
     if (e.target.closest(".submitrow")) return;                      // typing a name must not close the log
     if (e.target.closest("[data-download]")) return downloadLog();
     if (e.target.closest("[data-copy]")) return copyLog(e.target.closest("[data-copy]"));
-    if (e.target.closest("[data-close]")) toggleLog(false);          // only [C]LOSE (or C, L, Esc): never a click anywhere
+    toggleLog(false);          // [C]LOSE, C, L, Esc, or any other click on the page
   });
-  document.getElementById("board").addEventListener("click", e => { if (e.target.closest("[data-close]")) toggleBoard(false); });
+  document.getElementById("board").addEventListener("click", () => toggleBoard(false));   // no other interactive bits in here: any click closes
   document.getElementById("found").addEventListener("click", e => {
     if (document.getElementById("found").dataset.mode === "name") { if (e.target.closest("[data-namego]")) confirmName(); return; }
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
@@ -1277,9 +1294,10 @@
     if (e.target.closest("[data-use]")) return useInv(invSel);
     if (e.target.closest("[data-close]")) { showInv(false); if (save && save.encounter) encounterBox(); return; }
     if (e.target.closest("[data-codex]")) { showInv(false); codexSel = -1; return showCodex(true); }
+    if (e.target.closest("[data-hold]")) return holdAction();
     const line = e.target.closest("[data-i]");
     if (ichorPick >= 0) { if (!line) { ichorPick = -1; return showInv(true); } const n = Number(line.dataset.i); if (n === ichorPick) return useInv(invSel, n || "0"); ichorPick = n; return showInv(true); }
-    if (!line) return;                                    // no click-to-close here: only [C]LOSE, I or Esc
+    if (!line) { showInv(false); if (save && save.encounter) encounterBox(); return; }   // any other click closes, same as [C]LOSE
     const i = Number(line.dataset.i);
     if (i === invSel) useInv(i); else { invSel = i; showInv(true); }
   });
@@ -1287,7 +1305,7 @@
     const tab = e.target.closest("[data-tab]"), line = e.target.closest("[data-i]");
     if (tab) { codexTab = tab.dataset.tab; codexSel = -1; showCodex(true); }
     else if (line) { codexSel = Number(line.dataset.i); showCodex(true); }
-    else if (e.target.closest("[data-close]")) showCodex(false);     // only [C]LOSE (or C, Esc)
+    else showCodex(false);     // [C]LOSE, Esc, or any other click on the page
   });
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -1355,6 +1373,7 @@
         return showInv(true);
       }
       if (key === "i" || key === "c" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
+      else if (key === "h") { e.preventDefault(); holdAction(); }
       else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; showInv(true); }
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
