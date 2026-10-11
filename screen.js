@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.78";
+  const VERSION = "v0.80";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -305,26 +305,12 @@
     now = now || SMT_now(); extra = extra || "";
     const idx = moonIndex(now);
     const v = st.view;
-    const view = v.look ? renderLook(v.look, v.stairs, idx)
-      : v.end === "doors" ? renderDoors(renderView(v.left, v.right, "wall", 1, null), v.doors)
-      : renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
+    const view = v.look ? renderLook("U", false, idx) : renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
     // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
-    // and the letter between them is what she faces: a compass wall, or U (the sky) or D (the floor).
-    // The controls at the foot of the view, top to bottom: [ < LEFT ] and [ RIGHT > ] while the two doors ahead are
-    // locked, then the action button with its word inside ([ SEARCH ]), then the turn
-    // buttons with what she faces between them: a compass wall, U (the sky) or D (the floor).
+    // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 16, `[ < ]  ${st.look || st.facing || "?"}  [ > ]`);
-    // The one "do the obvious thing" button, with its word inside the brackets: [ SEARCH ], [ CONSULT ], [ ENTER ].
-    // While one of the two doors stands open, [ ENTER ] sits under that door, so this one goes back to a plain [ ^ ].
-    const openSide = !v.look && (v.doors || []).some(x => x.state === "open" && x.side !== "C");
-    const actBtn = `[ ${st.actLabel && !openSide ? String(st.actLabel).slice(0, 8) : "^"} ]`;
-    overlay(VH - 2, 23 - Math.floor((actBtn.length - 1) / 2), actBtn);
-    for (const x of (!v.look && v.doors) || []) {
-      if (x.side === "C") continue;
-      if (x.state === "locked") overlay(VH - 3, x.side === "L" ? 9 : 27, x.side === "L" ? "[ < LEFT ]" : "[ RIGHT > ]");
-      else if (x.state === "open") overlay(VH - 3, x.side === "L" ? 9 : 28, "[ ENTER ]");      // the door she opened: its label becomes the way in
-    }
+    overlay(VH - 2, 20, "[  ^  ]");          // the day's step: forward, the way KURA faces
     const r = s => "|" + ljust(s, W - 2) + "|";
     const rc = s => "|" + center(s, W - 2) + "|";
     const S = headerLines(st.omenText, st.tz, now);
@@ -394,9 +380,9 @@
     const line3 = st.question ? ljust(" " + extra.slice(0, 77 - answers.length - 1), 77 - answers.length) + answers + " " : " " + extra;
     for (const m of [" " + moonLine, " " + (st.log || ""), line3]) S.push(r(m));
     S.push("+" + "-".repeat(78) + "+");
-    // Free actions on the left (unlimited, searching included); the day's one charge is spent with the [^]
-    // button in the 3D view, and HOLD/RELEASE live in INVOKE with everything else that isn't always available.
-    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH " + (st.look === "U" ? "LOOK_[D]OWN" : "LOOK_[U]P");   // looking: up to the sky, then down to the floor, then level
+    // Free actions on the left (unlimited, searching included); the day's one step is the [^] button in
+    // the 3D view, and HOLD/RELEASE now live in INVOKE with everything else that isn't always available.
+    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH " + (st.look ? "LOOK_[D]OWN" : "LOOK_[U]P");   // looking: up to the sky, and level again
     S.push("|" + free + " ".repeat(78 - free.length) + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.

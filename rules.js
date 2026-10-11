@@ -1,6 +1,5 @@
 // Day-by-day rules for the daily dungeon, played on the floors from floor.js.
-// One room a day. Each day: one charge, to open one of the room's two locked doors (the other seals for good).
-// Stepping through shuts the door behind her. Searching the walls and the floor is unlimited but chancy. Overhead is the sky, and the moon.
+// Each day: one step (N/S/E/W through a door, or down found stairs). Searching is unlimited but chancy.
 // Days follow the real calendar (Honolulu). Each floor's way down closes on a Sunday; miss it and the run is over.
 // Shared by the web page (buttons) and node (the /smt-screen command).
 (function (root) {
@@ -9,12 +8,6 @@
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const NAME = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
   const CW = ["N", "E", "S", "W"];
-  // The six faces of a room. KURA faces a wall (st.facing) unless she is looking up or down (st.look:
-  // "U" the sky, "D" the floor); face() is whichever she is actually looking at.
-  const SURF = { N: "NORTH wall", E: "EAST wall", S: "SOUTH wall", W: "WEST wall", U: "sky", D: "floor" };
-  const face = st => st.look || st.facing;
-  // The doors onward are side by side in the wall ahead: "L" and "R", or "C" for a lone door.
-  const SIDE = { L: "LEFT ", R: "RIGHT ", C: "" }, SIDE_LC = { L: "left ", R: "right ", C: "" };
   const LEFT = { N: "W", E: "N", S: "E", W: "S" }, RIGHT = { N: "E", E: "S", S: "W", W: "N" };
   // ITEMS by rarity. COMMON: plain ruined-city junk. UNCOMMON: junk with a use. RARE: hybrids and odd tech.
   // MYTHIC: old-layer relics, deep in the walls and in lockers. MOON: only under a bright moon.
@@ -221,11 +214,10 @@
   const heatTier = h => (h >= 18 ? 3 : h >= 12 ? 2 : h >= 6 ? 1 : 0);
   const MOON_PULL = [0.8, 0.9, 1, 1.1, 1.25, 1.1, 1, 0.9];       // the moon still stirs things a little
   const MOON_BONUS = [0.03, 0.04, 0.05, 0.06, 0.07, 0.06, 0.05, 0.04];   // the ordinary bonus-room roll: 3% new moon, 7% full, same curve either side
-  const BONUS_ROOMS = false;     // PARKED: THE ARCHIVE and THE VOID have no place on a one-room floor yet (see sync and floor.js)
   function encounterChance(st) {
     const d = st.dungeon, h = RS(d).heat;
     const here = d.floor.rooms[d.at];
-    if (here.kind === "bay") return 0;                   // a Recharge Bay is safe
+    if (here.kind === "bay" || here.hall) return 0;      // a Recharge Bay and a passage are safe
     return (1 / 24 + (1 / 4 - 1 / 24) * Math.min(1, h / HEAT_MAX)) * MOON_PULL[moon()];
   }
   const HEAT_TELL = {
@@ -256,7 +248,7 @@
   // A level's name by its height: 1-4 are under the surface (B4F at the bottom, B1F the last one), 5 up are above it.
   const levelName = h => (h <= 4 ? `B${5 - h}F` : `${h - 4}F`);
   // Log lines only name a direction when stating a character's action ("KURA goes WEST"), never for hints or doors.
-  const doorList = room => ["No door onward.", "A single door ahead.", "Two doors ahead."][Math.min(2, room.exits.length)];
+  const doorList = room => Object.keys(room.doors).length + (room.falseDoors || []).length > 1 ? "Two doors." : "A single door.";
   // The third log line. About half the time it carries a faint clue about the room KURA is in
   // or the door she faces (never a direction word); otherwise it's pure atmosphere.
   // Every action starts from a copy. The ALIGN arrow (st.pull) belongs to the action that set it,
@@ -301,7 +293,7 @@
   const DEMON = ["> Claws scrape stone somewhere far off.", "> A low laugh echoes, then stops.",
     "> Something large shifts in the dark.", "> Wings beat once, close by.", "> A howl rises from below."];
   const AMBIENT = ["> Water drips somewhere in the dark.", "> The stone ticks as it cools.",
-    "> A draft stirs, then dies.", "> Dust sifts down from the walls.", "> The silence presses close.",
+    "> A draft stirs, then dies.", "> Dust sifts down from the ceiling.", "> The silence presses close.",
     "> Old scratches line the walls.", "> The lamp gutters, then steadies.", "> Pipes groan inside the walls."];
   function flavor(st) {
     const hurt = (st.party || []).filter(p => p.hpmax && p.hp > 0 && p.hp < p.hpmax / 2);
@@ -327,23 +319,17 @@
       "The stairs wait."],
     arch: ["An open arch. The dark goes on beyond it.", "A bare archway, and the way through.", "An opening in the stone, the dark past it.",
       "An arch, empty, with a draft coming through."],
-    sealed: ["A door, shut for good.", "A door that will not open again.", "A dead door, cold in its frame."],
     sky: ["No roof, only sky.", "Open sky.", "The night, far up.", "Broken walls, then sky."],
-    floor: ["Worn tiles, cracked at the seams.", "Flagstones, uneven underfoot.", "Dust, and KURA's own footprints.",
-      "Tiles. Some sit a little loose.", "Grit and old stains."],
   };
   function sight(st) {
     if (st.look === "U") return pick(SEE.sky) + " " + MOON_SEEN[moon()];
-    if (st.look === "D") return st.dungeon && atStairs(st) ? pick(SEE.stairs) : pick(SEE.floor);
     const v = st.dungeon ? (show(st), st.view.end) : "wall";
-    if (v === "doors") return doorStates(st.dungeon).some(x => x.state === "open") ? pick(SEE.arch) : "Two doors, side by side.";
-    if (v === "door" && st.dungeon && rm(st.dungeon).back === st.facing) return pick(SEE.sealed);
-    if (v === "door" && st.view.lock === null) return pick(SEE.arch);   // an open door is an arch, not a shut door
+    if (v === "door" && st.dungeon && !looksLocked(st.dungeon, st.facing) && !isSealed(st.dungeon, st.facing)) return pick(SEE.arch);   // an open door is an arch, not a shut door
     return pick(SEE[v] || SEE.wall);
   }
   // THE MOON. There is no ceiling: looking up ("U") is the open sky, with the real moon in it at her real phase.
-  // SEARCHing the moon asks her. Once a night she may answer with what one of the room's doors hides (never which
-  // door): the fuller she is, the likelier, and a new moon never answers. Asking is free: no heat, no noise,
+  // SEARCHing the moon asks her. Once a night she may answer with what one of the still-locked doors hides (never
+  // which door): the fuller she is, the likelier, and a new moon never answers. Asking is free: no heat, no noise,
   // nothing wanders in.
   const MOON_SEEN = ["No moon tonight.", "A thin moon, just begun.", "Half a moon, waxing.", "A swelling moon, nearly full.", "The full moon, wide open.",
     "A heavy moon, just past full.", "Half a moon, waning.", "A thin moon, almost gone."];
@@ -362,16 +348,18 @@
     st.moonDay = st.day;
     tally(st, "moonAsked");
     st.log = "> KURA searches the moon.";
-    const rm = d.floor.rooms[d.at], kinds = rm.exits.filter(j => !d.floor.rooms[j] && !d.floor.sealed[j]).map(j => d.floor.kinds[j]);
+    // The doors still locked in this room; failing that, any still locked on the level she has seen.
+    const fl = d.floor, shut = j => !fl.rooms[j] && !(fl.sealed && fl.sealed[j]) && MOON_SAYS[fl.kinds[j]];
+    let kinds = Object.values(fl.rooms[d.at].doors).filter(shut).map(j => fl.kinds[j]);
+    if (!kinds.length) fl.rooms.forEach((r, i) => { if (r && RS(d, i).visited) for (const j of Object.values(r.doors)) if (shut(j)) kinds.push(fl.kinds[j]); });
     st.extra = "> " + (kinds.length && Math.random() < MOON_ANSWER[m] ? MOON_SAYS[pick(kinds)] : pick(MOON_QUIET));
     delete st.tell;
     return show(st);
   }
-
-  // DOOR HINTS and SCRAPS. Each locked door hides a room of one kind. SEARCHing a locked door always gives a
+  // DOOR HINTS and DEAD-END CLUES. Each locked door hides a room of one kind. SEARCHing a locked door sometimes gives a
   // faint hint of what is behind it (the senses overlap on purpose: warm for the Den and the Forge, a hum for the Bay and
-  // the Altar, cold and static for the Vault and the Relay), so the day's one choice is never blind. Each room also hides
-  // a BIG clue: a scrap that says outright what one of its doors is. It never says which door, and no clue ever names a room.
+  // the Altar, cold and static for the Vault and the Relay). A wing's dead end hides a BIG clue: a scrap that says
+  // outright what one of the wing's two doors is. It never says which door, and no clue ever names a room.
   const KIND_HINT = {
     den: ["Warm air breathes along the bottom of the door.", "The door is faintly warm to the touch.", "Hot dust, and the smell of old plastic."],
     bay: ["A soft hum, like something asleep.", "The air at the door is clean, and still.", "KURA's shoulders drop a little, standing here."],
@@ -400,10 +388,12 @@
     altar: ["glows faintly at one wall", "seems to be listening"],
     archive: ["blinks with rows of tiny lights", "whirs, dry and low"],
     void: ["stands bare, stripped of anything worth taking", "is empty, and smells of something already gone"],
+    hall: ["is only a narrow way through, bare and echoing", "stretches on, narrow and bare"],
+    dead: ["closes in, with nowhere further to go", "is small and shut, at the end of the way"],
     plain: ["is bare and quiet", "is plain and still"],
   };
-  // The door she came in by: it shut behind her, and it stays shut.
-  const BEHIND = ["The door KURA came through. It has shut for good.", "The way back. It closed behind her and stays closed.", "No way back. The door has set in its frame."];
+  const FALSE_SEARCH = ["Paint. A door painted on bare stone.", "The door is flat. Brush strokes, and nothing under them.", "KURA knocks. Solid wall, dressed up as a door."];
+  const FALSE_GO = ["The door is only paint. The cell keeps its charge.", "KURA pushes. It is a wall with a door painted on it. No charge spent.", "A painted door. The cell was never needed."];
   const SEALED = ["The door is jammed shut. It won't open now.", "Something settled behind this door. It will not move.", "The frame has seized. This way is closed for good."];
   function atmosphere(st) { return flavor(st); }
 
@@ -419,9 +409,9 @@
     const w = LADDER[Math.min(Math.max(num, 1), 4) - 1];
     return Object.keys(w).reduce((a, b) => (w[b] > w[a] ? b : a));
   }
-  // The omen-streak telegraph: not a number, not a name, just a line that something about THIS floor is a
-  // little different. PARKED with the bonus and void rooms it announced (see BONUS_ROOMS): nothing stamps
-  // floor.streak now, so this line never shows.
+  // The omen-streak telegraph (see floor.js's buildWing / rules.js's omenStreak): not a number, not a
+  // name, just a line that something about THIS floor is a little different -- the same for every
+  // player on a LAW or CHAOS streak, since the streak itself already is.
   const STREAK_LINE = { LAW: "The pattern holds. Something about this floor feels orderly.",
     CHAOS: "The pattern breaks. Something about this floor feels wrong." };
   // A fresh-floor-only version of atmosphere(): the ordinary ambient line, plus (sometimes) a hint of
@@ -433,27 +423,29 @@
     const bits = [];
     if (Math.random() < 0.5) bits.push(pick(FAMILY_HINT[dominantFamily(floorNum(st))]));
     if (fl.streak && STREAK_LINE[fl.streak]) bits.push(STREAK_LINE[fl.streak]);
-    if (!bits.length) return base;
-    // Line 3 holds 77 characters: when the hint won't fit after the ambient line, it stands alone.
-    const both = base + " " + bits.join(" ");
-    return both.length <= 77 ? both : "> " + bits.join(" ");
+    return bits.length ? base + " " + bits.join(" ") : base;
   }
 
-  // A wall with a door on it: the wall ahead (while the room has a door onward), or the shut door she came in by.
-  const rm = d => d.floor.rooms[d.at];
-  const doorWall = (room, x) => (x === room.ahead && room.exits.length > 0) || room.back === x;
+  // The stairs sit against a wall with no door. Which wall is fixed by the floor's seed.
+  // A wall with a door on it: a real door (open, locked or sealed) or a false one.
+  const doorWall = (room, x) => x in room.doors || (room.falseDoors || []).includes(x);
+  function stairsDir(floor, i) {
+    const free = CW.filter(d => !doorWall(floor.rooms[i], d));
+    return free[floor.seed % free.length];
+  }
 
-  // A door is LOCKED while the room behind it isn't built yet: opening it takes the day's one charge.
-  // (a SEALED door was shut for good: the other door of a settled offer). Doors are named by side: L, R or C.
-  const isSealed = (d, side) => FLOOR.isSealed(d.floor, d.at, side);
-  const isLocked = (d, side) => { const j = rm(d).doors[side]; return j !== undefined && !d.floor.rooms[j] && !isSealed(d, side); };
-  const doorStates = d => Object.keys(rm(d).doors).map(side => ({ side, state: isSealed(d, side) ? "sealed" : isLocked(d, side) ? "locked" : "open" }));
+  // A door is LOCKED while the room behind it isn't built yet: opening it takes the day's one key.
+  // (a SEALED door was shut for good when the other door of its offer was opened; a FALSE door is only paint)
+  const isSealed = (d, dir) => FLOOR.isSealed(d.floor, d.at, dir);
+  const isFalse = (d, dir) => (d.floor.rooms[d.at].falseDoors || []).includes(dir);
+  const isLocked = (d, dir) => { const j = d.floor.rooms[d.at].doors[dir]; return j !== undefined && !d.floor.rooms[j] && !isSealed(d, dir); };
+  const looksLocked = (d, dir) => isLocked(d, dir) || isFalse(d, dir);          // what the player sees: a door that asks for a charge
 
-  // Ways out of KURA's room: its doors onward (by side), plus the stairs under the floor ("D") once they've been found.
+  // Ways out of KURA's room: its doors, plus the stairs once they've been found.
   function exits(d) {
-    const out = Object.keys(rm(d).doors);
-    if (RS(d).found.includes("stairs")) out.push("D");
-    return out;
+    const out = Object.keys(d.floor.rooms[d.at].doors);
+    if (RS(d).found.includes("stairs")) out.push(stairsDir(d.floor, d.at));
+    return CW.filter(x => out.includes(x));
   }
 
   // Draw the minimap and the first-person view from where KURA stands and faces.
@@ -478,7 +470,8 @@
     if (!d || !k || st.dead || st.encounter || st.question) return;
     if (st.party.slice(1).some(p => p.hp > 0)) return;          // company keeps the dark away
     const key = (st.loop && st.loop.key) || "", n = ((st.loop && st.loop.n) || 0) / (key.startsWith("search:") ? 2 : 1);
-    if (n >= DREAD.answer) {
+    const safe = !!d.floor.rooms[d.at].hall;                    // no demon comes into a passage, not even this one
+    if (n >= DREAD.answer && !safe) {
       const name = "ATOM SLASHER", u = UNIQUE[name];
       const hpmax = Math.round((16 + 9 * floorNum(st) + R(0, 8)) * u.hp);
       st.encounter = { name, family: familyOf(name), align: alignOf(name), hp: hpmax, hpmax, round: 0, angered: false, stage: null };
@@ -493,7 +486,7 @@
       st.extra = pick(DREAD_LINES.filter(l => l !== st.extra));
     }
   }
-  // ROOM NAMES: so one day's room reads differently from the last. The start room is "Stairs up", the room holding the
+  // ROOM NAMES: so a backtracking player can tell rooms apart. The start room is "Stairs up", the room holding the
   // stairs down (once found) is "Stairs down", and every other room is named the first time KURA walks in. The name is a
   // flavor word for what the room is like (11 characters at most, the same senses as the arch lines), never the room's
   // actual name. It sticks to the room, and no two rooms on a floor share one.
@@ -501,7 +494,7 @@
     den: ["Snug room", "Burrow room", "Musty room"], bay: ["Quiet room", "Soft room", "Still room"],
     relay: ["Tone room", "Static room", "Dish room"], vault: ["Heavy room", "Sealed room", "Hushed room"],
     forge: ["Ash room", "Solder room", "Soot room"], altar: ["The altar"],
-    archive: ["Drive room", "Rack room", "Spin room"],
+    archive: ["Drive room", "Rack room", "Spin room"], hall: ["Passageway", "Conduit", "Crawlway", "Corridor", "Walkway", "Service way"], dead: ["Dead end", "Sealed end"],
     plain: ["Dusty room", "Damp room", "Grey room", "Tiled room", "Mossy room", "Sooty room", "Round room", "Echo room", "Salt room",
       "Rusty room", "Hollow room", "Side room", "Back room", "Big room", "Small room", "Odd room", "Wet room", "Dry room", "Low room",
       "High room", "Lamp room", "Bent room", "Split room", "Dim room", "Old room", "Plain room", "Faded room", "Chalky room", "Bleak room",
@@ -513,44 +506,12 @@
     const rs = RS(d, i);
     if (rs.name) return rs.name;
     const rm = d.floor.rooms[i], used = new Set(allRooms(d).map(x => x.name).filter(Boolean));
-    const lists = [NAMES_BY_KIND[rm.kind || "plain"] || NAMES_BY_KIND.plain, NAMES_BY_KIND.plain];
+    const lists = [NAMES_BY_KIND[rm.kind || (rm.hall ? "hall" : rm.dead ? "dead" : "plain")] || NAMES_BY_KIND.plain, NAMES_BY_KIND.plain];
     const h = Math.abs(Math.imul((d.floor.seed | 0) ^ Math.imul(i + 1, 0x9e3779b1), 0x85ebca6b) >>> 7);
     for (const list of lists) {
       for (let t = 0; t < list.length; t++) { const n = list[(h + t) % list.length]; if (!used.has(n)) return (rs.name = n); }
     }
     return (rs.name = NAMES_BY_KIND.plain[h % NAMES_BY_KIND.plain.length]);
-  }
-  // THE WAY UP. The stairs to the next floor are hidden in one of the last room's bare walls (rs.walls.stairsDir).
-  // Once found, she is "at the stairs" whenever she faces that wall. (A room laid out before v0.76 kept them
-  // under its floor: there, looking down is facing them.)
-  const stairsAt = d => (RS(d).walls && RS(d).walls.stairsDir) || "D";
-  const atStairs = st => { const d = st.dungeon; return !!d && !st.dead && RS(d).found.includes("stairs") && face(st) === stairsAt(d); };
-  // WHAT SHE IS LOOKING AT, for the slot under the map (11 characters at most). Never a room's type: a fixture
-  // only gets its name once it has been found.
-  const FIXTURE_LABEL = { den: "GEAR HEAP", bay: "CABLES", relay: "DISH", vault: "DRAWERS", forge: "WORKBENCH" };
-  function facingLabel(st) {
-    const d = st.dungeon, rm = d.floor.rooms[d.at], f = st.facing;
-    if (st.dead) return "";
-    if (st.look === "U") return moon() === 0 ? "THE SKY" : "THE MOON";
-    if (atStairs(st)) return "STAIRS UP";
-    if (st.look === "D") return "FLOOR";
-    if (rm.back === f) return "WAY BACK";
-    if (doorWall(rm, f)) { const ds = doorStates(d); return ds.some(x => x.state === "open") ? "OPEN ARCH" : ds.length > 1 ? "TWO DOORS" : "LOCKED DOOR"; }
-    if (facingAltar(st)) return "TERMINAL";
-    if (RS(d).found.includes("fixture") && RS(d).walls && RS(d).walls.fixtureDir === f) return FIXTURE_LABEL[rm.kind] || "BARE WALL";
-    return "BARE WALL";
-  }
-  // WHAT [ ^ ] WILL DO from here, in one word (9 characters at most): the page's "do" action follows the same rules.
-  function actLabel(st) {
-    const d = st.dungeon, rm = d.floor.rooms[d.at], f = st.facing;
-    if (st.dead || st.encounter) return "";
-    if (st.look === "U") return moon() === 0 ? "SEARCH" : "CONSULT";
-    if (atStairs(st)) return "CLIMB";
-    if (st.look === "D") return "SEARCH";
-    if (f === rm.ahead && rm.exits.length) { const ds = doorStates(d); return ds.some(x => x.state === "open") ? "ENTER" : ds.length === 1 ? "OPEN" : "LISTEN"; }
-    if (facingAltar(st)) return "OFFER";
-    if (RS(d).found.includes("fixture") && RS(d).walls && RS(d).walls.fixtureDir === f && RS(d).fixtureDay !== st.day) return "USE";
-    return "SEARCH";
   }
   function show(st) {
     if (!st.dungeon) return st;
@@ -563,10 +524,9 @@
     st.extraUrgent = false;                             // the page holds line 3 for a moment, unless this is a warning
     if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; st.extraUrgent = true; } // a heat tell takes line 3 right away (not over a question)
     RS(d);                                              // (converts an old save's room arrays)
-    roomName(d, d.at);                                  // (each room keeps its own flavor name, said once as she walks in)
-    st.roomName = facingLabel(st);                      // the slot under the map names what she is looking at
-    st.actLabel = actLabel(st);                         // and the word between the turn buttons says what [ ^ ] will do
-    st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.look ? null : st.facing });
+    st.roomName = roomName(d, d.at);
+    if (st.look && !st.dead) st.roomName = moon() === 0 ? "THE SKY" : "THE MOON";   // looking up, the slot under the map names what she sees
+    st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.facing, visited: allRooms(d).map(s => s.visited), found: allRooms(d).map(s => s.found) });
     const door = dir => doorWall(room, dir);
     if (st.dead) {
       // Game over: the view goes dark and the third line points to RST.
@@ -574,16 +534,13 @@
       st.extra = "> GAME OVER. Press [R]ESET to begin a new run.";
       return st;
     }
-    // Looking up or down: the sky, or the floor (with the stairs in it once they've been found).
-    if (st.look) { st.view = { look: st.look, stairs: st.look === "D" && atStairs(st) }; return st; }
-    // The wall ahead: two doors side by side (view.doors), or the last room's lone door. Behind: the shut way back.
-    const ahead = st.facing === room.ahead && room.exits.length > 0, ds = ahead ? doorStates(d) : [];
+    if (st.look) { st.view = { look: "U" }; return st; }      // looking up: the open sky
+    const stairsAhead = RS(d).found.includes("stairs") && st.facing === stairsDir(d.floor, d.at);
     st.view = {
       left: [!door(LEFT[st.facing]), true], right: [!door(RIGHT[st.facing]), true],
-      end: atStairs(st) ? "stairs" : ds.length > 1 ? "doors" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : "wall",
-      lock: ds.length === 1 ? (ds[0].state === "locked" ? "+" : ds[0].state === "sealed" ? "x" : null) : room.back === st.facing ? "x" : null,    // the knob: + asks for the charge, x is sealed
+      end: stairsAhead ? "stairs" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : "wall",
+      lock: stairsAhead ? null : isSealed(d, st.facing) ? "x" : looksLocked(d, st.facing) ? "+" : null,    // the knob: + asks for the key, x is sealed
     };
-    if (ds.length) st.view.doors = ds;
     return st;
   }
 
@@ -625,11 +582,10 @@
 
   // KURA arrives on a fresh level, `height` levels up from the bottom of the pit, in moon quarter `n`. Its way
   // up closes at the end of the day that quarter ends.
-  // The floor's OFFERS (which two kinds are paired, day by day) are seeded off (this epoch, this floor
-  // depth) -- shared: every player who reaches this same depth during this same real lunar month faces
-  // the same pairs. Its CONTENTS (which door is which, which wall each door is on, where things are
-  // hidden, the wildcard) are seeded off (this account's own private salt, this floor depth) -- never
-  // shared, re-rolled every floor.
+  // The floor's SHAPE is seeded off (this epoch, this level) -- shared: every player on this level during
+  // this same real lunar month gets the identical shape. Its CONTENTS (which kind is where, where things
+  // are hidden, the wildcard, any bonus/void room) are seeded off (this account's own private salt, this
+  // level) -- never shared, re-rolled every floor.
   // The epoch itself is stamped here and held for the rest of the time on this floor (see screen.js's
   // epochIndex): a lunar-month rollover mid-floor must never reshuffle a floor out from under a player.
   function arrive(st, height, n) {
@@ -637,7 +593,8 @@
     st.floorEpoch = Q.epoch;                             // the month this level's quarter belongs to: everyone on it shares its offers
     st.height = height;
     const shared = seedFrom(st.floorEpoch, height), priv = seedFrom(st.pseed || 0, height);
-    const floor = FLOOR.generate(shared, priv, { days: Math.min(7, deadline - clock(st) + 1) });
+    const streak = omenStreak(effectiveOmenDay(st));
+    const floor = FLOOR.generate(shared, priv, { days: Math.min(7, deadline - clock(st) + 1), streak });
     const a = FLOOR.arrive(floor);
     st.floor = levelName(height);
     st.facing = a.facing; delete st.look;
@@ -698,12 +655,10 @@
     st.omenDay = utcDay();
     if (st.useBanked) delete st.bankedOmen;   // spent yesterday -- the bank is empty again today
     delete st.useBanked;
-    // PARKED (BONUS_ROOMS is false): the bonus room and THE VOID used to take over a wing's passage or
-    // dead end, and a one-room floor has neither, so for now nothing below runs and neither room appears.
-    // To be redesigned for one-room floors. The rules as they stood, kept for that day:
-    // The bonus/void room is decided fresh each real day KURA spends in a dungeon. Two independent
-    // sources, either can fire, both stop once either lands or one is already waiting to be placed,
-    // so a floor never gets more than one:
+    // The bonus/void room is decided fresh each real day KURA spends in a dungeon, not something
+    // floor.js's buildWing rolls on its own (see floor.js: it just places whatever this decided, the
+    // next time a wing actually builds). Two independent sources, either can fire, both stop once
+    // either lands or one is already waiting to be placed, so a floor never gets more than one:
     //
     // 1. A 100% GUARANTEE the day a 3-day LAW/CHAOS omen streak freshly completes (not every day the
     // streak holds -- only the day it first turns true, so it fires once per streak, not once a day
@@ -711,7 +666,7 @@
     // is already rare on its own (see omenStreak). LAW guarantees a bonus room; CHAOS guarantees void.
     const streakNow = omenStreak(st.omenDay), streakYesterday = omenStreak(st.omenDay - 1);
     const freshStreak = streakNow && streakNow !== streakYesterday ? streakNow : null;
-    if (BONUS_ROOMS && st.dungeon && !st.dungeon.floor.bonusRolled && !st.dungeon.floor.antiRolled
+    if (st.dungeon && !st.dungeon.floor.bonusRolled && !st.dungeon.floor.antiRolled
       && !st.dungeon.floor.pendingBonus && !st.dungeon.floor.pendingAnti) {
       if (freshStreak === "LAW") st.dungeon.floor.pendingBonus = true;
       else if (freshStreak === "CHAOS") st.dungeon.floor.pendingAnti = true;
@@ -721,7 +676,7 @@
     // brightness curve as MOON_PULL above: 3% new moon, up to 7% at full, back down either side.
     if (st.bonusEpoch !== epochNow()) { st.bonusEpoch = epochNow(); st.bonusCount = 0; }
     const bonusOK = (st.bonusCount || 0) < 2 && (st.lastBonusDay === undefined || utcDay() - st.lastBonusDay > 1);
-    if (BONUS_ROOMS && st.dungeon && bonusOK && !st.dungeon.floor.bonusRolled && !st.dungeon.floor.antiRolled
+    if (st.dungeon && bonusOK && !st.dungeon.floor.bonusRolled && !st.dungeon.floor.antiRolled
       && !st.dungeon.floor.pendingBonus && !st.dungeon.floor.pendingAnti && Math.random() < MOON_BONUS[moon()]) {
       st.dungeon.floor.pendingBonus = true;
       st.lastBonusDay = utcDay(); st.bonusCount = (st.bonusCount || 0) + 1;
@@ -755,7 +710,7 @@
       st.dead = true;
       st.encounter = null; st.question = null; st.altar = null;          // nothing is left pending on a dead run
       st.party = st.party.map(p => ({ ...p, hp: 0 }));
-      st.log = `> The week ended. The dark closed over KURA.`;
+      st.log = `> The moon turned. The dark rose and closed over KURA.`;
       return st;
     }
     st.log = `> KURA wakes on ${st.floor}.` + (st.campNote ? " " + st.campNote : "");
@@ -797,10 +752,10 @@
         const it = moon() === 4 && Math.random() < 0.5 ? pick(MOON_DROPS) : pick(names(Math.random() < 0.7 ? "RARE" : "MYTHIC"));
         gain(st, it); return `A locker holds ${it}.`;
       }
-      case "clue": {                          // the room's scrap: what one of its doors is
-        const rm = st.dungeon.floor.rooms[st.dungeon.at];
-        if (rm.clueKind) st.clue = pick(KIND_CLUE[rm.clueKind]);
-        return face(st) === "D" ? "A scrap of writing, under a loose tile." : "A scrap of writing, pinned to the wall.";
+      case "clue": {                          // a dead end's scrap: what one of the wing's two doors is
+        const rm = st.dungeon.floor.rooms[st.dungeon.at], w = st.dungeon.floor.wings[rm.wing];
+        if (w && w.clueKind) st.clue = pick(KIND_CLUE[w.clueKind]);
+        return "A scrap of writing, pinned to the wall.";
       }
       case "silver": { const n = R(20, 150) * (inArchive(st) ? 2 : 1); st.silver = silver + n; tally(st, "silverFound", n); return `Coins in the rubble. ${n} SILVER.`; }
       case "item": { const it = inArchive(st) ? pick(names(Math.random() < 0.35 ? "RARE" : "UNCOMMON")) : rollItem(st); gain(st, it); return `KURA finds ${it}.`; }
@@ -822,8 +777,8 @@
     return "Dust. Nothing more here.";
   }
 
-  // Each day KURA gets ONE charge: it opens one locked door. Walking through an open door, and going down
-  // found stairs, are free. Searching, turning, looking and the free actions are unlimited.
+  // Each day KURA gets ONE step (through a door, or down found stairs).
+  // Searching, turning and the free actions are unlimited. Days follow the real calendar.
   const OVER = "> GAME OVER. Press [R]ESET to begin a new run.";
   const today = st => (st.today = st.today || { stepped: false });
   function bump(st, key) { st.loop = st.loop && st.loop.key === key ? { key, n: st.loop.n + 1 } : { key, n: 1 }; }
@@ -925,69 +880,63 @@
     "Cold stone, cold hands.", "Mortar, mostly. Some is older.", "Fingers come away gray.", "A crack. It goes nowhere.",
     "Damp. The smell of old pipes.", "Someone has looked here before.", "A dead cable runs in and stops.",
     "Faded paint. A number, or a sigil.", "Old tally marks, in groups of five.", "Salt along the base, in a line."];
-  const MISSES_DOWN = ["Nothing.", "Nothing yet.", "Only tile.", "Grit under the nails.", "A loose tile. Nothing under it.", "The grout is older here.",
-    "A drain, long dry.", "Scuff marks, not KURA's.", "Cold comes up through the stone.", "A coin-shaped stain. No coin."];
   const moon = () => (root.SMT || require("./screen.js")).moonIndex((root.SMT || require("./screen.js")).now());
-  // Each room hides its things in the walls with no door on them and in its floor ("D"). (Overhead is the open
-  // sky: nothing hides there, see THE MOON.) The stairs up are always in a bare wall; a fixture is always in a wall;
-  // everything else is spread over those faces, fixed by the floor's seed.
+  // Each room hides its things behind its walls (never behind a door). The stairs are always behind
+  // the wall they will open in; everything else is spread over the other walls, fixed by the floor's seed.
   function walls(d, i) {
     const rs = RS(d, i);
-    if (rs.walls && rs.walls.U) {                              // a room laid out when there was still a ceiling: what it held drops to the floor
-      const w = rs.walls, rest = w.U.slice(w.taken.U || 0);
-      w.D = (w.D || []).concat(rest); w.need.D = (w.need.D || []).concat((w.need.U || []).slice(w.taken.U || 0));
-      if (w.deep && w.deep.dir === "U") w.deep.dir = "D";
-      delete w.U; delete w.taken.U; delete w.need.U; delete w.prog.U;
-    }
     if (rs.walls) return rs.walls;
     const room = d.floor.rooms[i];
     // The terminal's wall can't be searched for hidden things (it wakes the terminal instead), so nothing hides there.
     const altar = room.kind === "altar" ? altarDir(d.floor, i) : null;
-    const bare = CW.filter(x => !doorWall(room, x) && x !== altar), free = bare.concat(["D"]);
+    const free = CW.filter(x => !doorWall(room, x) && x !== altar);
     const w = { taken: {} };
     free.forEach(x => { w[x] = []; w.taken[x] = 0; });
+    const sd = stairsDir(d.floor, i);
     // A small LCG kept inside 32 bits (Math.imul), reading its high bits: the low bits of an LCG are not random.
-    let k = (d.floor.pseed + i * 31) >>> 0;
+    let k = (d.floor.seed + i * 31) >>> 0;
     const next = () => { k = (Math.imul(k, 1103515245) + 12345) >>> 0; return k >>> 8; };
-    for (const thing of room.hidden) if (thing !== "stairs") w[free[next() % free.length]].push(thing);
-    // The way up is in a bare wall, and always the first thing that wall gives up: the last day is never a long dig.
-    if (room.hidden.includes("stairs")) { const sd = bare.length ? bare[next() % bare.length] : "D"; w[sd].unshift("stairs"); w.stairsDir = sd; }
-    // Rooms with an effect hide a fixture in a wall. Finding it takes searching, like any find; using it is a SEARCH of that wall.
-    if (FIXTURE[room.kind] && bare.length) { const fd = bare[next() % bare.length]; w[fd].unshift("fixture"); w.fixtureDir = fd; }
-    // Nothing turns up on a first look. Each thing needs 5 to 10 points (half again more for each find already made on that face) of searching (rolled now, hidden from the
-    // player); every search of its face adds a point or so (see SEARCH). prog is what each face has had so far.
+    for (const thing of room.hidden) {
+      if (thing === "stairs") w[sd].push(thing);
+      else if (free.length) w[free[next() % free.length]].push(thing);
+    }
+    // Rooms with an effect hide a fixture behind one wall. Finding it takes searching, like any find; using it is a SEARCH of that wall.
+    if (FIXTURE[room.kind] && free.length) { const fd = free[next() % free.length]; w[fd].unshift("fixture"); w.fixtureDir = fd; }
+    // Nothing turns up on a first look. Each thing needs 5 to 10 points (half again more for each find already made on that wall) of searching (rolled now, hidden from the
+    // player); every search of its wall adds a point or so (see SEARCH). prog is what each wall has had so far.
     w.need = {}; w.prog = {};
     for (const x of free) { w.need[x] = w[x].map(() => 5 + next() % 6); w.prog[x] = 0; }
-    // About one room in three hides something deep in one face: findable, but only after a very long search,
-    // and that face may look empty for a very long time.
-    if (next() % 3 === 0) w.deep = { dir: free[next() % free.length], item: names("MYTHIC")[next() % CATALOG.MYTHIC.length], found: false, need: 20 + next() % 31, prog: 0 };
+    // About one room in three hides something deep in one wall: findable, but only 1 in 35 per search,
+    // and that wall may look empty for a very long time.
+    if (free.length && next() % 3 === 0) w.deep = { dir: free[next() % free.length], item: names("MYTHIC")[next() % CATALOG.MYTHIC.length], found: false, need: 20 + next() % 31, prog: 0 };
     return (rs.walls = w);
   }
 
-  // SEARCH the face KURA is looking at (a wall or the floor), NetHack style: unlimited, but each
-  // search only adds a little toward that face's next hidden thing. A bare face never answers. Doors can't be
-  // searched, but a locked one can be listened at.
+  // SEARCH the wall KURA faces, NetHack style: unlimited, but each search has only a small chance
+  // to turn up that wall's next hidden thing. A bare wall never answers. Doors can't be searched.
   function search(st) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
-    if (st.look === "U") return askMoon(st);                // overhead is the sky: searching it asks the moon
-    const d = st.dungeon, room = d.floor.rooms[d.at], found = RS(d).found, dir = face(st);
-    // A door can't be searched, but a locked one can be listened at: it always lets a hint slip (see KIND_HINT).
+    if (st.look === "U") return askMoon(st);              // looking up, SEARCH asks the moon
+    const d = st.dungeon, room = d.floor.rooms[d.at], found = RS(d).found, dir = st.facing;
+    // A door can't be searched, but a locked one can be listened at (see KIND_HINT); a false one gives itself away.
     // Costs nothing, and never says the same thing twice in a row.
-    if (!st.look && doorWall(room, dir)) {
-      let pool;
-      if (room.back === dir) pool = BEHIND;
-      else {
-        // Two doors in one wall: each search listens at the next door in turn, and says which.
-        const ds = doorStates(d).filter(x => x.state !== "sealed"), x = ds[(st.listen = ((st.listen || 0) + 1)) % ds.length];
-        const which = `The ${SIDE_LC[x.side]}door. `;
-        if (x.state === "locked") pool = KIND_HINT[FLOOR.kindBehind(d.floor, d.at, x.side)].map(h => which + h);
-        else {                                              // an open arch: what the room beyond is like
-          const to = d.floor.rooms[room.doors[x.side]];
-          pool = (ARCH_DESC[to && to.kind] || ARCH_DESC.plain).map(desc => `The open arch. The room beyond ${desc}.`);
-        }
+    if (doorWall(room, dir)) {
+      const DOOR = ["Only a door here. Nothing to search.", "KURA runs a hand along the door frame. Just a door.",
+        "A door. Whatever's hidden, it isn't here.", "The door gives nothing away. It only opens.",
+        "KURA checks the hinges. Old, but only hinges.", "Nothing behind the door but the way on."];
+      let pool = DOOR;
+      if (isFalse(d, dir)) pool = FALSE_SEARCH;
+      else if (isSealed(d, dir)) pool = SEALED;
+      else if (isLocked(d, dir)) {                          // a locked door says so, and sometimes lets a hint slip
+        const hint = Math.random() < 0.55 ? KIND_HINT[FLOOR.kindBehind(d.floor, d.at, dir)] : null;
+        pool = hint ? hint.map(h => "A locked door. " + h) : ["A locked door. Nothing to search here.", "A locked door. KURA runs a hand along the frame.", "A locked door. It gives nothing away."];
+      } else {                                              // an open arch: what the room beyond is like
+        const to = d.floor.rooms[room.doors[dir]], k = (to && to.kind) || FLOOR.kindBehind(d.floor, d.at, dir);
+        const desc = pick(ARCH_DESC[k] || (to && to.hall ? ARCH_DESC.hall : to && to.dead ? ARCH_DESC.dead : ARCH_DESC.plain));
+        pool = [`An arch to another room. It ${desc}.`];
       }
       st.log = "> " + pick(pool.filter(l => "> " + l !== st.log));
       act(st, "door"); nag(st);
@@ -999,7 +948,7 @@
       st.altar = altarUsed(st) ? { open: true, used: true } : { open: true, used: false, script: altarScript(st), page: 0 };
       return show(st);
     }
-    if (atStairs(st)) { act(st, "stairs"); st.log = "> The stairs wait, behind the parted stone."; return show(st); }
+    if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { act(st, "stairs"); st.log = "> The stairs wait. Nothing more here."; return show(st); }
     // A found fixture is used by searching its wall again: once a day per room.
     if (found.includes("fixture") && walls(d, d.at).fixtureDir === dir && RS(d).fixtureDay !== st.day) {
       act(st, `fixture:${d.at}`); RS(d).fixtureDay = st.day;
@@ -1020,11 +969,11 @@
     // can ever turn up on a first look (the cheapest thing needs 5).
     const fullness = (1 - Math.cos(moon() / 8 * 2 * Math.PI)) / 2;
     const worth = Math.min(1.9, fx.find * (tier === 0 ? 1.25 : tier >= 2 ? 0.75 : 1) * (st.restedDay === clock(st) ? 1.25 : 1) * (1 + 0.35 * fullness));
-    const where = `KURA searches the ${SURF[dir]}.`;
+    const where = `KURA searches the ${NAME[dir]} wall.`;
     const say = text => {
       const long = `> ${where} ${text}`;
       if (long.length <= 77) return long;
-      const short = `> KURA searches ${NAME[dir] || "the " + SURF[dir]}. ${text}`;
+      const short = `> KURA searches ${NAME[dir]}. ${text}`;
       return short.length <= 77 ? short : `> ${text.replace(/^KURA finds /, "Found ")}`.slice(0, 77);
     };
     if (Math.random() < chance) {
@@ -1047,7 +996,10 @@
         // The first find in a room also takes stock of its doors.
         if (found.length === 1 && st.log.length + doorList(room).length < 77) st.log += " " + doorList(room);
         drift(st);
-        if (has(st, "SCAN") && !st.clue && Math.random() < 0.3 && room.clueKind) st.clue = pick(KIND_CLUE[room.clueKind]);   // SCAN reads what is behind a door
+        if (has(st, "SCAN") && !st.clue && Math.random() < 0.3) {          // SCAN reads what is behind a door
+          const wing = st.dungeon.floor.wings[room.wing];
+          if (wing && wing.clueKind) st.clue = pick(KIND_CLUE[wing.clueKind]);
+        }
         if (st.clue) { st.extra = st.clue; delete st.clue; delete st.tell; }   // the scrap's words take line 3 (over a heat tell)
         return show(st);
       }
@@ -1067,79 +1019,91 @@
     // (it starts after a couple of searches: a hint to keep going; it never says where the sound comes from)
     const noise = w.taken[dir] < pile.length && (w.prog[dir] || 0) >= 3 && Math.random() < 0.25;
     const atFixture = w.fixtureDir === dir && pile.includes("fixture") && !found.includes("fixture");
-    st.log = say(noise ? pick(atFixture ? FIXTURE_NOISES : NOISES) : pick(dir === "D" ? MISSES_DOWN : MISSES));
+    st.log = say(noise ? pick(atFixture ? FIXTURE_NOISES : NOISES) : pick(MISSES));
     if (!nag(st)) drift(st);
     return show(st);
   }
 
-  // GO: through one of the doors ahead ("L", "R", or "C" for a lone door), or down found stairs ("D").
-  // A LOCKED door (its room not built yet) takes the day's one charge and only opens it: the other door of the
-  // offer seals, and she walks through when the player chooses. Walking through is free, and it is one-way:
-  // the door shuts behind her for good.
+  // GO: through the door toward dir (N/E/S/W; default: the way she faces). Doors that are already open are free.
+  // A LOCKED door (its room not built yet) takes the day's one charge; with it spent, she can't open another until dawn.
+  // A wall stops her with a message and costs nothing.
   function go(st, dir) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     if (!ensureFloor(st)) return show(st);
     const d = st.dungeon;
-    if (!exits(d).includes(dir)) {
-      st.log = dir === "D" ? "> No way up from here. If there is one, it is still hidden." : "> No way through there.";
-      if (st.encounter) st.round = ["No way out there."];
+    delete st.look;
+    dir = dir || st.facing;
+    const fals = isFalse(d, dir);
+    if (!fals && !exits(d).includes(dir)) {
+      st.facing = dir;
+      st.log = pick([`> A wall to the ${NAME[dir]}. KURA can't go that way.`, `> KURA walks ${NAME[dir]} into solid stone.`,
+        `> Only cold wall to the ${NAME[dir]}.`]);
+      if (st.encounter) st.round = [`A wall to the ${NAME[dir]}. No way out there.`];
       return show(st);
     }
-    const toStairs = dir === "D";
-    if (!toStairs) { st.facing = rm(d).ahead; delete st.look; }
-    const locked = !toStairs && isLocked(d, dir);
-    if (locked && today(st).stepped && !st.freeSteps) {
-      st.log = "> The door won't cycle. The cell is empty until dawn.";
-      if (st.encounter) st.round = ["The cell is empty. No running through a locked door."];
+    const toStairs = !fals && RS(d).found.includes("stairs") && dir === stairsDir(d.floor, d.at);
+    const locked = !toStairs && !fals && isLocked(d, dir);
+    if ((locked || fals) && today(st).stepped && !st.freeSteps) {
+      st.facing = dir; st.log = "> The door won't cycle. The cell is empty until dawn.";
+      if (st.encounter) st.round = ["The cell is empty. No running through a sealed door."];
       return show(st);
     }
-    if (!toStairs && isSealed(d, dir)) {                     // settled the other way: it never opens now
-      st.log = "> " + pick(SEALED);
+    if (!toStairs && !fals && isSealed(d, dir)) {            // settled the other way: it never opens now
+      st.facing = dir; st.log = "> " + pick(SEALED);
       if (st.encounter) st.round = ["That door is sealed. No way out there."];
       return show(st);
     }
-    // With a demon in the way, stepping through a door (or down the stairs) is running: half the time the demon
-    // blocks it and strikes. A locked door takes the day's charge only if she gets through it: in a room whose
-    // every way out is locked, a blocked run must not also cost the day.
-    const way = toStairs ? "up the stairs" : `for the ${SIDE_LC[dir]}door`;
+    if (fals) {                                              // only paint: nothing happens and the key is kept
+      st.facing = dir; st.log = "> " + pick(FALSE_GO.filter(l => "> " + l !== st.log));
+      if (st.encounter) { st.round = ["Paint over stone. No way out there."]; return show(st); }
+      const who = (st.party || []).filter((p, i) => i > 0 && p.hp > 0), p = who.length && pick(who);   // a remark replaces whatever line 3 still held
+      const FALSE_SAY = { ELF: ['ELF: "Paint. Someone had a sense of humor."', 'ELF: "Don\'t lean on it."'],
+        PIXIE: ['PIXIE: "It\'s not a room, it\'s not a door, it\'s not anything!"'], "CU SITH": ["CU SITH sniffs the paint and sneezes.", "CU SITH sits down in front of the paint and waits."] };
+      if (p && FALSE_SAY[p.name]) st.extra = "> " + pick(FALSE_SAY[p.name]); else delete st.extra;
+      return show(st);
+    }
+    // With a demon in the way, stepping through a door is running: half the time the demon blocks it and strikes.
+    // A locked door takes the day's charge only if she gets through it.
     if (st.encounter) {
       const e = st.encounter, lines = [];
-      if (e.ranTried) { st.round = ["KURA already tried to run. There is no running now."]; return show(st); }
+      if (e.ranTried) { st.facing = dir; st.round = ["KURA already tried to run. There is no running now."]; return show(st); }
       act(st, "run");
       lean(st, "run", lines);
+      st.facing = dir;
       st.roundOver = false;
       if (Math.random() < 0.5) {
         e.ranTried = true;
-        lines.push(`KURA runs ${way}. ${THE(e.name)} blocks the way.`);
-        st.log = `> KURA tries to run ${way}. ${THE(e.name)} blocks it.`.slice(0, 77);
+        lines.push(`KURA runs ${NAME[dir]}. ${THE(e.name)} blocks the door.`);
+        st.log = `> KURA tries to run ${NAME[dir]}. ${THE(e.name)} blocks it.`;
         demonTurn(st, lines);
         st.round = lines;
         if (st.dead) st.roundOver = true;
         return show(st);
       }
+      if (locked) today(st).stepped = true;                  // the door takes the day's charge only if she gets through it
       st.encounter = null;
       st.roundOver = true;
-      if (locked) today(st).stepped = true;                 // she made it through: the door cycled, and that was today's charge
-      st.round = [`KURA runs ${way} and leaves ${the(e.name)} behind.`, ...lines];
+      st.round = [`KURA runs ${NAME[dir]} and leaves ${the(e.name)} behind.`, ...lines];
       tally(st, "fled");
     } else if (locked) {
       // Unlocking only opens the door: the room behind it is built, the other offer seals, and KURA stays where she is.
-      // Walking through the open door is free, so she goes in when the player chooses.
+      // Walking through an open door is free, so she goes in when the player chooses.
       act(st, "unlock");
       st.today.stepped = true;
       FLOOR.grow(d.floor, d.at, dir);
-      st.log = dir === "C" ? "> The door cycles open. The way is clear." : `> The ${SIDE[dir]}door cycles open. The other one seals.`;
+      st.facing = dir;
+      st.log = `> The ${NAME[dir]} door cycles open. The way is clear.`;
       st.extra = atmosphere(st);
       tally(st, "unlocks");
       return show(st);
     } else act(st, "go");
     // Taking the stairs down is free, like any open door.
     if (toStairs) tally(st, "floors"); else tally(st, "steps");
+    st.facing = dir;
     if (toStairs) {
       // The next level belongs to the next quarter of the moon, so climbing early banks the rest of this one.
       const nextQ = (d.quarter !== undefined ? d.quarter : TIME.quarterOf(new Date(nowMs(st))).n) + 1, surfaced = (st.height || 1) === 4;
-      (st.path = st.path || []).push({ f: st.floor, a: d.arrived, e: d.deadline, left: clock(st), rooms: floorPath(d) });   // the floor she is leaving, for THE PATH
       st.climb = floorNum(st) + 1;
       arrive(st, (st.height || 1) + 1, nextQ);
       st.log = surfaced ? `> KURA climbs out of the pit, into open air. ${st.floor}.` : `> KURA takes the stairs and climbs to ${st.floor}.`;
@@ -1147,22 +1111,24 @@
       st.extra = floorArrivalLine(st);   // line 3 is flavor only: the deadline already shows on the status line
       return show(st);
     }
-    const i = FLOOR.grow(d.floor, d.at, dir);               // (a run through a locked door builds the room here)
+    const i = FLOOR.grow(d.floor, d.at, dir);               // builds the room behind a locked door the first time
+    const isNew = !RS(d, i).visited;
     d.at = i; RS(d, i).visited = true;
-    st.facing = rm(d).ahead; delete st.listen;
-    // The ? room: something is still tucked away in it.
-    st.log = i === d.floor.lure ? "> KURA steps through. The door shuts. " + pick(["The room is holding its breath.", "The air here keeps something back.", "The walls know a little more."])
-      : `> KURA steps through into the ${roomName(d, i).replace(/^The /, "").toLowerCase()}. The door shuts behind her.`;
-    enterKind(st, i, true);
+    st.log = locked ? `> The ${NAME[dir]} door cycles open. KURA steps into a new room.`
+      : (i === d.floor.lure && !(RS(d, i).found || []).includes("lure"))      // the ? room: something is still tucked away in it
+        ? `> KURA goes ${NAME[dir]}. ` + pick(["The room feels like it is holding its breath.", "The air here is keeping something back.", "The walls seem to know a little more than KURA."])
+        : `> KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
+    enterKind(st, i, locked || isNew);
     st.extra = atmosphere(st);
     partyEnter(st);
     return show(st);
   }
 
+
   // PARTY ENTRY LINES: when KURA walks into a room that has no flavor line of its own, someone in the party may say something.
   // Nothing here describes what a room does. Members without lines of their own speak in their family's voice ({n} = their name).
   const PARTY_ENTER = {
-    ELF: ['ELF: "Another room. Stay close."', 'ELF: "I have seen this sort of place before."', 'ELF glances at the sky, then the floor.',
+    ELF: ['ELF: "Another room. Stay close."', 'ELF: "I have seen this sort of place before."', 'ELF glances at the ceiling, then the floor.',
       'ELF: "Walk lightly. Stone remembers."', 'ELF: "Not much to love in here."', 'ELF: "Mind the corners."'],
     PIXIE: ['PIXIE: "Ooh, a new room!"', 'PIXIE: "Do you think anything lives here?"', 'PIXIE flits ahead, then flits back.',
       'PIXIE: "I don\'t like this one. Or maybe I do."', 'PIXIE: "Can we stay a little? No? Fine."', 'PIXIE: "It smells funny in here."'],
@@ -1215,6 +1181,16 @@
       PIXIE: ['PIXIE: "It\'s so EMPTY. Why is it so empty?"', 'PIXIE: "I don\'t want to be in here. Can we not."'],
       "CU SITH": ['CU SITH won\'t cross the threshold.', 'CU SITH backs out, then sits in the doorway.'],
     },
+    hall: {
+      ELF: ['ELF: "Single file. I do not like a long way."', 'ELF: "A passage. Let us not linger in it."'],
+      PIXIE: ['PIXIE: "Are we there yet? We\'re not even anywhere."', 'PIXIE: "Echo! ...echo? Hm. No echo."'],
+      "CU SITH": ['CU SITH walks ahead, nose to the floor.', 'CU SITH keeps to the middle of the way, tail low.'],
+    },
+    dead: {
+      ELF: ['ELF: "A dead end. Someone wanted it this way."', 'ELF: "There is nowhere left to go but back."'],
+      PIXIE: ['PIXIE: "Ugh. A dead end. I hate those."', 'PIXIE: "It just... stops. Rude."'],
+      "CU SITH": ['CU SITH turns in a circle and looks at KURA.', 'CU SITH noses the end wall and turns back.'],
+    },
     plain: {
       ELF: ['ELF: "Another room. Stay close."', 'ELF: "Nothing remarkable. Which can be a warning."'],
       PIXIE: ['PIXIE: "A room! Just a room."', 'PIXIE: "Is it boring? I think it\'s boring."'],
@@ -1226,7 +1202,7 @@
   function partyEnter(st) {
     const d = st.dungeon, rm = d && d.floor.rooms[d.at];
     if (!rm || st.dead || st.encounter) return;
-    const kind = rm.kind || "plain";
+    const kind = rm.kind || (rm.hall ? "hall" : rm.dead ? "dead" : "plain");
     const alive = (st.party || []).filter((p, i) => i > 0 && p.hp > 0);
     const named = alive.filter(p => ENTER_BY_KIND[kind] && ENTER_BY_KIND[kind][p.name]);
     const pool = named.length ? named : alive;
@@ -1239,8 +1215,9 @@
     st.lastEnterWho = p.name; delete st.tell;                     // their remark is the room's flavor line now
   }
 
-  // ROOM KINDS. Every room but a floor's first has one (see floor.js). Walking in shows the room's own line (line 3).
-  // There is no going back to a room, so each is met once. No kind is better than another: they answer different needs.
+  // ROOM KINDS. Most rooms have one (see floor.js). The first time KURA enters, the room does its one thing (line 3).
+  // The Den, Bay, Forge and Altar keep working: going back does it again at HALF strength, once a day per room.
+  // The rest are one-time finds. No kind is better than another: they answer different needs.
   // Placeholders (nothing to act on yet): DEN gear, BAY shield, VAULT keys, FORGE repairs.
   const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR", archive: "THE ARCHIVE", void: "THE VOID" };
   // Walking into a room only shows its flavor line. Its benefit waits behind a fixture the player has to find (see FIXTURE) and use.
@@ -1290,8 +1267,8 @@
       const hurt = st.party.some(p => p.hp < p.hpmax);
       if (hurt) heal(st, 1 / 3, false);
       st.log = hurt ? "> KURA plugs in. The party mends a little." : "> KURA plugs in. No one needs it.";
-    } else if (k === "relay") {              // the dish turns to the door the room's scrap doesn't cover
-      const rm = d.floor.rooms[d.at], fl = d.floor, other = rm.exits.map(j => fl.kinds[j]).find(x => x !== rm.clueKind);
+    } else if (k === "relay") {              // the dish turns to the door the dead end's scrap doesn't cover
+      const rm = d.floor.rooms[d.at], fl = d.floor, w = fl.wings[rm.wing], other = w && w.exits.map(j => fl.kinds[j]).find(x => x !== w.clueKind);
       st.log = "> KURA turns the dish. It settles on a signal.";
       st.extra = other ? pick(KIND_CLUE[other]) : "> The dish turns, then holds still. Something carries in here.";
     } else if (k === "vault") {              // coin
@@ -1321,13 +1298,13 @@
   const ALTAR_FACE = { good: ":)", ok: ":|", bad: ":(" };
   const ALTAR_FLAVOR = { good: ["The terminal drinks it.", "The three symbols shift."], ok: ["The terminal takes it.", "The three symbols stir."],
     bad: ["The terminal swallows it and doesn't like it.", "The three symbols barely move."] };
-  // The terminal is set into one of the room's walls (never a door wall).
+  // The terminal is set into one of the room's walls (never a door wall, and not the stairs wall).
   // Face it and SEARCH (or [G]IVE) to wake it.
   function altarDir(fl, i) {
     const room = fl.rooms[i];
     if (room.kind !== "altar") return null;
-    const free = CW.filter(x => !doorWall(room, x));
-    return free.length ? free[(fl.pseed + i * 17) % free.length] : null;
+    const free = CW.filter(x => !doorWall(room, x) && !(fl.stairs === i && x === stairsDir(fl, i)));
+    return free.length ? free[(fl.seed + i * 17) % free.length] : null;
   }
   // What the terminal says before it asks. Every script ends by asking for an offering. Low voice, a little wrong, never explained.
   const ALTAR_TALK = [
@@ -1345,7 +1322,7 @@
     if (d) RS(d).altarScript = i;
     return ALTAR_TALK[i];
   }
-  const facingAltar = st => !!(st.dungeon && !st.look && altarDir(st.dungeon.floor, st.dungeon.at) === st.facing);
+  const facingAltar = st => !!(st.dungeon && altarDir(st.dungeon.floor, st.dungeon.at) === st.facing);
   function altarUsed(st) { const d = st.dungeon; return !!(d && RS(d).altarDay === st.day); }
   function altarGifts(st) {
     const n = 20 * floorNum(st), out = [{ silver: n, ok: (st.silver ?? 0) >= n, label: `${n} SILVER` }];
@@ -1391,18 +1368,15 @@
     return show(st);
   }
 
-  // Turning is free: "L" and "R" turn 90 degrees (and bring her eyes back level). "U" looks up at the sky;
-  // again, down at the floor; a third time, level again. "D" looks straight down (and, from there, level again).
+  // Turning is free: "L" and "R" turn 90 degrees.
   function turn(st, how) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     if (!st.dungeon) return st;
-    if (how === "U" || how === "D") {
-      // "U" steps through sky, floor, level. "D" goes straight to the floor (and back level from there).
-      st.look = how === "D" ? (st.look === "D" ? undefined : "D") : !st.look ? "U" : st.look === "U" ? "D" : undefined;
-      if (!st.look) delete st.look;
+    if (how === "U") {                                   // tip her head up to the sky, or level again
+      if (st.look) delete st.look; else st.look = "U";
       act(st, "look");
-      st.log = `> KURA looks ${st.look === "U" ? "up" : st.look === "D" ? "down" : "ahead, " + NAME[st.facing]}. ${sight(st)}`;
+      st.log = `> KURA looks ${st.look ? "up" : "ahead, " + NAME[st.facing]}. ${sight(st)}`;
       if (!nag(st)) drift(st);
       return show(st);
     }
@@ -1462,20 +1436,19 @@
   function debugInfo(st) {
     const d = st.dungeon;
     if (!d) return "";
-    const fl = d.floor, rm = fl.rooms[d.at];
-    const kind = rm.kind ? ROOM[rm.kind] : d.at === 0 ? "START" : "ROOM";
-    const left = Math.max(0, rm.hidden.length - RS(d).found.filter(x => x !== "fixture").length);
+    const fl = d.floor, rm = fl.rooms[d.at], w = fl.wings[rm.wing];
+    const kind = rm.kind ? ROOM[rm.kind] : rm.hall ? "PASSAGE" : rm.dead ? "DEAD END" : d.at === 0 ? "START" : "ROOM";
+    const left = Math.max(0, rm.hidden.length - RS(d).found.length);
     const wall = altarDir(fl, d.at);
     const enc = Math.round(encounterChance(st) * 100);
-    const w = walls(d, d.at), where = Object.keys(SURF).filter(x => w[x] && w[x].length).map(x => `${x}:${w[x].slice(w.taken[x]).join("+") || "-"}`).join(" ");
-    const stairs = rm.hidden.includes("stairs") ? `STAIRS here${RS(d).found.includes("stairs") ? " (found)" : ""}` : `STAIRS in ${fl.pairs - rm.stage} more`;
-    const exs = rm.exits.length ? "DOORS " + Object.keys(rm.doors).map(x => x + "=" + fl.kinds[rm.doors[x]] + (fl.rooms[rm.doors[x]] ? "*" : fl.sealed[rm.doors[x]] ? "x" : "")).join("/") + " CLUE " + rm.clueKind : null;
-    const row1 = [`ROOM ${rm.stage + 1}/${fl.pairs + 2} ${kind}`, stairs, exs, where];
+    const stairs = fl.stairs < 0 ? "STAIRS unplaced" : `STAIRS R${fl.stairs + 1}${RS(d, fl.stairs).found.includes("stairs") ? " (found)" : ""}`;
+    const exs = w && w.exits.length ? "EXITS " + w.exits.map(j => fl.kinds[j] + (fl.rooms[j] ? "*" : fl.sealed && fl.sealed[j] ? "x" : "")).join("/") + " CLUE " + w.clueKind : null;
+    const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/${fl.pairs + 2}`, stairs, exs];
     const row2 = [`CELL ${(st.today || {}).stepped ? "spent" : "ready"}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
       `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`, onOmenCooldown(st) ? `OMEN COOLDOWN ${7 - (st.day - st.omenCooldownDay)}d` : null];
     const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`,
       `OMEN ${omen(effectiveOmenDay(st)).key}${st.useBanked ? "(banked)" : ""}${st.bankedOmen !== undefined ? " +BANK" : ""}`,
-      "BONUS parked"];
+      `BONUS ${st.bonusCount || 0}/2${fl.pendingBonus ? " +PEND" : ""}${fl.pendingAnti ? " +PEND(void)" : ""}`];
     return [row1, row2, row3].map(r => r.filter(Boolean).join("  ")).join("\n");   // three lines under the screen
   }
 
@@ -1501,25 +1474,22 @@
   // What KURA can still do today, for dimming buttons on the page.
   function available(st) {
     const d = st.dungeon, t = st.today || {};
-    const out = d && !st.dead ? exits(d) : [];
-    // SEARCH works on the face KURA is looking at; a door (or found stairs) can't be searched.
-    const res = { search: !!d && !st.dead, stairs: out.includes("D"), atStairs: atStairs(st), look: st.look || null, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps) && !onOmenCooldown(st),
+    const out = d && !st.dead ? exits(d).concat(d.floor.rooms[d.at].falseDoors || []) : [];
+    // SEARCH works on the wall KURA faces; a door (or found stairs) can't be searched.
+    const res = { search: !!d && !st.dead, hold: !!d && !st.dead && !st.encounter && (!t.stepped || !!st.freeSteps) && !onOmenCooldown(st),
       useBankedOmen: !st.dead && st.bankedOmen !== undefined && !st.useBanked,
       // For the bag's single Hold/Release Omen slot: whether it should show greyed-out, and the count to show.
       // (Not while Release Omen itself is still showing -- that takes priority the same day it's released,
       // before the next sync() clears bankedOmen.)
       omenCoolingDown: !st.dead && !st.encounter && !(st.bankedOmen !== undefined && !st.useBanked) && onOmenCooldown(st),
       omenCooldownDays: onOmenCooldown(st) ? 7 - (st.day - st.omenCooldownDay) : 0 };   // a door can be searched too (it just says so)
-    const spent = !!t.stepped && !st.freeSteps;           // a locked door needs the day's charge; an open one is always free
-    // The doors ahead, by side: its state, and whether it can be used right now. ways: every way out that works now.
-    res.doors = {}; res.ways = [];
-    if (d && !st.dead) for (const x of doorStates(d)) {
-      const can = x.state === "open" || (x.state === "locked" && !spent);
-      res.doors[x.side] = { state: x.state, can };
-      if (can) res.ways.push({ id: x.side, locked: x.state === "locked" });
+    const spent = !!t.stepped && !st.freeSteps;           // a locked door needs the day's key; open doors are always free
+    res.locked = {}; res.door = {};
+    for (const x of CW) {
+      const shut = !!d && out.includes(x) && looksLocked(d, x);
+      res.locked[x] = shut; res.door[x] = out.includes(x);
+      res[x] = !st.dead && out.includes(x) && !(shut && spent) && !(d && isSealed(d, x));   // a sealed door is dim for good
     }
-    if (res.stairs) res.ways.push({ id: "D", locked: false });
-    res.facingDoors = !!d && !st.dead && !st.look && st.facing === rm(d).ahead && rm(d).exits.length > 0;
     return res;
   }
 
@@ -1539,9 +1509,9 @@
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
-    // What a new run DOES reroll is this: the private seed that decides which door is which, which wall each
-    // door is on and where things are hidden -- never the shared offers (which kinds are paired, day by day)
-    // that every player's floor agrees on.
+    // What a new run DOES reroll is this: the private seed that decides which room kind lands where, where
+    // things are hidden, and which room (if any) turns out to be a bonus or an omen-streak room on this floor --
+    // never the shared shape (wing count, topology, which kinds are paired) that every player's floor agrees on.
     st.pseed = 1 + Math.floor(Math.random() * 4294967295);
     st.runId = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(""); delete st.submitted; st.needName = true;   // the leaderboard takes one entry per run; every new run asks the player's name (kept as the default)
     const t = clock(st);
@@ -2880,58 +2850,6 @@
     ];
   }
 
-  // THE PATH: every floor of the run as the choices made on it, for the long view at the top of the log.
-  // A floor is kept as its rooms in order, each { s: the side of the door taken to reach it (absent for the first),
-  // k: its kind (absent for the first) }: a few dozen bytes a floor, so the whole run is kept, however long.
-  // The floor she is on is read live from the dungeon; a floor is written to st.path as she takes its stairs.
-  function floorPath(d) {
-    const rooms = []; let i = d.at;
-    while (i !== undefined) { const r = d.floor.rooms[i], o = {}; if (r.side) o.s = r.side; if (r.kind) o.k = r.kind; rooms.unshift(o); i = r.from; }
-    return rooms;
-  }
-  // One mark a kind, by what the room is like (the same senses the door hints use), never by its name.
-  const PATH_MARK = { den: '"', bay: "~", relay: ":", vault: "$", forge: "*", altar: "&", archive: "=", void: "%" };
-  const PATH_SENSE = { den: "warm", bay: "quiet", relay: "signal", vault: "cold", forge: "ash", altar: "glow", archive: "lights", void: "bare" };
-  function pathView(st) {
-    const d = st.dungeon; if (!d) return [];
-    const floors = (st.path || []).concat([{ f: st.floor, a: d.arrived, e: d.deadline, rooms: floorPath(d), here: true, stairs: RS(d).found.includes("stairs") }]);
-    const COLW = 19, PER = 4, STEP = { L: -2, R: 2, C: 0 }, out = [], used = new Set();
-    const span = fl => fl.a === undefined ? "" : `${fmt(fl.a).slice(4)}-${fl.e !== undefined ? fmt(Math.min(fl.e, fl.left ?? fl.e)).slice(4).replace(/^[A-Z]+ /, m => m === fmt(fl.a).slice(4, 8) ? "" : m) : ""}`;
-    out.push("THE PATH" + `lunar month ${st.floorEpoch ?? epochNow()}`.padStart(PER * COLW - 8), "");
-    for (let b = 0; b < floors.length; b += PER) {
-      const block = floors.slice(b, b + PER), cols = block.map(fl => {
-        // Lay the floor out as a tree growing up its own little grid: the first room at the bottom, and at every
-        // room a fork (\ /): one arm to the next room, a step left or right, the other to an x, the door not taken.
-        const cells = []; let c = 0;
-        fl.rooms.forEach((r, n) => {
-          const from = c; c += STEP[r.s] || 0;
-          const last = n === fl.rooms.length - 1, mark = last && fl.here ? "@" : n === 0 ? "v" : last ? "^" : PATH_MARK[r.k] || " ";
-          if (n > 0 && !last && r.k) used.add(r.k);
-          cells.push({ row: 2 * n, c, room: mark });
-          if (r.s === "L" || r.s === "R") {
-            cells.push({ row: 2 * n, c: from - STEP[r.s], ch: "x" });                // where the other door would have led
-            cells.push({ row: 2 * n - 1, c: from - 1, ch: "\\" }, { row: 2 * n - 1, c: from + 1, ch: "/" });
-          } else if (r.s === "C") cells.push({ row: 2 * n - 1, c: from, ch: "|" });
-        });
-        const lo = Math.min(...cells.map(k => k.c - (k.room ? 1 : 0))), hi = Math.max(...cells.map(k => k.c + (k.room ? 1 : 0)));
-        const pad = Math.max(0, Math.floor((COLW - (hi - lo + 1)) / 2)) - lo;
-        const put = (line, x, ch) => { if (x >= 0 && x < COLW) line[x] = ch; };
-        return { fl, height: 2 * fl.rooms.length - 1, rows: n => { const line = Array(COLW).fill(" ");
-          for (const k of cells) if (k.row === n && !k.room) put(line, k.c + pad, k.ch);
-          for (const k of cells) if (k.row === n && k.room) { put(line, k.c + pad - 1, "["); put(line, k.c + pad, k.room); put(line, k.c + pad + 1, "]"); }
-          return line.join(""); } };
-      });
-      const center = (t, w) => { const l = Math.floor((w - t.length) / 2); return " ".repeat(Math.max(0, l)) + t + " ".repeat(Math.max(0, w - t.length - l)); };
-      if (b) out.push("");
-      out.push(cols.map(c => center(c.fl.f, COLW)).join("").replace(/\s+$/, ""));
-      out.push(cols.map(c => center(span(c.fl), COLW)).join("").replace(/\s+$/, ""), "");
-      for (let n = Math.max(...cols.map(c => c.height)) - 1; n >= 0; n--) out.push(cols.map(c => c.rows(n)).join("").replace(/\s+$/, ""));
-    }
-    const legend = Object.keys(PATH_MARK).filter(k => used.has(k)).map(k => `${PATH_MARK[k]} ${PATH_SENSE[k]}`);
-    out.push("", "[v] came up   [@] here   [^] went up   x the door not taken");
-    if (legend.length) out.push(legend.join("   "));
-    return out;
-  }
 
   // What the leaderboard gets: deepest floor, days survived, demons beaten, and the real turn count (never the on-screen one).
   const NAME_OK = /^[A-Za-z0-9 _.\-]{3,10}$/;
@@ -2948,7 +2866,7 @@
   const score = st => { const k = st.stats || {}, pacts = st.pacts || [];
     return { run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: k.beaten || 0, turns: st.steps || 0, align: String(st.align || "NEUTRAL").toUpperCase(),
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0 } }; };
-  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, side) => !!st.dungeon && isLocked(st.dungeon, side), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS, pathView };
+  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);
