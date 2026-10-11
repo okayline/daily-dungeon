@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.90 - News From This Level - Oct 11 2026, 07:58 HST
+
+![v0.89](screenshots/v0.89.png)
+
+- **The ticker is about people now.** It carries news of your own run and of other players, and leaves the month's totals to the title screen.
+- **It says where things happened.** News from your own level comes first: "On this level, day 2: ..."
+- **It moves a little slower.**
+
 ## v0.89 - The Ticker - Oct 11 2026, 07:50 HST
 
 ![v0.89](screenshots/v0.89.png)
