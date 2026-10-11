@@ -128,7 +128,7 @@
   let save = null;
   // TITLE SCREEN: shown first on every load (even over a save in progress -- CONTINUE is the explicit
   // resume). atTitle gates the click/keydown handlers over at the bottom of this file.
-  let atTitle = true, titleTimer = null, titleOffset = 0, titleCards = [], titleLean = null, titleDeep = null;
+  let atTitle = true, titleTimer = null, titleOffset = 0, titleCards = [], titleLean = null, titleDeep = null, titleStats = null;
 
   // Color only the minimap rows (right panel) and the moon marker.
   function colorize(text) {
@@ -377,6 +377,25 @@
       }
     }
     if (titleDeep) cards.push(`Deepest floor: B${titleDeep}F`);
+    // The running totals for this lunar epoch (the Worker's /stats): exact counts, nobody named. A card only
+    // shows once its number is above zero, so a quiet epoch has a short feed, not a wall of zeroes.
+    if (titleStats) {
+      const c = titleStats.counts || {}, n = k => Number(c[k]) || 0, num = v => v.toLocaleString("en-US");
+      if (titleStats.lastFall) {
+        const mins = Math.max(0, Math.floor((SMT.now().getTime() / 1000 - titleStats.lastFall) / 60));
+        const ago = mins < 1 ? "just now" : mins < 60 ? `${mins} min ago` : mins < 2880 ? `${Math.floor(mins / 60)} hour${mins < 120 ? "" : "s"} ago` : `${Math.floor(mins / 1440)} days ago`;
+        cards.push(`Last fall: ${ago}`);
+      }
+      if (n("runs")) cards.push(`Runs ended: ${num(n("runs"))}`);
+      if (n("players")) cards.push(`Players seen: ${num(n("players"))}`);
+      if (n("turns")) cards.push(`Turns logged: ${num(n("turns"))}`);
+      if (n("pacts")) cards.push(`Pacts: ${num(n("pacts"))} made, ${num(n("ended"))} ended`);
+      if (n("broken")) cards.push(`Items broken: ${num(n("broken"))}`);
+      if (n("trips")) cards.push(`TRIPs reported: ${num(n("trips"))}`);
+      if (n("wall")) cards.push(`Longest wall search: ${num(n("wall"))}x`);
+      if (n("refused")) cards.push(`Gifts refused: ${num(n("refused"))}`);
+      if (n("silent")) cards.push(`Answered [S]ILENT: ${num(n("silent"))}x`);
+    }
     cards.push(RULES.omen(SMT.utcDay(SMT.now())).text.replace(/^> /, ""));
     return cards;
   }
@@ -389,6 +408,10 @@
     try {
       const r = await fetch(`${LEADERBOARD_URL}/top?n=1`);
       if (r.ok) { const d = await r.json(); if (d.rows && d.rows[0]) titleDeep = d.rows[0].floor; }
+    } catch (e) {}
+    try {
+      const r = await fetch(`${LEADERBOARD_URL}/stats`);
+      if (r.ok) { const d = await r.json(); if (d && typeof d.counts === "object") titleStats = d; }
     } catch (e) {}
     if (atTitle) { titleCards = buildTitleCards(); drawTitle(); }
   }

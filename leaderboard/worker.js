@@ -2,6 +2,7 @@
 //   POST /score   {run, name, floor, days, demons, turns, version, align}   -> {ok, rank}
 //   GET  /top?n=20&run=ID                                      -> {rows: [...], you: {...} | null}
 //   GET  /season                                               -> {epoch, law, chaos}
+//   GET  /stats                                                -> {epoch, counts: {...}, lastFall}
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
 const MAX = { floor: 20, days: 400 };
@@ -34,6 +35,27 @@ async function tallyFaction(db, align, floorPts) {
     WHERE epoch = ?1 AND count = (SELECT MIN(count) FROM faction_season WHERE epoch = ?1)
       AND (SELECT COUNT(DISTINCT count) FROM faction_season WHERE epoch = ?1) = 2`)
     .bind(epoch, floorPts).run();
+}
+// THE TITLE SCREEN'S RUNNING TOTALS: plain counts for the current lunar epoch, added up from the few
+// numbers each finished run reports with its score. One row per (epoch, key); "wall" keeps the longest,
+// everything else adds. "players" counts distinct senders, through the seen table (never a table scan).
+// Each value is capped per run, so one forged post can't swing a total by much. None of this ranks anyone.
+const STAT_CAPS = { pacts: 30, ended: 30, broken: 200, trips: 50, refused: 200, silent: 500 };
+async function tallyStats(db, b, turns, who) {
+  const epoch = epochIndex(), s = (b && typeof b.stats === "object" && b.stats) || {};
+  const add = (key, n) => db.prepare(`INSERT INTO counters (period, key, count) VALUES (?1, ?2, ?3)
+    ON CONFLICT (period, key) DO UPDATE SET count = count + ?3`).bind(epoch, key, n).run();
+  await add("runs", 1);
+  await add("turns", Math.max(0, Math.min(turns, 100000)));
+  for (const key of Object.keys(STAT_CAPS)) {
+    const n = Math.floor(Number(s[key]));
+    if (Number.isFinite(n) && n > 0) await add(key, Math.min(n, STAT_CAPS[key]));
+  }
+  const wall = Math.floor(Number(s.wall));
+  if (Number.isFinite(wall) && wall > 0) await db.prepare(`INSERT INTO counters (period, key, count) VALUES (?1, 'wall', ?2)
+    ON CONFLICT (period, key) DO UPDATE SET count = MAX(count, ?2)`).bind(epoch, Math.min(wall, 9999)).run();
+  const seen = await db.prepare(`INSERT OR IGNORE INTO seen (period, who) VALUES (?1, ?2)`).bind(epoch, who).run();
+  if (seen.meta && seen.meta.changes) await add("players", 1);
 }
 const cors = () => ({ "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   "access-control-allow-headers": "content-type, x-admin-key", "access-control-max-age": "86400" });
@@ -76,6 +98,15 @@ export default {
       return json({ epoch, law: tally.LAW, chaos: tally.CHAOS }, 200, allow);
     }
 
+    // This epoch's running totals, for the title screen's cards. One small indexed read; an empty epoch is just {}.
+    if (url.pathname === "/stats" && req.method === "GET") {
+      const epoch = epochIndex(), counts = {};
+      const rows = await env.DB.prepare(`SELECT key, count FROM counters WHERE period = ?1 LIMIT 40`).bind(epoch).all();
+      for (const r of rows.results) counts[r.key] = r.count;
+      const last = await env.DB.prepare(`SELECT MAX(made) AS made FROM scores`).first();
+      return json({ epoch, counts, lastFall: (last && last.made) || null }, 200, allow);
+    }
+
     // Removing an entry takes the admin key (a Worker secret: `npx wrangler secret put ADMIN_KEY`).
     if (url.pathname === "/score" && req.method === "DELETE") {
       if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
@@ -106,7 +137,12 @@ export default {
       // KEY, INSERT OR IGNORE no-ops) must never double up a season point. An unrecognized/missing
       // align just skips the season tally; it doesn't invalidate the run itself.
       const alignIn = String(b.align || "").toUpperCase(), align = [...SIDES, "NEUTRAL"].includes(alignIn) ? alignIn : null;
-      if (align && (ins.meta && ins.meta.changes)) await tallyFaction(env.DB, align, floor);
+      // The season and the running totals are flavor: if either can't be written (a table missing on an old
+      // database, say), the score itself must still stand.
+      if (ins.meta && ins.meta.changes) {
+        if (align) try { await tallyFaction(env.DB, align, floor); } catch (e) {}
+        try { await tallyStats(env.DB, b, turns, who); } catch (e) {}
+      }
       const row = await env.DB.prepare(`SELECT name, floor, days, demons, turns, made FROM scores WHERE run = ?1`).bind(run).first();
       return json({ ok: true, rank: await rankOf(env.DB, row) }, 200, allow);
     }

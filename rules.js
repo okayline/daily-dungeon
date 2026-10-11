@@ -538,7 +538,7 @@
     RS(d);                                              // (converts an old save's room arrays)
     roomName(d, d.at);                                  // (each room keeps its own flavor name, said once as she walks in)
     st.roomName = facingLabel(st);                      // the slot under the map names what she is looking at
-    st.map = FLOOR.minimap(d.floor, { at: d.at });
+    st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.look ? null : st.facing });
     const door = dir => doorWall(room, dir);
     if (st.dead) {
       // Game over: the view goes dark and the third line points to RST.
@@ -792,6 +792,7 @@
     if (st.talkLine) { if (st.extra === st.talkLine) st.extra = ""; delete st.talkLine; }   // a party member's reply doesn't outstay the next action
     if (st.altar) st.altar = null;           // walking off closes the terminal
     bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
+    if (key && key.startsWith("search:")) { st.stats = st.stats || {}; st.stats.maxWall = Math.max(st.stats.maxWall || 0, st.loop.n); }   // the longest run at one wall
     if (st.dungeon) {
       const rs = RS(st.dungeon);
       rs.linger++;
@@ -2130,6 +2131,7 @@
   function lastChance(st, p, yes) {
     if (yes === true) { p.patience = Math.min(PATIENCE + 2, (p.patience ?? 0) + 3); lean(st, "talk"); st.extra = "> " + ASK.mend[0][1][0].replace(/\{n\}/g, p.name); return; }
     if (yes === "silent") {                              // saying nothing wears them down further
+      tally(st, "silent");
       p.patience = Math.max(0, (p.patience ?? 0) - (personaOf(p) === "GRUFF" ? 1 : 2));
       st.extra = "> " + `${p.name} waits. Then looks away.`; return;
     }
@@ -2189,6 +2191,7 @@
       return show(st);
     }
     const quiet = yes === "silent";
+    if (quiet) tally(st, "silent");
     let line, dp, why;
     if (quiet) { const [d, say] = SILENT_PARTY[personaOf(p)] || SILENT_PARTY.PRIM; dp = typeof d === "function" ? d() : d; line = say; }
     else [line, dp, why] = ASK[q.pool][q.k][yes ? 1 : 2];
@@ -2468,6 +2471,7 @@
   function demonHears(st, e, yes, lines) {
     const [, likes, good, bad] = DEMON_ASK[famOf(e)][e.q];
     const quiet = yes === "silent";
+    if (quiet) tally(st, "silent");
     if (quiet) {                                      // a third answer: say nothing, and let its nature decide
       const [say, feel] = SILENCE[personaOf(e)] || SILENCE.PRIM, first = !e.quiet;
       let d = feel();
@@ -2606,6 +2610,7 @@
     if (v < 0) {
       // Hated: it throws the gift back (KURA keeps it) and attacks.
       lines.push(`KURA offers ${g.label}.`, said(e, "hate", who), `${THE(e.name)} throws it back.`);
+      tally(st, "refused");
       e.stage = null; e.angered = true; demonTurn(st, lines);
       st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st);
     }
@@ -2833,7 +2838,11 @@
   }
   // align travels with the score payload so the Worker can tally faction seasons off the run's final
   // lean -- the game itself never talks to the counters table, it just reports what it already tracks.
-  const score = st => ({ run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: (st.stats || {}).beaten || 0, turns: st.steps || 0, align: String(st.align || "NEUTRAL").toUpperCase() });
+  // stats: a few plain counts from the run, for the title screen's running totals (see the Worker's /stats). Nothing
+  // here ranks anyone, and nothing names anyone.
+  const score = st => { const k = st.stats || {}, pacts = st.pacts || [];
+    return { run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: k.beaten || 0, turns: st.steps || 0, align: String(st.align || "NEUTRAL").toUpperCase(),
+      stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0 } }; };
   const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, side) => !!st.dungeon && isLocked(st.dungeon, side), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;

@@ -121,7 +121,7 @@
   // the doors ahead of her sit on the top row.
   //   [@] KURA   [^] where she came down   [ ] a room behind her
   //   #  a locked door   x  a door sealed for good   '  a door standing open
-  // state: { at: room index }
+  // state: { at: room index, facing: the wall she faces (N ahead, S behind, W left, E right), or null }
   function minimap(floor, state) {
     const W = 29, H = 5, rows = Array.from({ length: H }, () => Array(W).fill(" "));
     const put = (r, c, s) => [...s].forEach((ch, k) => { if (r >= 0 && r < H && c + k >= 0 && c + k < W) rows[r][c + k] = ch; });
@@ -142,6 +142,11 @@
       if (step) put(row, col - 2 * step, "x");               // where the other room would have been
       col -= step; i = room.from;
     }
+    // Which way she is turned, on the map's own terms (up is ahead): ^ above her, v below, or < > in place of
+    // the bracket on that side. A door's own mark stays on top of it. Nothing while she looks up or down.
+    const f = state.facing, edge = (r, c, ch) => { if (!"#x'".includes(rows[r][c])) put(r, c, ch); };
+    if (f === here.ahead) edge(0, mid, "^"); else if (f === "S") edge(2, mid, "v");
+    else if (f === "W") put(1, mid - 1, "<"); else if (f === "E") put(1, mid + 1, ">");
     return rows.map(r => r.join("").replace(/\s+$/, ""));
   }
 

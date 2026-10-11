@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.72";
+  const VERSION = "v0.73";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -81,11 +81,11 @@
     const c = view.map(r => r.split(""));
     const put = (x, y, t) => [...t].forEach((ch, k) => { if (x + k >= 0 && x + k < VW && y >= 0 && y < VH) c[y][x + k] = ch; });
     for (const d of doors) {
-      const x0 = d.side === "L" ? 10 : 28;
-      if (d.state === "open") { put(x0, 4, " _______ "); put(x0, 5, "/       \\"); }
-      else { put(x0, 4, "_________"); put(x0, 5, "|       |"); }
-      for (let y = 6; y <= 13; y++) put(x0, y, y === 13 ? "|_______|" : "|       |");
-      if (d.state !== "open") put(x0 + 6, 9, d.state === "sealed" ? "x" : "+");
+      const x0 = d.side === "L" ? 9 : 27;
+      if (d.state === "open") { put(x0, 4, " _________ "); put(x0, 5, "/         \\"); }
+      else { put(x0, 4, "___________"); put(x0, 5, "|         |"); }
+      for (let y = 6; y <= 13; y++) put(x0, y, y === 13 ? "|_________|" : "|         |");
+      if (d.state !== "open") put(x0 + 8, 9, d.state === "sealed" ? "x" : "+");
     }
     return c.map(r => r.join(""));
   }

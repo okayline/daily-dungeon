@@ -20,3 +20,18 @@ CREATE TABLE IF NOT EXISTS faction_season (
   count INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (epoch, side)
 );
+
+-- The title screen's running totals: one row per (lunar epoch, key). See tallyStats in worker.js.
+CREATE TABLE IF NOT EXISTS counters (
+  period INTEGER NOT NULL,
+  key    TEXT NOT NULL,
+  count  INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (period, key)
+);
+-- Who has posted this epoch (the same sender hash the rate limit uses), so "players seen" is a counter, not a scan.
+CREATE TABLE IF NOT EXISTS seen (
+  period INTEGER NOT NULL,
+  who    TEXT NOT NULL,
+  PRIMARY KEY (period, who)
+);
+CREATE INDEX IF NOT EXISTS made_idx ON scores (made);
