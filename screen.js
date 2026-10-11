@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.86";
+  const VERSION = "v0.87";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -390,7 +390,7 @@
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step is the [^] button in
     // the 3D view, and HOLD/RELEASE now live in INVOKE with everything else that isn't always available.
-    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH " + (st.look ? "LOOK_[D]OWN" : "LOOK_[U]P");   // looking: up to the sky, and level again
+    const free = ` [F]IGHT [T]ALK [I]NVOKE ${st.look ? "[S]CRY" : "[S]EARCH"} [M]OON`;   // [M]OON looks up at her, and level again; looking up, SEARCH becomes SCRY (asking her)
     S.push("|" + free + " ".repeat(78 - free.length) + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.

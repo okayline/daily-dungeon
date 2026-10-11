@@ -343,12 +343,12 @@
   function askMoon(st) {
     const d = st.dungeon, m = moon();
     act(st, "moon");
-    if (m === 0) { st.log = "> " + pick(["KURA searches the sky. No moon tonight. No one to ask.", "KURA searches the sky. Only the dark, a long way up."]); return show(st); }
+    if (m === 0) { st.log = "> " + pick(["KURA scries the sky. No moon tonight. No one to ask.", "KURA scries the sky. Only the dark, a long way up."]); return show(st); }
     if (st.moonDay === st.day) { st.log = "> " + pick(["The moon has said what she will tonight.", "KURA looks to the moon again. She has nothing more tonight."]); return show(st); }
     st.moonDay = st.day;
     spendBreath(st);
     tally(st, "moonAsked");
-    st.log = "> KURA searches the moon.";
+    st.log = "> KURA scries the moon.";
     // The doors still locked in this room; failing that, any still locked on the level she has seen.
     const fl = d.floor, shut = j => !fl.rooms[j] && !(fl.sealed && fl.sealed[j]) && MOON_SAYS[fl.kinds[j]];
     let kinds = Object.values(fl.rooms[d.at].doors).filter(shut).map(j => fl.kinds[j]);

@@ -205,8 +205,8 @@
           .replace("[F]IGHT", '<span class="btn" data-act="fight">[F]IGHT</span>')
           .replace("[T]ALK", '<span class="btn" data-act="talk">[T]ALK</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
-          .replace("[S]EARCH", b("[S]EARCH", "search", can.search))
-          .replace(/LOOK_\[U\]P|LOOK_\[D\]OWN/, m => b(m, "look", !!save && !save.encounter && !save.dead))
+          .replace(/\[S\]EARCH|\[S\]CRY/, m => b(m, "search", can.search))
+          .replace("[M]OON", b("[M]OON", "look", !!save && !save.encounter && !save.dead))
           .replace(/\[([NSEW])\](ORTH|OUTH|AST|EST)/g, (m, x) =>
             b(m, "go-" + x, can[x]).replace('class="btn', 'class="btn' + (armed === x ? " armed" : save && save.encounter && can[x] ? " flee" : "")));
       }
@@ -918,7 +918,8 @@
       "KEYS",
       ...[["[ ^ ] / up arrow", "walk through the door KURA faces"],
         ["[ < ] [ > ] / arrows", "turn (free)"],
-        ["LOOK_[U]P", "look up at the sky; again to look level"],
+        ["[M]OON", "look up at the moon; again to look level"],
+        ["[S]CRY", "looking up: ask the moon (it takes a breath)"],
         ["[F]IGHT  [T]ALK", "deal with a demon; with none, TALK to the party"],
         ["[G]IVE", "at a wall terminal, or in a fight: offer a gift"],
         ["[H]", "Hold Omen, or Release Omen once one is banked"],
@@ -1722,7 +1723,7 @@
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
-      s: "search", g: "altar", u: "look", d: save && save.look ? "look" : null, arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
+      s: "search", g: "altar", m: "look", arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
     if (k) { e.preventDefault(); act(k); }
   });
