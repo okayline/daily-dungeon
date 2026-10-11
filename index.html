@@ -597,12 +597,9 @@
     holdBtn = null;
     if (save) {
       const av = RULES.available(save);
-      if (save.bankedOmen !== undefined && !save.useBanked) holdBtn = { label: "Release Omen", action: "release",
-        caption: "A day kept back, on standby. [H] spends it in place of today's own." };
-      else if (av.hold) holdBtn = { label: "Hold Omen", action: "hold",
-        caption: "[H] stays put today and banks tonight's omen, to spend in place of a later day's own." };
-      else if (av.omenCoolingDown) holdBtn = { label: "Hold Omen", action: "hold", cooling: true,
-        caption: `Spent recently. ${av.omenCooldownDays} real day${av.omenCooldownDays === 1 ? "" : "s"} left before KURA can hold again.` };
+      if (save.bankedOmen !== undefined && !save.useBanked) holdBtn = { label: "Release Omen", action: "release" };
+      else if (av.hold) holdBtn = { label: "Hold Omen", action: "hold" };
+      else if (av.omenCoolingDown) holdBtn = { label: `Hold Omen (${av.omenCooldownDays}d)`, action: "hold", cooling: true };
     }
     invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
@@ -619,15 +616,7 @@
       return;
     }
     if (ichorPick >= 0) ichorPick = -1;
-    const head = add("INVOKE", "");
-    if (holdBtn) {
-      const sp = document.createElement("span");
-      sp.textContent = "[H] " + holdBtn.label;
-      sp.className = "btn" + (holdBtn.cooling ? " off" : "");
-      sp.dataset.hold = "1";
-      head.append("   ", sp);
-    }
-    if (holdBtn) add(holdBtn.caption);
+    add("INVOKE", "");
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
@@ -644,7 +633,12 @@
     }
     add(" ");
     // What happened on the last try to use something (cleared when another item is chosen).
-    const help = add("[1-9] choose  "), btn = (t, k) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = "btn"; sp.dataset[k] = "1"; return sp; };
+    const btn = (t, k, cls) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = cls || "btn"; sp.dataset[k] = "1"; return sp; };
+    // The hold/release button gets its own line above the rest -- the box is a fixed 47 columns (it
+    // overlays the 3D view), and "[1-9] choose  [ENTER] use  [H] Release Omen  [C]LOSE" alone runs
+    // past that width (49-54 chars depending on label/cooldown), which would silently clip or scroll.
+    if (holdBtn) add("", "").append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : "")));
+    const help = add("[1-9] choose  ");
     help.append(btn("[ENTER] use", "use"), "  ", btn("[C]LOSE", "close"));
   }
   // ABOUT: the build, what the game is, a few numbers from this run and the codex.
@@ -683,11 +677,8 @@
       "  [F]IGHT  [T]ALK .... deal with a demon; with none around, TALK to the party",
       "  [G]IVE ............. facing a terminal in the wall: make an offering (SEARCH it works too)",
       "  [G]IVE ............. in a fight: offer the demon a gift (rarely ends it, often buys a round)",
+      "  [H] Hold Omen, or Release Omen once one's banked",
       "  [I]NVOKE ........... the bag: 1-9 or arrows choose an item, Enter uses",
-      "    [H] .............. its own button, not a numbered slot. Hold Omen: make camp (uses the day's",
-      "                        charge; restores the party; tonight's rest runs deeper)",
-      "                        Once a day's held, the same button/key becomes Release Omen: spend it in",
-      "                        place of today's own (releasing greys it out for 7 real days after)",
       "  [L]OG .............. the adventure log",
       "  [P]ASSWORD ......... this run's password: copy it to keep or move the run,",
       "                       or paste one in to continue that run",
