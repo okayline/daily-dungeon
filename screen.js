@@ -426,15 +426,19 @@
     const gap = Math.max(5, Math.floor((VW - 6) / days)), x0 = Math.max(3, Math.floor((VW - gap * (days - 1)) / 2) - 1);
     let up = R(2) === 0;
     for (let i = 0; i < days; i++) {
-      const x = x0 + i * gap, h = 1 + R(2), len = 1 + R(4), twig = R(3) === 0;
+      const x = x0 + i * gap, h = 1 + R(2), len = 1 + R(4), twig = R(3) === 0, t2 = 1 + R(2);
+      // A day that hasn't come yet is masked: a ? on the line and no branch. (Its shape is rolled all the same, so
+      // the branches already showing never change as the days are uncovered.)
+      const hidden = first + i > today;
+      if (hidden) { put(y0, x, "?"); up = !up; continue; }
       if (up) {
         for (let k = 1; k <= h; k++) put(y0 - k, x + k, "/");
         put(y0 - h - 1, x + h + 1, "_".repeat(len));
-        if (twig && h > 1) put(y0 - h, x + h + 1, "_".repeat(1 + R(2)));
+        if (twig && h > 1) put(y0 - h, x + h + 1, "_".repeat(t2));
       } else {
         for (let k = 1; k <= h; k++) put(y0 + k, x + k, "\\");
         put(y0 + h, x + h + 1, "_".repeat(len));
-        if (twig && h < 2) { put(y0 + h + 1, x + h + 1 + len, "\\"); put(y0 + h + 1, x + h + 2 + len, "_".repeat(1 + R(2))); }
+        if (twig && h < 2) { put(y0 + h + 1, x + h + 1 + len, "\\"); put(y0 + h + 1, x + h + 2 + len, "_".repeat(t2)); }
       }
       const n = String(first + i), isToday = first + i === today;
       put(y0, x - (n.length > 1 ? 1 : 0) - (isToday ? 1 : 0), isToday ? `[${n}]` : n);
