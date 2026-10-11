@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.99.1";
+  const VERSION = "v0.99.2";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -456,15 +456,17 @@
     for (let x = x0 - 4; x <= x0 + gap * (days - 1) + 4; x++) if (x >= 1 && x < VW - 1 && !lab[x] && !lab[x - 1] && !lab[x + 1]) g[y0][x] = "-";
     // Each quarter is named for the moon it opens with: the new moon, the first quarter (half, waxing), the full
     // moon, the last quarter (half, waning).
-    const level = `B${4 - q}F`, name = ["New Moon", "First Quarter", "Full Moon", "Last Quarter"][q], kanji = ["新月", "上弦", "満月", "下弦"][q];
+    const level = `B${4 - q}F`, name = ["NEW MOON", "WAX HALF", "FULL MOON", "WANE HALF"][q], kanji = ["新月", "上弦", "満月", "下弦"][q];
     // The drawing first, its heading underneath. (Blank rows at the foot of the drawing are dropped, so the
     // heading sits one row below the lowest branch.)
     const rows = g.map(r => r.join("").replace(/\s+$/, ""));
     while (rows.length > y0 + 1 && !rows[rows.length - 1]) rows.pop();
-    // The heading is one fixed-width block (the name and the days are padded to their longest), centered, so the
-    // "- Lunar Days" part sits in the same place whichever quarter it is. (A kanji is two columns wide.)
-    const head = `${level} - ${kanji} ${name.padEnd(13)} - Lunar Days ${(first + "-" + last).padEnd(5)}`, pad = Math.max(0, VW - colsOf(head)), lead = Math.floor(pad / 2);
-    return [...rows, "", " ".repeat(lead) + head + " ".repeat(pad - lead)];
+    // The heading is two lines under the drawing: the floor, left-aligned, and below it the moon's line (the
+    // quarter, its Japanese name and English name, the lunar days), one fixed-width block centered so the
+    // "- Lunar Days" part sits in the same place whichever quarter it is. (A kanji is two columns wide.) The heading is pinned to the
+    // last two rows, so it sits at the same height every day.
+    const moon = `${["1st", "2nd", "3rd", "4th"][q]} QTR - ${kanji} ${name.padEnd(9)} - Lunar Days ${(first + "-" + last).padEnd(5)}`, pad = Math.max(0, VW - colsOf(moon)), lead = Math.floor(pad / 2);
+    return [...rows, ...Array(Math.max(0, 8 - rows.length - 2)).fill(""), " " + level, " ".repeat(lead) + moon + " ".repeat(pad - lead)];
   }
   // The title's crescent moon: seven rows of block characters, thirteen columns wide. Only the shape lives here; the
   // page colors it (blue, the dotted block on the inner edge matches the lettering's dots).

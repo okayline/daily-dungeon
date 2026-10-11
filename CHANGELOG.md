@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.99.2 - Two Lines for the Moon - Oct 11 2026, 13:35 HST
+
+![v0.99.2](screenshots/v0.99.2.png)
+
+- **The title's heading is two lines:** the floor (B3F), then the quarter, the moon in Japanese and English, and the lunar days ("2nd QTR - 上弦 WAX HALF - Lunar Days 9-15"). It sits in the same place every day.
+
 ## v0.99.1 - The Twenty-Sixth Night - Oct 11 2026, 13:10 HST
 
 ![v0.99.1](screenshots/v0.99.1.png)
