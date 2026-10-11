@@ -2835,7 +2835,7 @@
     const TIER = ["calm", "uneasy", "nervous", "wrong"];
     const fixed = n => (n > 0 ? "+" : "") + (Math.round((n || 0) * 10) / 10);
     return [
-      ["Reached", `${st.floor}  (${k.floors || 0} floor${k.floors === 1 ? "" : "s"} climbed)`],
+      ["Reached", `${st.floor}  (${k.floors || 0} level${k.floors === 1 ? "" : "s"} climbed)`],
       ["Days", st.day], ["Turns", st.steps || 0], ["Steps walked", k.steps || 0], ["Searches", k.searches || 0],
       ["Alignment", `${st.align}  (lean ${fixed(st.alignScore)}, LAW - / CHAOS +)`],
       ["Heat here", `${Math.round(heat)}  (${TIER[heatTier(heat)]})`], ["Hottest room", Math.round(k.maxHeat || 0)],
