@@ -341,7 +341,7 @@
   // What the room beyond an open arch is like (finishes "a room that ..."). Senses only; it never names the room.
   const ARCH_DESC = {
     den: ["runs warm, and smells of hot dust", "breathes warm air, and old plastic"],
-    bay: ["is quiet and clean, and hums like something asleep", "feels kind, and very still"],
+    bay: ["is quiet, and hums like something asleep", "feels kind, and very still"],
     relay: ["carries a thin tone, almost a voice", "ticks and hisses, faintly"],
     vault: ["is cold and dry, and holds its breath", "is cold, with a hush of metal"],
     forge: ["smells of solder and ash", "ticks like cooling metal"],
