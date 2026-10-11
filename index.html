@@ -78,6 +78,7 @@
   .logview .dim { color: var(--trail); }
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; box-shadow: 0 0 24px rgba(227, 179, 65, 0.25); }
+  .foundbox.plain { box-shadow: none; }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
   .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
@@ -1119,10 +1120,13 @@
   function resultBox() {
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
-    const said = [save.log, save.look && /^> (Moonlight|The moon|KURA asks)/.test(save.extra || "") ? save.extra : null]   // (with the moon's answer, when she gave one)
-     .filter(Boolean).map(l => String(l).replace(/^> /, ""));
+    // Only what came of it: "KURA searches the SOUTH wall." and "KURA scries the moon." are dropped from the front.
+    // After a scry, the moon's own line (her answer, or her silence) follows.
+    const said = [save.log, save.look && /^> (Moonlight|The moon|KURA asks)/.test(save.extra || "") ? save.extra : null].filter(Boolean)
+      .map(l => String(l).replace(/^> /, "").replace(/^KURA (searches|scries) the [A-Za-z ]+?\.\s*/, "")).filter(Boolean);
     if (!said.length) return;
     floatBox(box);
+    box.classList.add("plain");                       // the gold border, without the glow around it
     pre.innerHTML = "";
     said.forEach((l, k) => { if (k) add(" "); for (const w of wrapText(l, 38)) add(w); });
     add(" ");
@@ -1448,7 +1452,8 @@
     return true;
   }
 
-  // The countdown beside the breath bar: seconds to the next breath, to a tenth. Five cells, blank when she has them all.
+  // The countdown beside the breath bar: seconds until she may act again, to a tenth, shown only while she is out
+  // of breath. Five cells, blank otherwise.
   const breathTimer = () => { const ms = save && save.dungeon && !save.dead && RULES.breathNext ? RULES.breathNext(save) : null; return (ms === null ? "" : (ms / 1000).toFixed(1) + "s").padStart(5); };
   setInterval(() => { const el = document.getElementById("breathT"); if (el && !atTitle) { const t = breathTimer(); if (el.textContent !== t) el.textContent = t; } }, 100);   // only its own five cells change: the screen is not redrawn
   let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent

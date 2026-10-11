@@ -644,13 +644,14 @@
     if (write) { if (n >= BREATH_MAX) delete st.breath; else st.breath = { n, at }; }
     return n;
   }
-  // How long until the next breath is back, in milliseconds (null when she has them all).
+  // How long until she may act again, in milliseconds: the time until she has a whole breath, counted only while
+  // she has less than one (null otherwise).
   function breathNext(st) {
     const b = st.breath, now = TIME.now().getTime();
     if (!b || !(b.n < BREATH_MAX)) return null;
     let n = Math.max(0, b.n), at = Math.min(b.at, now + BREATH_WAIT);
     while (n < BREATH_MAX && now - at >= breathStep(n).ms) { const s = breathStep(n); at += s.ms; n = s.to; }
-    return n >= BREATH_MAX ? null : Math.max(0, at + breathStep(n).ms - now);
+    return n >= 1 ? null : Math.max(0, at + breathStep(n).ms - now);
   }
   const STEP_BREATH = 0.5;                                // a step into another room: half of what a search takes
   function spendBreath(st, amount = 1) { const n = breathNow(st, true); st.breath = { n: Math.max(0, n - amount), at: TIME.now().getTime() + BREATH_WAIT }; }
