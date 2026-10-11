@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.93";
+  const VERSION = "v0.94";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -460,14 +460,17 @@
     opts = opts || {};
     const now = opts.now || SMT_now();
     const S = headerLines(opts.omenText || "", opts.tz, now);
-    // 3D-view slot: a static centered wordmark standing in for the dungeon view (nothing to wire up).
+    // THE WORDMARK runs the full width of the frame, in block letters (the dev's own lettering), on the first eight
+    // rows of the main area. Under it, side by side: this quarter's level as a line of days (see levelBones) on the
+    // left, eight rows; the rumor cards on the right.
+    const MARK = ["          ▄                       ▄       ▄", "█▀▄ ▄▀█ █ █  █ █      █▀▄ █ ▄▀▀ █ █▄  ▄▀█ █", "▓ ▐ ▓▄▌ ▓ ▓   ▀▌      ▓ ▐ ▓ ▌ ▌ ▓ ▐ ▄ ▓▄▌ ▓", "▀▀▀ ▌ ▀ ▀ ▀▀ ▀▀▀      ▀▀▀ ▀  ▀▀ ▀  ▀▀ ▌ ▀ ▀▀", "", "█▀▄ ▄▀▀ ▄▀▄▀▄ ▄▀▄ ▄▀▄      █▀▄ █ ▄ ▄▀▄ ▄▀▀ ▄▀▀ ▄▀▄ ▄▀▄", "▓ ▐ ▌▀▄ ▓ ▌ ▌ ▐ ▓ ▓ ▌      ▓ ▐ ▐ ▓ ▓ ▌ ▌ ▌ ▌▀▄ ▐ ▓ ▓ ▌", "▀▀▀  ▀▀ ▀ ▀ ▀  ▀▀ ▌ ▀      ▀▀▀  ▀▀ ▌ ▀  ▀▀  ▀▀  ▀▀ ▌ ▀"];
+    const TOP = 9;                                       // rows the wordmark takes (eight, and a blank one)
+    const markTop = MARK.slice(0, 4), markBot = MARK.slice(5, 8), wide = a => Math.max(...a.map(l => l.length));
+    const banner = Array.from({ length: TOP }, () => "");
+    markTop.forEach((l, i) => { banner[i] = " ".repeat(Math.floor((W - 2 - wide(markTop)) / 2)) + l; });
+    markBot.forEach((l, i) => { banner[5 + i] = " ".repeat(Math.floor((W - 2 - wide(markBot)) / 2)) + l; });
     const view = Array.from({ length: VH }, () => " ".repeat(VW));
-    const put = (row, text) => { view[row] = center(text.slice(0, VW), VW); };
-    put(1, "DAILY DIGITAL");
-    put(2, "DEMON DUNGEON");
-    put(4, "a daily dungeon crawl");
-    // Under it, this quarter's level as a line of days with a branch off each (see levelBones).
-    levelBones(now).forEach((l, i) => { if (7 + i < VH) view[7 + i] = ljust(l, VW).slice(0, VW); });
+    levelBones(now).forEach((l, i) => { if (TOP + i < VH) view[TOP + i] = ljust(l, VW).slice(0, VW); });
     // Sidebar: a pinned "RUMORS AND SECRETS" header (never scrolls) over an auto-advancing card ticker.
     const PW = 29, rule = " " + "-".repeat(PW - 1);
     const cards = opts.cards && opts.cards.length ? opts.cards : ["..."];
@@ -481,10 +484,11 @@
       if (cur || !out.length) out.push(cur); return out; };
     const content = []; for (const c of cards) { for (const l of wrap(c)) content.push(ljust(" " + l, PW)); content.push(""); }
     const off = ((opts.cardOffset || 0) % content.length + content.length) % content.length;
-    const windowH = VH - 2;        // the header + rule take the first two sidebar rows
+    const windowH = VH - TOP - 2;  // the header + rule take the first two sidebar rows; the wordmark has the rows above
     const ticker = Array.from({ length: windowH }, (_, i) => content[(off + i) % content.length]);
     const stat = [ljust(" RUMORS AND SECRETS", PW), rule, ...ticker];
-    for (let i = 0; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i] || "", 30) + "|");
+    for (let i = 0; i < TOP; i++) S.push("|" + ljust(banner[i], W - 2) + "|");
+    for (let i = TOP; i < VH; i++) S.push("|" + ljust(view[i], 47) + "|" + ljust(stat[i - TOP] || "", 30) + "|");
     S.push("+" + "=".repeat(78) + "+");
     // Log box repurposed as cold, stable facts (WEEK/EPOCH/LEAN) that hold until the day rolls over.
     const r = s => "|" + ljust(s, W - 2) + "|";
