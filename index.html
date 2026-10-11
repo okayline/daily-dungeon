@@ -1572,12 +1572,19 @@
         // A beat before the result: the log says what she is doing and three dots follow, one at a time; then the
         // whole line appears, with the result in its color. Nothing else can be pressed meanwhile.
         const full = save.log, m = /^> KURA (searches|scries) the [^.]+/.exec(full || ""), lead = m ? m[0] : "> KURA listens at the door";
-        let dots = 0;
+        // Then the result, a sentence at a time, with a beat between sentences ("A crack." ... "It goes nowhere.").
+        const head = m ? m[0] + "." : null, rest = head && full.startsWith(head + " ") ? full.slice(head.length + 1) : null;
+        const parts = rest ? (rest.match(/[^.!?]+[.!?]+(?:\s+|$)/g) || [rest]).map(x => x.trim()) : [];
+        let dots = 0, shown = 0;
         const paint = () => { save.log = lead + " .".repeat(dots); draw(); };
-        searchBeat = setInterval(() => {
-          if (++dots <= 3) return paint();
-          clearInterval(searchBeat); searchBeat = null; save.log = full; draw();
-        }, 200);
+        const step = () => {
+          if (dots < 3) { dots++; paint(); searchBeat = setTimeout(step, 200); return; }
+          shown++;
+          if (!parts.length || shown >= parts.length) { searchBeat = null; save.log = full; draw(); return; }
+          save.log = head + " " + parts.slice(0, shown).join(" "); draw();
+          searchBeat = setTimeout(step, 550);
+        };
+        searchBeat = setTimeout(step, 200);
         paint();
       }
       return;
