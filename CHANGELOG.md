@@ -2,6 +2,18 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.81 - The Moon Closes - Oct 11 2026, 05:24 HST
+
+![v0.81](screenshots/v0.81.png)
+
+Searching wears a room out, and now you can see it.
+
+- **The moon strip under the map closes** as you search a room, from both ends inward. Wide open is a fresh room.
+- **A worn room is slow.** The more it has closed, the longer each search takes.
+- **Time opens it again.** A room recovers by itself in real time, whether or not the game is open. Walking to another room does not hurry it.
+- **Asking the moon is no longer free.** It wears on the room a little.
+- The end screen counts levels climbed.
+
 ## v0.80 - Back to the Wings - Oct 11 2026, 05:06 HST
 
 ![v0.80](screenshots/v0.80.png)
