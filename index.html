@@ -267,6 +267,10 @@
     if (atTitle) return drawTitle();               // a stray redraw (the clock, a closing box) must never paint the run over the title
     if (!save) return;
     try {
+      // Any breath spent (a search, a step, something used) presses the bar for a second; so does being refused for want of one.
+      const bn = save.breathNow, refused = bn === 0 && save.log !== seenLog && /out of breath|catches her breath|needs a moment/.test(save.log || "");
+      if (typeof bn === "number") { if ((seenBreath !== null && bn < seenBreath) || refused) squeeze(); seenBreath = bn; }
+      seenLog = save.log;
       if (Date.now() < squeezeUntil) save.squeeze = true;      // (only for this frame: never saved)
       const html = colorize(SMT.renderScreen(save, extraToShow())); delete save.squeeze;
       document.getElementById("screen").innerHTML = html;
@@ -1429,6 +1433,7 @@
     return true;
   }
 
+  let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent
   let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
   const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
   let contWait = false;                         // a search result is on screen, waiting for a click or a key
