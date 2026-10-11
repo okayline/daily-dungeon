@@ -394,7 +394,7 @@
     plain: ["is bare and quiet", "is plain and still"],
   };
   const FALSE_SEARCH = ["Paint. A door painted on bare stone.", "The door is flat. Brush strokes, and nothing under them.", "KURA knocks. Solid wall, dressed up as a door."];
-  const FALSE_GO = ["The door is only paint. The cell keeps its charge.", "KURA pushes. It is a wall with a door painted on it. No charge spent.", "A painted door. The cell was never needed."];
+  const FALSE_GO = ["The door is only paint. KURA keeps the key.", "KURA pushes. It is a wall with a door painted on it. The key is not spent.", "A painted door. The key was never needed."];
   const SEALED = ["The door is jammed shut. It won't open now.", "Something settled behind this door. It will not move.", "The frame has seized. This way is closed for good."];
   function atmosphere(st) { return flavor(st); }
 
@@ -853,7 +853,7 @@
       `Day ${onFloor} on this floor. ${closes}.`,
       `${name}. ${seen} room${seen === 1 ? "" : "s"} surveyed. Stairs ${stairs ? "confirmed" : "unconfirmed"}.`,
       `Day ${onFloor}. ${party}.`,
-      `${name}. ${party}. Today's charge ${(st.today || {}).stepped ? "spent" : "full"}.`,
+      `${name}. ${party}. Today's key ${(st.today || {}).stepped ? "spent" : "in hand"}.`,
       TIME.moonNote(TIME.now()).replace(/\.$/, "") + ".",          // "The moon is day 26, waning crescent."
     ];
     return "> " + (left <= 1 ? news[pick([0, 1])] : pick(news));
@@ -1062,8 +1062,8 @@
     const toStairs = !fals && RS(d).found.includes("stairs") && dir === stairsDir(d.floor, d.at);
     const locked = !toStairs && !fals && isLocked(d, dir);
     if ((locked || fals) && today(st).stepped && !st.freeSteps) {
-      st.facing = dir; st.log = "> The door won't cycle. The cell is empty until dawn.";
-      if (st.encounter) st.round = ["The cell is empty. No running through a sealed door."];
+      st.facing = dir; st.log = "> The door won't unlock. Today's key is spent. Another comes at dawn.";
+      if (st.encounter) st.round = ["Today's key is spent. No running through a locked door."];
       return show(st);
     }
     if (!toStairs && !fals && isSealed(d, dir)) {            // settled the other way: it never opens now
@@ -1110,7 +1110,7 @@
       st.today.stepped = true;
       FLOOR.grow(d.floor, d.at, dir);
       st.facing = dir;
-      st.log = `> The ${NAME[dir]} door cycles open. The way is clear.`;
+      st.log = `> KURA unlocks the ${NAME[dir]} door. The way is clear.`;
       st.extra = atmosphere(st);
       tally(st, "unlocks");
       return show(st);
@@ -1131,7 +1131,7 @@
     const i = FLOOR.grow(d.floor, d.at, dir);               // builds the room behind a locked door the first time
     const isNew = !RS(d, i).visited;
     d.at = i; RS(d, i).visited = true;
-    st.log = locked ? `> The ${NAME[dir]} door cycles open. KURA steps into a new room.`
+    st.log = locked ? `> KURA unlocks the ${NAME[dir]} door and steps into a new room.`
       : (i === d.floor.lure && !(RS(d, i).found || []).includes("lure"))      // the ? room: something is still tucked away in it
         ? `> KURA goes ${NAME[dir]}. ` + pick(["The room feels like it is holding its breath.", "The air here is keeping something back.", "The walls seem to know a little more than KURA."])
         : `> KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
@@ -1413,7 +1413,7 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
-    if (today(st).stepped && !st.freeSteps) { st.log = "> The cell is already spent today."; return show(st); }
+    if (today(st).stepped && !st.freeSteps) { st.log = "> Today's key is already spent."; return show(st); }
     act(st, "hold");
     today(st).stepped = true; today(st).held = true;
     tally(st, "holds");
@@ -1461,7 +1461,7 @@
     const stairs = fl.stairs < 0 ? "STAIRS unplaced" : `STAIRS R${fl.stairs + 1}${RS(d, fl.stairs).found.includes("stairs") ? " (found)" : ""}`;
     const exs = w && w.exits.length ? "EXITS " + w.exits.map(j => fl.kinds[j] + (fl.rooms[j] ? "*" : fl.sealed && fl.sealed[j] ? "x" : "")).join("/") + " CLUE " + w.clueKind : null;
     const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/${fl.pairs + 2}`, stairs, exs];
-    const row2 = [`CELL ${(st.today || {}).stepped ? "spent" : "ready"}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
+    const row2 = [`KEY ${(st.today || {}).stepped ? "spent" : "ready"}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
       `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`, onOmenCooldown(st) ? `OMEN COOLDOWN ${7 - (st.day - st.omenCooldownDay)}d` : null];
     const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`,
       `OMEN ${omen(effectiveOmenDay(st)).key}${st.useBanked ? "(banked)" : ""}${st.bankedOmen !== undefined ? " +BANK" : ""}`,
