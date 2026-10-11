@@ -79,7 +79,6 @@
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
   #ticker { display: inline-block; width: 76ch; overflow: hidden; white-space: pre; vertical-align: top; }
-  #tickerIn { display: inline-block; white-space: pre; will-change: transform; }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
   .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
@@ -192,8 +191,8 @@
       if (i >= lines.length - 6 && i <= lines.length - 4) {
         let inner = esc(line.slice(1, -1)); const gold = false;
         // A party member's question: [Y]ES and [N]O sit at the right end of the top line and answer it.
-        // The bottom line is the ticker: the status report and word of everyone else, scrolling right to left.
-        if (i === lines.length - 4) return `|<span class="logline"> <span id="ticker"><span id="tickerIn" style="transform:translateX(${-tickFrac}ch)">${esc(tickerText(line.slice(2, -1)))}</span></span> </span>|`;
+        // The bottom line is the ticker: the status report, this run's news and word of everyone else, typed out a line at a time.
+        if (i === lines.length - 4) return `|<span class="logline"> <span id="ticker">${tickerHtml()}</span> </span>|`;
         if (i === lines.length - 6) inner = inner
           .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')
           .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>')
@@ -1496,35 +1495,32 @@
     for (let i = 0; i < Math.max(own.length, others.length); i++) { if (own[i]) out.push(own[i]); if (others[i]) out.push(others[i]); }
     return out;
   }
-  const TICK_W = 76, TICK_GAP = "   //   ";
-  let tape = " ".repeat(TICK_W), tapeAt = 0, tapeNext = 0, tapeStatus = null;
-  function tickerText(status) {
-    status = String(status || "").replace(/^> /, "").trim();
-    let guard = 0;
-    while (tape.length - tapeAt < TICK_W + 2 && guard++ < 50) {
-      const feed = tickerFeed();
-      let item = status && status !== tapeStatus ? (tapeStatus = status) : feed.length ? feed[tapeNext++ % feed.length] : status;
-      if (!item) { tape += " ".repeat(TICK_W); break; }
-      tape += item + TICK_GAP;
-    }
-    if (tapeAt > 600) { tape = tape.slice(tapeAt); tapeAt = 0; }
-    return tape.slice(tapeAt, tapeAt + TICK_W + 1).padEnd(TICK_W + 1);   // one character more than the window, for the slide
+  // It is typed, not scrolled: a line appears a letter at a time, as if at a terminal, with a _ at the end; it
+  // holds for a few seconds with the _ blinking; it is deleted back to nothing; the next one is typed. The run's
+  // own status report goes next whenever a new one is waiting. Only the line's own span is rewritten.
+  // (var and a function declaration, not let/const: the first frame is drawn before this point in the script is reached.)
+  var TYPE_W = 74, typeLine = "", typeN = 0, typeMode = "gap", typeNext = 0, typeStatus = null;
+  function tickerHtml() { return esc((typeLine || "").slice(0, typeN || 0)) + (typeMode === "hold" ? '<span class="wait">_</span>' : "_"); }
+  function typeStep() {
+    let wait = 300;
+    try {
+      if (atTitle || !save || !save.dungeon) { wait = 500; }
+      else if (typeMode === "gap") {
+        const status = String(save.status || "").replace(/^> /, "").trim(), feed = tickerFeed();
+        typeLine = (status && status !== typeStatus ? (typeStatus = status) : feed.length ? feed[typeNext++ % feed.length] : status || "").slice(0, TYPE_W);
+        typeN = 0; typeMode = typeLine ? "type" : "gap"; wait = 350;
+      } else if (typeMode === "type") {
+        typeN++;
+        const ch = typeLine[typeN - 1];
+        wait = /[.,:;!?]/.test(ch) ? 260 : ch === " " ? 70 : 35 + Math.random() * 55;      // a cadence: quick letters, a breath at punctuation
+        if (typeN >= typeLine.length) { typeMode = "hold"; wait = 3200; }
+      } else if (typeMode === "hold") { typeMode = "delete"; wait = 30; }
+      else if (typeMode === "delete") { typeN = Math.max(0, typeN - 2); wait = 18; if (typeN === 0) { typeMode = "gap"; wait = 500; } }
+      const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml();
+    } catch (e) {}
+    setTimeout(typeStep, wait);
   }
-  // It glides: every frame the tape is slid left by a fraction of a character, and when a whole character has gone
-  // by, the text moves on one and the slide starts again. Five characters a second.
-  let tickFrac = 0, tickLast = 0;
-  const TICK_MS = 200;
-  function tickerFrame(now) {
-    const dt = Math.min(500, now - (tickLast || now)); tickLast = now;
-    const el = document.getElementById("tickerIn");
-    if (el && !atTitle && save && save.dungeon) {
-      tickFrac += dt / TICK_MS;
-      if (tickFrac >= 1) { const whole = Math.floor(tickFrac); tapeAt += whole; tickFrac -= whole; el.textContent = tickerText(save.status); }
-      el.style.transform = `translateX(${-tickFrac}ch)`;
-    }
-    requestAnimationFrame(tickerFrame);
-  }
-  requestAnimationFrame(tickerFrame);
+  setTimeout(typeStep, 800);
   let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent
   let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
   const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
