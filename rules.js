@@ -2888,7 +2888,7 @@
   // here ranks anyone, and nothing names anyone.
   // THE LEVEL, LAID OUT AS ITS DAYS, for the end-of-run screen: one column a day. [v] is where she woke, each < >
   // a day's two doors, [?] the last day's lone door, [^] the way up. Under each: how many of that day's rooms
-  // she walked into (- for a wing she never reached), and what the two doors offered, by feel. A mark shows where the run ended.
+  // she walked into (- for a wing she never reached), and the room she took that day, by feel. A mark shows where the run ended.
   const MAP_FEEL = { den: "warm", bay: "hum", relay: "signal", vault: "cold", forge: "ash", altar: "glow", archive: "lights", void: "bare" };
   function levelMap(st) {
     const d = st.dungeon; if (!d || !d.floor || !Array.isArray(d.floor.offers)) return [];
@@ -2896,15 +2896,15 @@
     const row = (label, cell) => { let s = label.padEnd(7); for (let i = 0; i < n; i++) s += String(cell(i)).padEnd(W); return s.replace(/\s+$/, ""); };
     // (Every wing has three rooms, so a count of them says nothing: this row is how many of the three she walked into.)
     const rooms = i => { let c = 0, v = 0; f.rooms.forEach((r, j) => { if (r && r.wing === i) { c++; if (RS(d, j).visited) v++; } }); return c ? `${v}/${c}` : "-"; };
-    const reached = i => f.rooms.some(r => r && r.wing === i);
+    const took = i => { const x = Object.keys(f.exits).map(Number).find(j => f.exits[j].wing === i && f.rooms[j]); return x === undefined ? "?" : MAP_FEEL[f.rooms[x].kind || f.exits[x].kind] || "?"; };
     let chain = " ".repeat(7);
     for (let i = 0; i < n; i++) chain += (i === 0 ? "[v]" : i === n - 1 ? "[?]" : "< >") + (i < n - 1 ? "----" : "--[^]");
     const left = d.deadline !== undefined && st.today ? d.deadline - st.today.date : null;
     const out = [` ${st.floor}   the level the run ended on` + (left === null ? "" : left < 0 ? "        the dark took it" : `        ${left} day${left === 1 ? "" : "s"} were left`), "",
       row(" day", i => i + 1), chain, row(" seen", rooms),
-      // Only the offers of wings she reached: the pairs are the same for everyone on the level, and for her next
-      // run on it, so the days ahead stay unknown.
-      row(" offer", i => (i < f.pairs ? (reached(i) ? MAP_FEEL[f.offers[i][0]] : "?") : "")), row("", i => (i < f.pairs ? (reached(i) ? MAP_FEEL[f.offers[i][1]] : "?") : ""))];
+      // Only the room she took each day: the door she didn't open stays a ?, and so do the days ahead. (The pairs
+      // are the same for everyone on the level, and for her next run on it.)
+      row(" took", i => (i < f.pairs ? took(i) : "")), row(" left", i => (i < f.pairs ? "?" : ""))];
     if (here !== undefined && here < n) out.push(" ".repeat(col(here)) + "^ here");
     return out;
   }
