@@ -2,7 +2,7 @@
 
 **Play it here: https://okayline.github.io/daily-dungeon/**
 
-<img width="60%" alt="Daily Digital Demon Dungeon, build v0.94" src="screenshots/v0.94.png" />
+<img width="60%" alt="Daily Digital Demon Dungeon, build v0.99.1" src="screenshots/v0.99.1.png" />
 
 An 80-column ASCII roguelike dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played one key a day on the real calendar. The real moon phase impacts gameplay in different ways.
 
@@ -12,7 +12,7 @@ An 80-column ASCII roguelike dungeon crawler in the spirit of 80s CRPGs and Shin
 - **The dark rises with the moon.** Each quarter of the lunar month the dark takes one level. Be gone before it takes yours, or the run is over. A level's last wing hides the way up.
 - **One key a day.** Spend it to unlock a door, or go on STANDBY and rest. Everything else (searching, turning, talking, walking through doors you've already opened) is free of the key.
 - **Wings and doors.** A level is a run of wings, one offer a day. Each wing hangs two locked doors off its rooms. Unlock one and the other seals for good.
-- **Search all you like,** but searching tires KURA. Her breath shows on the moon strip under the map: spend it too fast and she has to stop and recover. Something else may notice you, too.
+- **Search all you like,** but searching tires KURA. Her breath shows on the moon strip under the map: spend it too fast and she has to stop and recover, and pressing on only makes the wait longer. Something else may notice you, too.
 - **Listen at the doors.** Each gives away a little of what's behind it.
 - **Ask the moon.** Look up and ask her. Some nights she answers.
 - **Demons don't leave.** Fight them, talk to them, or run. Some want gifts. Some want to join you. Some are lying.
@@ -22,6 +22,8 @@ An 80-column ASCII roguelike dungeon crawler in the spirit of 80s CRPGs and Shin
 - **STANDBY can bank a day.** Hold instead of stepping and that day's omen is kept, to spend later instead of whatever the day brings.
 - **Everyone is in the same pit.** Everyone playing in the same moon quarter is on the same level, and the rooms on offer each day are the same for every player. Which door is which, and what's hidden where, is yours alone. The title screen carries rumors and counts from everyone else, and finished runs can be posted to the board.
 - **Don't drink the ichor.** Or do.
+
+The header counts the lunar day (1 to 29) and names today's phase in Japanese, and the title carries a crescent over the lettering.
 
 Your run saves itself in your browser. Finish a run and you can post it to the leaderboard. `[?]` explains the keys and holds the password (to move a run to another device) and the leaderboard. `[L]OG` keeps the story.
 
