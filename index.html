@@ -138,11 +138,11 @@
         const left = esc(line.slice(0, 49)), right = line.slice(49);
         // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
         // The locked door KURA faces gets a slightly brighter #: it sits in the gap beside her @ on that side.
-        const ctr = (lines[17] || "").slice(49).indexOf("@"), face = save && save.facing;
+        const ctr = (lines[17] || "").slice(49).indexOf("@"), face = save && !save.look && save.facing;
         const focus = ctr < 0 ? null : face === "N" ? [16, ctr] : face === "S" ? [18, ctr] : face === "E" ? [17, ctr + 2] : face === "W" ? [17, ctr - 2] : null;
-        const map = right.replace(/[\[)][\^v][\](]|[@^v<>&$?□=‖#+\-|]/g, (m, at) => {
-          // The outline walls (+ - |) are dim; a # is a locked door and stays bright. The panel's own edges are left alone.
-          if (/[+\-|]/.test(m)) {
+        const map = right.replace(/[\[)][\^v][\](]|[@^v<>&$?□=‖#x+\-|]/g, (m, at) => {
+          // The outline walls (+ - |) and a sealed door's x are dim; a # is a locked door and stays bright. The panel's own edges are left alone.
+          if (/[x+\-|]/.test(m)) {
             if (at === 0 || at === right.length - 1) return m;
             const l = right[at - 1], r = right[at + 1], gap = c => c === " " || c === "[" || c === "]";
             return `<span class="wall">${m}</span>`;
@@ -167,11 +167,13 @@
           // [^] takes the day's step forward; dim when that way is a wall or the step is spent, and in a fight
           // (running is a button in the fight box).
           .replace("[  ^  ]", `<span class="btn" data-act="forward">[  <span class="caret">^</span>  ]</span>`)
-          .replace(/(<\/span>)(\s+)([NESW?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
+          .replace(/(<\/span>)(\s+)([NESWUD?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5');
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
         const tail = esc(line.slice(48)).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
         return left + tail;
       }
+      // [U]P at the top of the 3D view: look up at the ceiling, again for the floor, again for level.
+      if (i === 6) return esc(line.slice(0, 48)).replace("[U]P", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="look">[U]P</span>`) + esc(line.slice(48));
       // The v over today's phase (row 20, right panel).
       if (i === 20) return esc(line.slice(0, 48)) + esc(line.slice(48)).replace(/\./, `<span class="cell" style="position:relative;left:${[2, 6].includes(SMT.moonIndex(SMT.now())) ? ".65ch" : ".15ch"}">.</span>`);
       // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
@@ -350,13 +352,13 @@
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.dispatchEvent(new Event("resize")));   // popups are placed by measuring the font
     // The title screen shows first either way (CONTINUE is the explicit resume now); this only decides
     // whether CONTINUE has anything to resume. tick()/draw() wait for that button, same for a fresh save.
-    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 7 && s.party) save = s;
+    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 8 && s.party) save = s;
     else { if (s) stash("-old"); save = null; }
     showTitle();
   }
 
   // TITLE SCREEN -----------------------------------------------------------------------------------
-  const titleCanContinue = () => !!(save && save.dungeon && save.dungeon.floor && save.dungeon.floor.v === 7 && save.party);
+  const titleCanContinue = () => !!(save && save.dungeon && save.dungeon.floor && save.dungeon.floor.v === 8 && save.party);
   // The three hard-number cards that cost nothing new (Part 11, build-order note): today's shared omen
   // needs no save at all, and the other two just read the leaderboard's existing endpoints.
   function buildTitleCards() {
@@ -647,7 +649,7 @@
       if (!got || (code && got === code)) { msg.textContent = got ? "That is this run already." : "Paste a password first."; return; }
       try {
         const s = JSON.parse(decodeURIComponent(escape(atob(got))));
-        if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 7) throw new Error("not a run");   // the same shape start() accepts
+        if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 8) throw new Error("not a run");   // the same shape start() accepts
         const trial = JSON.parse(JSON.stringify(s)); RULES.tick(trial); SMT.renderScreen(trial, "");      // it must really run, not just parse
         loadCode = s;
         if (save) askBox("load", "REPLACE THIS RUN?", ["The run in the password takes this one's place."]);
@@ -765,22 +767,23 @@
     const text = [
       "DAILY DIGITAL DEMON DUNGEON   " + head + ("build " + SMT.VERSION).padStart(71 - 30 - headLen), line,
       "A dungeon crawler you play one charge a day, on the real calendar.",
-      "Each floor is four wings. Three times, two locked doors offer two",
-      "rooms: take one and the other seals. Listen at the doors; dead ends",
-      "hold the big clues. The way down closes at the end of Sunday.",
+      "One room a day. Each room has two locked doors: open one and the",
+      "other seals for good. Step through and the door shuts behind you.",
+      "Listen at the doors, and search the walls, the ceiling and the floor.",
+      "The week's last room hides the way down. It closes at the end of Sunday.",
       "The moon, the omens and the demons follow real time.", "",
       "Search as much as you like. Talk to demons, or fight them.",
-      "Open your one new door. Come back tomorrow.", "",
+      "Open your one door. Come back tomorrow.", "",
       ...(save ? ["THIS RUN",
         two("Floor", save.floor, "Day", save.day),
         two("Turns", save.steps || 0, "Alignment", String(save.align).slice(0, 3)),
         two("Demons met", k.met || 0, "Items found", k.items || 0), ""] : []),
       ...(cx ? ["CODEX", two("Demons", count(cx.demons), "Items", count(cx.items)), ""] : []),
       "KEYS",
-      "  [^] / up arrow ..... go through the door KURA faces",
+      "  [^] / up arrow ..... through the door KURA faces, or down found stairs",
       "  [ < ] [ > ] / arrows ... turn (free)",
-      "  + .................. a door that wants a charge (or is only paint)",
-      "  x .................. a door sealed for good (its pair was opened)",
+      "  + .................. a door that wants a charge",
+      "  x .................. a sealed door: the one not taken, or the one behind you",
       "  1-8 ................ pick a gift when a demon asks for one",
       ...(LEADERBOARD_URL ? ["  {{BOARD}} ........... the leaderboard (post your score when a run ends)"] : []),
       "  [C]ODEX ............ every demon and item found, over all runs (press C on the main screen)",
@@ -793,9 +796,10 @@
       "  [P]ASSWORD ......... this run's password: copy it to keep or move the run,",
       "                       or paste one in to continue that run",
       "  [R]ESET ............ start a new run       [?] this page",
-      "  [R]UN in a fight ... run through any open door (a locked one uses the charge; it may block you)",
-      "  [S]EARCH ........... search the wall KURA faces (as much as you like)",
+      "  [R]UN in a fight ... out a door or found stairs (a locked one takes the charge)",
+      "  [S]EARCH ........... search what KURA faces: a wall, the ceiling or the floor",
       "  [S]ILENT ........... a third answer: say nothing",
+      "  [U]P ............... look up; again to look down; again to look ahead",
       "  [Y]ES  [N]O ........ answer a party member's question, or a demon",
       "",
       "Made by okayline.   [?] or {{CLOSE}}",
@@ -886,7 +890,7 @@
     const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
     add(again ? "ARE YOU REALLY SURE?" : `POWER THE ${NAMES[dir]} DOOR?`, "gold");
     add(" ");
-    add(again ? "Only one new door a day. Today's charge is gone once it cycles." : "This uses today's charge. A door already open is free.");
+    add(again ? "Only one door a day. The other one seals for good once this cycles." : "This uses today's charge. The other door seals for good.");
     add(" ");
     const row = document.createElement("div"), opt = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.cact = a; return e; };
     row.append(opt("[ YES ]", "yes"), "    ", opt("[ NO ]", "no"));
@@ -1234,7 +1238,7 @@
         else if (e.stage === "swap") {
           save.party.forEach((p, i) => { if (i > 0) left.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
           left.append(opt("[N]O", "swap-none"));
-        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[G]IVE", "offer"), "   ", (() => { const r = opt("[R]UN", "run"); if (save.encounter.ranTried || !["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
+        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[G]IVE", "offer"), "   ", (() => { const r = opt("[R]UN", "run"); if (save.encounter.ranTried || !(RULES.available(save).stairs || ["N", "E", "S", "W"].some(d => RULES.available(save)[d]))) r.className += " off"; return r; })());
       }
       row.append(left);
       pre.appendChild(row);
@@ -1265,12 +1269,14 @@
     if (replayTimer) finishReplay();
     prevDemonHp = save && save.encounter ? save.encounter.hp : null;
     prevKuraHp = save && save.encounter && save.party && save.party[0] ? save.party[0].hp : null;
-    // [^] toward a bare wall is just a search of that wall; toward a door it takes the step.
+    // [^] toward a bare wall (or the ceiling, or the floor) is just a search of it; toward a door it goes that
+    // way; looking down at found stairs, it takes them.
     if (name === "forward" && save) {
       if (save.encounter) return;                  // in a fight, running is the [R]UN button in the fight box
-      name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
+      const can = RULES.available(save);
+      name = can.look ? (can.look === "D" && can.stairs ? "go-D" : "search") : !can.door[save.facing] ? "search" : "go-" + save.facing;
     }
-    if (save && save.encounter && (name === "left" || name === "right")) return;      // no turning around mid-fight
+    if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no looking around mid-fight
     if ((name === "qyes" || name === "qno" || name === "qsilent") && save) {
       const log = save.log, partyBefore = (save.party || []).map(p => p.name);
       save = RULES.reply(save, name === "qsilent" ? "silent" : name === "qyes");
@@ -1282,14 +1288,14 @@
     }
     // A party member's question waits for [Y]ES or [N]O: nothing else moves the game on until it's answered
     // (the bag, codex, log, help and password still open, so the player can think it over).
-    if (save && save.question && /^(search|hold|left|right|forward|run|fight|talk|altar|go-)/.test(name)) {
+    if (save && save.question && /^(search|hold|left|right|look|forward|run|fight|talk|altar|go-)/.test(name)) {
       document.querySelectorAll(".btn.ask").forEach(el => { el.classList.remove("nudge"); void el.offsetWidth; el.classList.add("nudge"); });
       return;
     }
     if (name === "run" && save && save.encounter && save.encounter.ranTried) { save.log = "> KURA already tried to run. FIGHT, TALK, or GIVE."; persist(); draw(); encounterBox(); return; }
     if (name === "run" && save && save.encounter) {
-      // Running takes any way out, whichever way KURA faces: an open door first, a locked one (it takes the key) if that's all there is.
-      const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]), free = out.filter(d => !can.locked[d]);
+      // Running takes any way out, whichever way KURA faces: an open door or found stairs first, a locked door (it takes the charge) if that's all there is.
+      const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]), free = out.filter(d => !can.locked[d]).concat(can.stairs ? ["D"] : []);
       const pool = free.length ? free : out;
       if (!pool.length) { save.log = "> There is no way out today. FIGHT, TALK, or GIVE."; persist(); draw(); encounterBox(); return; }
       name = "go-" + pool[Math.floor(Math.random() * pool.length)];
@@ -1328,7 +1334,7 @@
       : name === "altar" ? RULES.altarOpen(save)
       : name === "altar-next" ? RULES.altarNext(save)
       : name.startsWith("altar-") ? RULES.altarGive(save, name === "altar-none" ? null : Number(name.slice(6)))
-      : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R")
+      : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R") : name === "look" ? RULES.turn(save, "U")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
     if (name === "reset") {
       save.history = [];
@@ -1515,7 +1521,7 @@
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
-      s: "search", g: "altar", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
+      s: "search", g: "altar", u: "look", arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
     if (k) { e.preventDefault(); act(k); }
   });

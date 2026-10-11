@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.62.2";
+  const VERSION = "v0.70";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -71,6 +71,32 @@
           put(cx - w - 1, y, "|"); put(cx + w + 1, y, "|");
         }
       }
+    }
+    return c.map(row => row.join(""));
+  }
+
+  // LOOKING UP OR DOWN: the room's ceiling ("U") or its floor ("D"), seen straight on, with the four walls
+  // falling away to the corners of the view. The floor shows the stairs down once they have been found.
+  function renderLook(which, stairs) {
+    const c = Array.from({ length: VH }, () => Array(VW).fill(" "));
+    const put = (x, y, t) => [...t].forEach((ch, k) => { if (x + k >= 0 && x + k < VW && y >= 0 && y < VH && ch !== " ") c[y][x + k] = ch; });
+    for (let i = 0; i < 3; i++) { put(2 + i, i, "\\"); put(44 - i, i, "/"); put(2 + i, 16 - i, "/"); put(44 - i, 16 - i, "\\"); }
+    put(5, 2, "_".repeat(37)); put(5, 13, "_".repeat(37));
+    for (let y = 3; y <= 13; y++) { put(5, y, "|"); put(41, y, "|"); }
+    if (which === "U") {
+      // Two pipes run the length of the ceiling, with a caged lamp between them.
+      put(6, 5, "=".repeat(35)); put(6, 11, "=".repeat(35));
+      put(14, 5, "[]"); put(31, 11, "[]");
+      [" .-----. ", "( ----- )", " '-----' "].forEach((t, j) => put(19, 7 + j, t));
+    } else if (stairs) {
+      // A lifted stone, and steps going down into the dark.
+      [".___________________.", "|___________________|", "| |_______________| |", "| | |___________| | |",
+        "| | | |_______| | | |", "|_|_|_|_______|_|_|_|"].forEach((t, j) => put(13, 5 + j, t));
+    } else {
+      // Tiles: a grid of seams, one of them a little crooked.
+      for (const y of [5, 8, 11]) for (let x = 8; x <= 38; x += 6) put(x, y, "+");
+      for (const y of [5, 8, 11]) for (let x = 8; x < 38; x += 6) put(x + 2, y, "- -");
+      for (const y of [6, 7, 9, 10]) for (let x = 8; x <= 38; x += 6) put(x, y, ":");
     }
     return c.map(row => row.join(""));
   }
@@ -241,12 +267,15 @@
     now = now || SMT_now(); extra = extra || "";
     const idx = moonIndex(now);
     const v = st.view;
-    const view = renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
+    const view = v.look ? renderLook(v.look, v.stairs)
+      : renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
     // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
-    // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
+    // and the letter between them is what she faces: a compass wall, or U (the ceiling) or D (the floor).
+    // [U]P at the top of the view tips her head back: once for the ceiling, again for the floor, again for level.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
-    overlay(VH - 1, 16, `[ < ]  ${st.facing || "?"}  [ > ]`);
-    overlay(VH - 2, 20, "[  ^  ]");          // the day's step: forward, the way KURA faces
+    overlay(VH - 1, 16, `[ < ]  ${st.look || st.facing || "?"}  [ > ]`);
+    overlay(VH - 2, 20, "[  ^  ]");          // forward: through the door she faces, or down found stairs
+    if (v.end !== "dark") overlay(0, 21, "[U]P");
     const r = s => "|" + ljust(s, W - 2) + "|";
     const rc = s => "|" + center(s, W - 2) + "|";
     const S = headerLines(st.omenText, st.tz, now);
@@ -316,8 +345,8 @@
     const line3 = st.question ? ljust(" " + extra.slice(0, 77 - answers.length - 1), 77 - answers.length) + answers + " " : " " + extra;
     for (const m of [" " + moonLine, " " + (st.log || ""), line3]) S.push(r(m));
     S.push("+" + "-".repeat(78) + "+");
-    // Free actions on the left (unlimited, searching included); the day's one step is the [^] button in
-    // the 3D view, and HOLD/RELEASE now live in INVOKE with everything else that isn't always available.
+    // Free actions on the left (unlimited, searching included); the day's one charge is spent with the [^]
+    // button in the 3D view, and HOLD/RELEASE live in INVOKE with everything else that isn't always available.
     const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH";
     S.push("|" + free + " ".repeat(78 - free.length) + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
