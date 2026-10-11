@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.99.4 - One Line for the Moon - Oct 11 2026, 13:45 HST
+
+![v0.99.4](screenshots/v0.99.4.png)
+
+- **The title's heading is back to one line** ("2nd QTR - 上弦 WAX HALF - Lunar Days 9-15"). The floor line is gone, since the LEVEL line below the frame already gives it.
+
 ## v0.99.3 - Room Below the Moon - Oct 11 2026, 13:40 HST
 
 ![v0.99.3](screenshots/v0.99.3.png)
