@@ -1460,7 +1460,7 @@
   // THE TICKER along the bottom log line: one long tape of news, moved a character at a time, right to left.
   // It carries the run's own status report (each new one joins the tape as it comes) and the title feed's lines
   // (the numbers, the rumors, the moon), in turn. Only its own span is rewritten: the screen is not redrawn for it.
-  const TICK_W = 76, TICK_GAP = "   +++   ";
+  const TICK_W = 76, TICK_GAP = "   //   ";
   let tape = " ".repeat(TICK_W), tapeAt = 0, tapeNext = 0, tapeStatus = null;
   function tickerText(status) {
     status = String(status || "").replace(/^> /, "").trim();
