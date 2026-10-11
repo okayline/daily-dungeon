@@ -2,6 +2,15 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.93 - The Line of Days - Oct 11 2026, 08:57 HST
+
+![v0.93](screenshots/v0.93.png)
+
+- **The title screen draws the level.** A line of this quarter's days with a branch off each, the same for everyone. Days that haven't come yet are hidden; it fills in as the quarter goes.
+- **A search always takes its beat,** even when a demon or a find comes of it.
+- **`[F]IGHT` left the bottom bar.** It is in the fight box, where it is used.
+- **The typed line** ends its sentences properly and holds each one a little longer.
+
 ## v0.92 - In Color - Oct 11 2026, 08:38 HST
 
 ![v0.92](screenshots/v0.92.png)
