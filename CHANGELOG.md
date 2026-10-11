@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.61 - Oct 10 2026, 20:30 HST
+
+- **Hold Omen has its own button in the bag now.** It used to take up a numbered slot alongside whatever you'd found; now it's a fixed button (and an H key) above the list, so it's always in the same place and never bumps a found item down.
+- **The ? help menu's key list is alphabetical now**, easier to scan for a specific key.
+- **Every popup (About, Log, Invoke, Codex, the Leaderboard) closes with a click anywhere on it**, not just its [C]LOSE button.
+
 ## v0.60 - Oct 10 2026, 20:30 HST
 
 - **Faction seasons.** Every finished run now nudges a month-long, server-side tally toward LAW or CHAOS, deeper runs counting for more. A NEUTRAL run doesn't get its own side — its point goes to whichever of LAW/CHAOS is currently behind, so one side can't run away with a season. Nothing visible in the game yet; this just lays the groundwork the title screen will read from.
