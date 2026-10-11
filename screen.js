@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.74";
+  const VERSION = "v0.75";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -300,21 +300,14 @@
       : renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
     // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
     // and the letter between them is what she faces: a compass wall, or U (the sky) or D (the floor).
-    // [ ^ ] acts on whatever she faces. Beside the turn buttons, one more tips her head: [ UP ] to the sky,
-    // then [ DOWN ] to the floor, then [ AHEAD ] to level again; its label is always the next place she'd look.
-    // The row above holds whatever can be walked through from here: [ < LEFT ] and [ RIGHT > ] under the two
-    // doors ahead ([ ENTER ] under one that stands open), [ OPEN ] for a lone door, [ DESCEND ] over found stairs.
+    // The controls at the foot of the view, top to bottom: the word for what [ ^ ] will do here (with [ < LEFT ]
+    // and [ RIGHT > ] either side of it while the two doors ahead are locked), then [ ^ ] itself, then the turn
+    // buttons with what she faces between them: a compass wall, U (the sky) or D (the floor).
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
-    overlay(VH - 1, 13, `[ < ] ${center(String(st.actLabel || "").slice(0, 9), 9)} [ > ]`);   // between the turn buttons: what [ ^ ] does here
-    overlay(VH - 2, 21, "[ ^ ]");            // the one "do the obvious thing" button: search, consult, enter, descend
-    if (v.end !== "dark") overlay(VH - 1, 35, st.look === "U" ? "[ DOWN ]" : st.look === "D" ? "[ AHEAD ]" : "[ UP ]");   // where her eyes go next
-    if (v.look === "D" && v.stairs) overlay(VH - 3, 18, "[ DESCEND ]");
-    for (const x of (!v.look && v.doors) || []) {
-      if (x.state === "sealed") continue;
-      if (x.side === "C") overlay(VH - 3, 19, x.state === "open" ? "[ ENTER ]" : "[ OPEN ]".padEnd(9).slice(0, 8));
-      else if (x.state === "open") overlay(VH - 3, x.side === "L" ? 10 : 28, "[ ENTER ]");
-      else overlay(VH - 3, x.side === "L" ? 9 : 27, x.side === "L" ? "[ < LEFT ]" : "[ RIGHT > ]");
-    }
+    overlay(VH - 1, 16, `[ < ]  ${st.look || st.facing || "?"}  [ > ]`);
+    overlay(VH - 2, 21, "[ ^ ]");            // the one "do the obvious thing" button: search, listen, consult, enter, descend
+    if (st.actLabel) overlay(VH - 3, 19, center(String(st.actLabel).slice(0, 8), 8));
+    for (const x of (!v.look && v.doors) || []) if (x.state === "locked" && x.side !== "C") overlay(VH - 3, x.side === "L" ? 9 : 27, x.side === "L" ? "[ < LEFT ]" : "[ RIGHT > ]");
     const r = s => "|" + ljust(s, W - 2) + "|";
     const rc = s => "|" + center(s, W - 2) + "|";
     const S = headerLines(st.omenText, st.tz, now);
@@ -386,7 +379,7 @@
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one charge is spent with the [^]
     // button in the 3D view, and HOLD/RELEASE live in INVOKE with everything else that isn't always available.
-    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH";
+    const free = " [F]IGHT [T]ALK [I]NVOKE [S]EARCH " + (st.look === "U" ? "LOOK_[D]OWN" : "LOOK_[U]P");   // looking: up to the sky, then down to the floor, then level
     S.push("|" + free + " ".repeat(78 - free.length) + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.

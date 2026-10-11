@@ -116,16 +116,16 @@
     return i !== undefined && !floor.rooms[i] ? floor.kinds[i] || null : null;
   };
 
-  // The map: the choices KURA has made on this floor, as a path climbing the panel. Her room is on the second
+  // The map: the choices KURA has made on this floor, as a path climbing the panel. Her room is on the middle
   // row; the rooms behind her run down from it, each one step left or right of the next (the door she took);
-  // the doors ahead of her sit on the top row.
+  // the doors ahead of her sit on the top row, with a row between for the mark of which way she is turned.
   //   [@] KURA   [^] where she came down   [ ] a room behind her
   //   #  a locked door   x  a door sealed for good   '  a door standing open
   // state: { at: room index, facing: the wall she faces (N ahead, S behind, W left, E right), or null }
   function minimap(floor, state) {
     const W = 29, H = 5, rows = Array.from({ length: H }, () => Array(W).fill(" "));
     const put = (r, c, s) => [...s].forEach((ch, k) => { if (r >= 0 && r < H && c + k >= 0 && c + k < W) rows[r][c + k] = ch; });
-    const STEP = { L: -2, R: 2, C: 0 }, mid = 14;
+    const STEP = { L: -2, R: 2, C: 0 }, mid = 14, ME = 2;      // ME: the row her own room sits on, the middle one; the doors ahead are on the top row
     const here = floor.rooms[state.at];
     // The doors ahead, on the top row: left and right of her, or straight ahead for a lone door.
     for (const side of Object.keys(here.doors)) {
@@ -134,7 +134,7 @@
     }
     // Her room, then back down the way she came. Beside each room, the door she did not take.
     let i = state.at, col = mid;
-    for (let row = 1; row < H && i !== undefined; row++) {
+    for (let row = ME; row < H && i !== undefined; row++) {
       const room = floor.rooms[i];
       put(row, col - 1, "[" + (i === state.at ? "@" : i === floor.start ? "^" : " ") + "]");
       if (room.from === undefined) break;
@@ -145,8 +145,8 @@
     // Which way she is turned, on the map's own terms (up is ahead): ^ above her, v below, or < > in place of
     // the bracket on that side. A door's own mark stays on top of it. Nothing while she looks up or down.
     const f = state.facing, edge = (r, c, ch) => { if (!"#x'".includes(rows[r][c])) put(r, c, ch); };
-    if (f === here.ahead) edge(0, mid, "^"); else if (f === "S") edge(2, mid, "v");
-    else if (f === "W") put(1, mid - 1, "<"); else if (f === "E") put(1, mid + 1, ">");
+    if (f === here.ahead) edge(ME - 1, mid, "^"); else if (f === "S") edge(ME + 1, mid, "v");
+    else if (f === "W") put(ME, mid - 1, "<"); else if (f === "E") put(ME, mid + 1, ">");
     return rows.map(r => r.join("").replace(/\s+$/, ""));
   }
 

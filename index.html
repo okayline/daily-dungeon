@@ -167,8 +167,9 @@
           .replace("[ &gt; ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="right">[ &gt; ]</span>`)
           // [^] looks up at the sky; again, down at the floor; again, level.
           .replace("[ ^ ]", `<span class="btn${save && save.encounter ? " off" : ""}" data-act="do">[ <span class="caret2">^</span> ]</span>`)
-          .replace(/\[ (UP|DOWN|AHEAD) \]/, m => `<span class="btn${save && save.encounter ? " off" : ""}" data-act="look">${m}</span>`)
-          .replace(/(data-act="left">[^<]*<\/span> )([A-Z ]{9})( <span)/, (m, a, w, c) => a + w.replace(/[A-Z]+/, x => `<span class="btn facing" data-act="do">${x}</span>`) + c);
+
+          .replace(/(<\/span>)(\s+)([NESWUD?])(\s+)(<span)/, '$1$2<span class="facing">$3</span>$4$5')
+;
         // The moon strip (row 21, right panel): each block glyph boxed to one cell, like the moon icon.
         const tail = esc(line.slice(48)).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`);
         return left + tail;
@@ -180,8 +181,8 @@
         const b = (txt, act, ok) => `<span class="btn${ok && !fight ? "" : " off"}" data-act="${act}">${txt}</span>`;
         const open = Object.keys(can.doors || {}).find(k => can.doors[k].state === "open");
         const ok = k => !!(can.doors[k] && can.doors[k].can);
-        return esc(line.slice(0, 48)).replace("[ &lt; LEFT ]", b("[ &lt; LEFT ]", "go-L", ok("L"))).replace("[ RIGHT &gt; ]", b("[ RIGHT &gt; ]", "go-R", ok("R")))
-          .replace("[ ENTER ]", b("[ ENTER ]", "go-" + open, true)).replace("[ OPEN ]", b("[ OPEN ]", "go-C", ok("C"))).replace("[ DESCEND ]", b("[ DESCEND ]", "go-D", true));
+        return esc(line.slice(0, 48)).replace(/\b(LISTEN|OPEN|ENTER|SEARCH|USE|OFFER|CONSULT|DESCEND)\b/, w => b(w, "do", true))   // the word for what [ ^ ] does
+          .replace("[ &lt; LEFT ]", b("[ &lt; LEFT ]", "go-L", ok("L"))).replace("[ RIGHT &gt; ]", b("[ RIGHT &gt; ]", "go-R", ok("R")));
       })() + esc(line.slice(48)).replace(/\./, `<span class="cell" style="position:relative;left:${[2, 6].includes(SMT.moonIndex(SMT.now())) ? ".65ch" : ".15ch"}">.</span>`);
       // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
       const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);
@@ -210,6 +211,7 @@
           .replace("[T]ALK", '<span class="btn" data-act="talk">[T]ALK</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace("[S]EARCH", b("[S]EARCH", "search", can.search))
+          .replace(/LOOK_\[U\]P|LOOK_\[D\]OWN/, m => b(m, "look", !!save && !save.encounter && !save.dead))
           .replace(/\[([NSEW])\](ORTH|OUTH|AST|EST)/g, (m, x) =>
             b(m, "go-" + x, can[x]).replace('class="btn', 'class="btn' + (armed === x ? " armed" : save && save.encounter && can[x] ? " flee" : "")));
       }
@@ -663,9 +665,11 @@
         `${(save.log || "").replace(/^> (Day \d+\. )?/, "")}\n\n` +
         RULES.summary(save).map(([k, v]) => "  " + (k + " ").padEnd(15, ".") + " " + v).join("\n") +
         "\n\n" : "";
+      // THE PATH: the whole run as the choices made, floor by floor (the long view; see RULES.pathView).
+      let path = ""; try { const pv = save ? RULES.pathView(save) : []; if (pv.length) path = pv.join("\n") + "\n\n"; } catch (e) { console.error(e); }
       // The CODEX opens from here: a button at the top of the log.
       const pre = box.querySelector("pre");
-      logText = "DAILY DIGITAL DEMON DUNGEON " + SMT.VERSION + "  -  " + hstDate() + "\n\n" + end + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
+      logText = "DAILY DIGITAL DEMON DUNGEON " + SMT.VERSION + "  -  " + hstDate() + "\n\n" + end + path + "ADVENTURE LOG  (" + h.length + " entries)   D = day, T = turn\n\n" +
         // Newest first, but each action keeps its follow-up lines underneath it.
         (h.length ? h.reduce((g, l) => (/^ /.test(l) && g.length ? g[g.length - 1].push(l) : g.push([l]), g), [])
           .reverse().map(g => g.join("\n")).join("\n") : "Nothing yet.") + (save && save.dead ? "\n\n[R]ESET begins a new run." : "");
@@ -792,6 +796,7 @@
       if (save.bankedOmen !== undefined && !save.useBanked) holdBtn = { label: "Release Omen", action: "release" };
       else if (av.hold) holdBtn = { label: "Hold Omen", action: "hold" };
       else if (av.omenCoolingDown) holdBtn = { label: `Hold Omen (${av.omenCooldownDays}d)`, action: "hold", cooling: true };
+      else if (!save.dead) holdBtn = { label: "Hold Omen", action: "hold", cooling: true };   // today's charge is spent (or a demon is here): still shown, greyed, so the button never vanishes
     }
     invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
@@ -864,9 +869,9 @@
       ...(cx ? ["CODEX", two("Demons", count(cx.demons), "Items", count(cx.items)), ""] : []),
       "KEYS",
       "  [^] / up arrow ..... act on what KURA faces: search it, consult the moon, enter, descend",
-      "  [ UP ] / [U] ....... look up at the sky; again, down; again, ahead (down arrow: look down)",
+      "  LOOK_[U]P .......... look up at the sky; again (or [D]), down at the floor; again, level",
       "  [ < ] [ > ] / arrows ... turn (free)",
-      "  [A] [D] ............ the left door, the right door (asks first: it takes the day's charge)",
+      "  [Q] [E] ............ the left door, the right door (asks first: it takes the day's charge)",
       "  [ENTER] / [W] ...... through an open door, or down found stairs",
       "  + .................. a door that wants a charge",
       "  x .................. a sealed door: the one not taken, or the one behind you",
@@ -1096,7 +1101,7 @@
   let queuedNotice = null;
   let doneAt = 0;
   function closeFound() {
-    if (document.getElementById("found").dataset.mode === "done" && doneReveal) { doneReveal(); return; }   // still unfolding: the first press shows the rest, the next one closes
+    if (document.getElementById("found").dataset.mode === "done" && doneTimer) return;   // still unfolding: nothing skips it, and it only closes from its [ OK ]
     if (document.getElementById("found").dataset.mode === "done" && Date.now() - doneAt < 900) return;   // the victory screen can't be dismissed by the click that brought it up
     document.getElementById("found").hidden = true;
     if (blockedRun) { blockedRun = false; encounterBox(true); return; }
@@ -1515,7 +1520,7 @@
     if (mode === "confirm") return;                  // only its YES / NO buttons (or the keys): a stray click is not an answer
     const b = e.target.closest("[data-fact]");
     if (b) act(b.dataset.fact);
-    else if (mode === "found" || mode === "done") { if (mode === "done" && doneReveal) doneReveal(); else if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
+    else if (mode === "found" || mode === "done") { if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
     else if (mode === "altar" && save.altar && save.altar.script && !save.altar.result && save.altar.page < save.altar.script.length - 1) act("altar-next");   // a click brings the terminal's next line
     else if (mode === "altar" || mode === "encounter") return;                   // their own buttons only
     else if (e.target.closest(".btn")) closeFound();   // any other box: only its [ OK ]
@@ -1633,7 +1638,7 @@
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
       s: "search", g: "altar", u: "look", arrowup: "do", arrowdown: "lookdown", arrowleft: "left", arrowright: "right",
-      a: "go-L", d: "go-R", w: "enter", enter: "enter" }[key];
+      d: "lookdown", q: "go-L", e: "go-R", w: "enter", enter: "enter" }[key];
     if (key === "x") { e.preventDefault(); return act(e.shiftKey ? "next" : "freesteps"); }   // testing cheats: X toggles infinite steps, Shift+X jumps a day
     if (k) { e.preventDefault(); act(k); }
   });

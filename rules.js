@@ -1112,6 +1112,7 @@
     if (toStairs) {
       // Bonus days: the next floor belongs to next week, so going down early banks the rest of this one.
       const deadline = sundayOf(clock(st)) + 7;
+      (st.path = st.path || []).push({ f: st.floor, a: d.arrived, e: d.deadline, left: clock(st), rooms: floorPath(d) });   // the floor she is leaving, for THE PATH
       arrive(st, floorNum(st) + 1, deadline);
       st.log = `> KURA takes the stairs and descends to ${st.floor}.`;
       st.extra = floorArrivalLine(st);   // line 3 is flavor only: the deadline already shows on the status line
@@ -1505,7 +1506,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events"]) delete st[k];
+      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events", "path"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
@@ -1764,8 +1765,8 @@
       e.hp = Math.max(0, e.hp - total);
       lines.push(`The party strikes. -${total}`);
       st.log = `> KURA's party fights ${the(e.name)}.`;
-      if (e.hp <= 0) { win(st, lines); lean(st, "kill", lines); } else lean(st, "fight", lines);
-      wearTension(st, DISSONANCE_FIGHT);   // fighting wears on a tense party on top of anything else
+      // A fight fought to the end wears on a tense party: once, when the demon falls, not every round.
+      if (e.hp <= 0) { win(st, lines); lean(st, "kill", lines); wearTension(st, DISSONANCE_FIGHT); } else lean(st, "fight", lines);
     }, "> Nothing here to fight.", true);
   }
   // TALK: the demon may listen and leave (sometimes with a gift), ask a price, or take offense.
@@ -1810,10 +1811,11 @@
     for (const q of st.party) if (q !== p && q.hp > 0) worst = Math.max(worst, alignGap(mine, memberAlign(st, q)));
     return worst;
   }
-  // Tuning (exact amounts still TBD, per the design doc): bigger for an opposite pair than a
-  // neutral-adjacent one. Note the skip-day wear currently loses to the nightly +3 regen even at the
-  // worst gap -- faithful to the mechanism, not yet balanced to actually erode an unmanaged party.
-  const DISSONANCE_FIGHT = { 1: 1, 2: 2 };
+  // Tuning (exact amounts still TBD): only an opposite pair (LAW beside CHAOS, gap 2) wears at all. A gap of 1
+  // (anyone beside a NEUTRAL) costs nothing, so NEUTRAL is the bridge, and the starting party -- two CHAOS, one
+  // NEUTRAL, and a KURA who starts NEUTRAL -- is at peace until KURA herself turns LAW or a LAW demon joins.
+  // Each source is 1 point against a night's +3, so tension alone erodes a party only if it is fed every day.
+  const DISSONANCE_FIGHT = { 1: 0, 2: 1 };
   const DISSONANCE_SKIP = { 1: 0, 2: 1 };
   const DISSONANCE_LINGER = { 1: 0, 2: 1 };
   function wearTension(st, table) {
@@ -2848,6 +2850,59 @@
     ];
   }
 
+  // THE PATH: every floor of the run as the choices made on it, for the long view at the top of the log.
+  // A floor is kept as its rooms in order, each { s: the side of the door taken to reach it (absent for the first),
+  // k: its kind (absent for the first) }: a few dozen bytes a floor, so the whole run is kept, however long.
+  // The floor she is on is read live from the dungeon; a floor is written to st.path as she takes its stairs.
+  function floorPath(d) {
+    const rooms = []; let i = d.at;
+    while (i !== undefined) { const r = d.floor.rooms[i], o = {}; if (r.side) o.s = r.side; if (r.kind) o.k = r.kind; rooms.unshift(o); i = r.from; }
+    return rooms;
+  }
+  // One mark a kind, by what the room is like (the same senses the door hints use), never by its name.
+  const PATH_MARK = { den: '"', bay: "~", relay: ":", vault: "$", forge: "*", altar: "&", archive: "=", void: "%" };
+  const PATH_SENSE = { den: "warm", bay: "quiet", relay: "signal", vault: "cold", forge: "ash", altar: "glow", archive: "lights", void: "bare" };
+  function pathView(st) {
+    const d = st.dungeon; if (!d) return [];
+    const floors = (st.path || []).concat([{ f: st.floor, a: d.arrived, e: d.deadline, rooms: floorPath(d), here: true, stairs: RS(d).found.includes("stairs") }]);
+    const COLW = 19, PER = 4, STEP = { L: -2, R: 2, C: 0 }, out = [], used = new Set();
+    const span = fl => fl.a === undefined ? "" : `${fmt(fl.a).slice(4)}-${fl.e !== undefined ? fmt(Math.min(fl.e, fl.left ?? fl.e)).slice(4).replace(/^[A-Z]+ /, m => m === fmt(fl.a).slice(4, 8) ? "" : m) : ""}`;
+    out.push("THE PATH" + `lunar month ${st.floorEpoch ?? epochNow()}`.padStart(PER * COLW - 8), "");
+    for (let b = 0; b < floors.length; b += PER) {
+      const block = floors.slice(b, b + PER), cols = block.map(fl => {
+        // Lay the floor out as a tree growing up its own little grid: the first room at the bottom, and at every
+        // room a fork (\ /): one arm to the next room, a step left or right, the other to an x, the door not taken.
+        const cells = []; let c = 0;
+        fl.rooms.forEach((r, n) => {
+          const from = c; c += STEP[r.s] || 0;
+          const last = n === fl.rooms.length - 1, mark = n === 0 ? "^" : last && fl.here ? "@" : last ? "v" : PATH_MARK[r.k] || " ";
+          if (n > 0 && !last && r.k) used.add(r.k);
+          cells.push({ row: 2 * n, c, room: mark });
+          if (r.s === "L" || r.s === "R") {
+            cells.push({ row: 2 * n, c: from - STEP[r.s], ch: "x" });                // where the other door would have led
+            cells.push({ row: 2 * n - 1, c: from - 1, ch: "\\" }, { row: 2 * n - 1, c: from + 1, ch: "/" });
+          } else if (r.s === "C") cells.push({ row: 2 * n - 1, c: from, ch: "|" });
+        });
+        const lo = Math.min(...cells.map(k => k.c - (k.room ? 1 : 0))), hi = Math.max(...cells.map(k => k.c + (k.room ? 1 : 0)));
+        const pad = Math.max(0, Math.floor((COLW - (hi - lo + 1)) / 2)) - lo;
+        const put = (line, x, ch) => { if (x >= 0 && x < COLW) line[x] = ch; };
+        return { fl, height: 2 * fl.rooms.length - 1, rows: n => { const line = Array(COLW).fill(" ");
+          for (const k of cells) if (k.row === n && !k.room) put(line, k.c + pad, k.ch);
+          for (const k of cells) if (k.row === n && k.room) { put(line, k.c + pad - 1, "["); put(line, k.c + pad, k.room); put(line, k.c + pad + 1, "]"); }
+          return line.join(""); } };
+      });
+      const center = (t, w) => { const l = Math.floor((w - t.length) / 2); return " ".repeat(Math.max(0, l)) + t + " ".repeat(Math.max(0, w - t.length - l)); };
+      if (b) out.push("");
+      out.push(cols.map(c => center(c.fl.f, COLW)).join("").replace(/\s+$/, ""));
+      out.push(cols.map(c => center(span(c.fl), COLW)).join("").replace(/\s+$/, ""), "");
+      for (let n = Math.max(...cols.map(c => c.height)) - 1; n >= 0; n--) out.push(cols.map(c => c.rows(n)).join("").replace(/\s+$/, ""));
+    }
+    const legend = Object.keys(PATH_MARK).filter(k => used.has(k)).map(k => `${PATH_MARK[k]} ${PATH_SENSE[k]}`);
+    out.push("", "[^] came down   [@] here   [v] went down   x the door not taken");
+    if (legend.length) out.push(legend.join("   "));
+    return out;
+  }
+
   // What the leaderboard gets: deepest floor, days survived, demons beaten, and the real turn count (never the on-screen one).
   const NAME_OK = /^[A-Za-z0-9 _.\-]{3,10}$/;
   function setName(st, name) {                             // the player's name, asked at the start of every run
@@ -2863,7 +2918,7 @@
   const score = st => { const k = st.stats || {}, pacts = st.pacts || [];
     return { run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: k.beaten || 0, turns: st.steps || 0, align: String(st.align || "NEUTRAL").toUpperCase(),
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0 } }; };
-  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, side) => !!st.dungeon && isLocked(st.dungeon, side), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
+  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, side) => !!st.dungeon && isLocked(st.dungeon, side), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS, pathView };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);
