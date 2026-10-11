@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.60 - Oct 10 2026, 20:30 HST
+
+- **Faction seasons.** Every finished run now nudges a month-long, server-side tally toward LAW or CHAOS, deeper runs counting for more. A NEUTRAL run doesn't get its own side — its point goes to whichever of LAW/CHAOS is currently behind, so one side can't run away with a season. Nothing visible in the game yet; this just lays the groundwork the title screen will read from.
+
 ## v0.59 - Oct 10 2026, 20:05 HST
 
 - **Dissonance.** Mixed-alignment parties wear on each other now — fighting, lingering too long in a dangerous room, and skipping a day all chip at a tense member's patience a little faster, worse the bigger the alignment gap between them. No new meter: it's the same patience number as always, just worn down from a second direction, with its own line when a member's at zero over the others rather than over talking.

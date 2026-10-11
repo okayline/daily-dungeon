@@ -2776,7 +2776,9 @@
     st = copy(st); st.playerName = name.toUpperCase(); delete st.needName;
     return st;
   }
-  const score = st => ({ run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: (st.stats || {}).beaten || 0, turns: st.steps || 0 });
+  // align travels with the score payload so the Worker can tally faction seasons off the run's final
+  // lean -- the game itself never talks to the counters table, it just reports what it already tracks.
+  const score = st => ({ run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: (st.stats || {}).beaten || 0, turns: st.steps || 0, align: String(st.align || "NEUTRAL").toUpperCase() });
   const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
