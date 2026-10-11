@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.73 - Rumors and Numbers - Oct 11 2026, 01:51 HST
+
+![v0.73](screenshots/v0.73.png)
+
+- **The title screen's feed has numbers in it now.** Running totals for this lunar month, from every run posted to the board: the last fall, runs ended, players seen, turns logged, pacts made and ended, items broken, and a few stranger ones. Nobody is named. A number only shows up once there's something to count.
+- **The two doors are a little wider.**
+- **The map shows which way you're turned**: an arrow ahead, behind, or at KURA's side.
+
 ## v0.72 - Left or Right - Oct 11 2026, 01:43 HST
 
 ![v0.72](screenshots/v0.72.png)
