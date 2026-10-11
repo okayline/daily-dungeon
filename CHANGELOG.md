@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.82 - The Key - Oct 11 2026, 05:34 HST
+
+![v0.82](screenshots/v0.82.png)
+
+Old words back, and some tidying.
+
+- **The day's key.** What opens your one new door each day is a key again, and doors unlock.
+- **The moon strip closes evenly** from both sides.
+- **A slow search says so.** In a worn room the log reads "KURA searches..." while she is at it. The screen no longer dims.
+- **The [?] page is tidier:** one line a key, everything lined up, and the map's marks in their own list.
+
 ## v0.81 - The Moon Closes - Oct 11 2026, 05:24 HST
 
 ![v0.81](screenshots/v0.81.png)
