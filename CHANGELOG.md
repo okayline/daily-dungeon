@@ -2,6 +2,15 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.92 - In Color - Oct 11 2026, 08:38 HST
+
+![v0.92](screenshots/v0.92.png)
+
+- **What a search turns up is colored by what it is:** grey for nothing much, silver for SILVER, blue for something rare, gold for the best of it, lavender for the moon's own.
+- **A search plays out on its own line:** three dots, then the result, a sentence at a time. No box to dismiss; the box for an actual find stays.
+- **Found money is SILVER,** and says so.
+- **The typed line** is a little quicker, and waits a moment between lines.
+
 ## v0.91.1 - A Slow Hand - Oct 11 2026, 08:16 HST
 
 ![v0.91](screenshots/v0.91.png)
