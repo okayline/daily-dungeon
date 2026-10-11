@@ -805,7 +805,7 @@
         if (w && w.clueKind) st.clue = pick(KIND_CLUE[w.clueKind]);
         return "A scrap of writing, pinned to the wall.";
       }
-      case "silver": { const n = R(20, 150) * (inArchive(st) ? 2 : 1); st.silver = silver + n; tally(st, "silverFound", n); return `Coins in the rubble. ${n} SILVER.`; }
+      case "silver": { const n = R(20, 150) * (inArchive(st) ? 2 : 1); st.silver = silver + n; tally(st, "silverFound", n); return `${n} SILVER, loose in the rubble.`; }
       case "item": { const it = inArchive(st) ? pick(names(Math.random() < 0.35 ? "RARE" : "UNCOMMON")) : rollItem(st); gain(st, it); return `KURA finds ${it}.`; }
       case "demon": {
         // A demon appears and stays until it's fought, talked down, or escaped (see the ENCOUNTER section).

@@ -79,6 +79,7 @@
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
   .logline.q-plain { color: var(--trail); }
+  .logline.q-silver { color: #cfd8e3; }     /* SILVER found: a cool, bright silver */
   .logline.q-rare { color: #6aa6e8; }
   .logline.q-mythic { color: var(--gold); }
   .logline.q-moon { color: var(--moon); }
@@ -289,9 +290,9 @@
         if (m) {
           whole = save.log; save.log = m[1]; top = "> " + m[2];
           // The result is always in a quality's color: grey for nothing or a common or uncommon thing, blue for a
-          // rare one, yellow for a mythic one, the moon's own for a moon thing. Coins are yellow.
+          // rare one, yellow for a mythic one, the moon's own for a moon thing. SILVER is silver.
           const it = (/^(?:KURA finds|A locker holds) (.+?)\.$/.exec(m[2]) || [])[1], tier = it ? RULES.tierOf(it) : null;
-          resultGold = /^Coins in the rubble|^Deep in the stone/.test(m[2]) || tier === "MYTHIC" ? "q-mythic" : tier === "RARE" ? "q-rare" : tier === "MOON" ? "q-moon" : "q-plain";
+          resultGold = /SILVER, loose in the rubble/.test(m[2]) ? "q-silver" : /^Deep in the stone/.test(m[2]) || tier === "MYTHIC" ? "q-mythic" : tier === "RARE" ? "q-rare" : tier === "MOON" ? "q-moon" : "q-plain";
         }
       }
       const html = colorize(SMT.renderScreen(save, top)); delete save.squeeze;
@@ -1123,7 +1124,7 @@
     const silver = (save.silver || 0) - (before.silver || 0);
     const lines = [];
     for (const it of newItems) lines.push({ text: it, tier: RULES.tierOf(it) });
-    if (silver > 0 && /Coins/.test(save.log)) lines.push(silver + " SILVER");
+    if (silver > 0 && /SILVER, loose in the rubble/.test(save.log)) lines.push(silver + " SILVER");
     if (/Stairs lead up/.test(save.log)) lines.push("the stairs up");
     const box = document.getElementById("found");
     const pre = box.querySelector("pre");
