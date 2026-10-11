@@ -1372,7 +1372,6 @@
     return true;
   }
 
-  let searchWait = null, searchGo = false;      // the pause before a search lands in a hot room
   function act(name) {
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
     // screen (resetBox() -> answerConfirm(true) -> act("reset")); that's the title's own exit into the game.
@@ -1386,18 +1385,6 @@
       if (save.encounter) return;                  // in a fight, running is the [R]UN button in the fight box
       if (save.look) name = "search"; else       // looking up, [^] asks the moon
       name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
-    }
-    // A hot room is slow to search: a pause that grows with the room's heat (none while it is calm, 2 seconds at
-    // the top). Nothing else can be done while she is at it. Nothing on the screen changes but the log line.
-    if (searchWait) return;
-    if (name === "search" && save && !save.encounter && !save.dead && !save.look && !searchGo) {
-      const h = save.heatNow || 0, ms = h < 5 ? 0 : Math.min(2000, Math.round((h - 4) / 20 * 2000));
-      if (ms) {
-        // The key press is confirmed on the log's middle line while she is at it; the result then takes its place.
-        const was = save.log; save.log = "> KURA searches..."; draw(); save.log = was;
-        searchWait = setTimeout(() => { searchWait = null; searchGo = true; try { act("search"); } finally { searchGo = false; } }, ms);
-        return;
-      }
     }
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
     if ((name === "qyes" || name === "qno" || name === "qsilent") && save) {
