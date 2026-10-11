@@ -194,9 +194,6 @@
           .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')
           .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>')
           .replace("[S]ILENT", '<span class="btn ask" data-act="qsilent">[S]ILENT</span>');
-        // A search result waiting to be read: a blinking _ after the log's middle line (in place of one of its spaces).
-        if (contWait && i === lines.length - 5) { const body = line.slice(1, -1), txt = body.replace(/\s+$/, "");
-          if (txt.length < body.length - 1) inner = esc(txt) + ' <span class="wait">_</span>' + " ".repeat(body.length - txt.length - 2); }
         return `|<span class="logline${gold ? " gold" : ""}">${inner}</span>|`;
       }
       if (i === lines.length - 2) {
@@ -1117,6 +1114,22 @@
     box.hidden = false;
     box.dataset.mode = "found";
   }
+  // A SEARCH RESULT: what the search (or the scrying) turned up, in the same small box a find uses, with [ OK ].
+  // Only when nothing else opened: a find, a fight and the terminal have boxes of their own.
+  function resultBox() {
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); };
+    const said = [save.log, save.look && /^> (Moonlight|The moon|KURA asks)/.test(save.extra || "") ? save.extra : null]   // (with the moon's answer, when she gave one)
+     .filter(Boolean).map(l => String(l).replace(/^> /, ""));
+    if (!said.length) return;
+    floatBox(box);
+    pre.innerHTML = "";
+    said.forEach((l, k) => { if (k) add(" "); for (const w of wrapText(l, 38)) add(w); });
+    add(" ");
+    add("[ OK ]", "btn");
+    box.hidden = false;
+    box.dataset.mode = "found";
+  }
   // An item breaks: a box says so, lists what fell out (if anything) and waits for [ OK ]. If something came to
   // see what broke, the fight box opens when the break box closes.
   let afterBreak = false;
@@ -1441,7 +1454,6 @@
   let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent
   let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
   const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
-  let contWait = false;                         // a search result is on screen, waiting for a click or a key
   let searchWait = null, searchGo = false;      // the moment a wall search takes before its result shows
   function act(name) {
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
@@ -1472,18 +1484,18 @@
         clearInterval(searchWait); searchWait = null; save.log = was;
         squeeze();
         searchGo = true; try { act("search"); } finally { searchGo = false; }
-        // The result waits on the log's middle line with a blinking _ until a click or a key (unless something opened over it).
-        if (save && !save.dead && !save.encounter && !save.question && document.getElementById("found").hidden) { contWait = true; draw(); }
+        // The result comes up in a small box over the view and waits for its [ OK ] (unless something else opened).
+        if (save && !save.dead && !save.encounter && !save.question && !(save.altar && save.altar.open) && document.getElementById("found").hidden) resultBox();
       }, 250 + (6 - Math.min(6, RULES.breath(save))) * 50);   // slower as she tires: a second in all at full breath, two on her last
       return;
     }
-    // Every other search is instant (out of breath, an open archway, a sealed door, scrying the moon), and waits
-    // with the same blinking _ once its line is up, unless it opened something (a terminal, a popup, a fight).
+    // Every other search is instant (scrying the moon, or being out of breath). A result gets the same box; being
+    // refused for want of breath only shows its line.
     if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.question) {
       const before = RULES.breath(save);
       searchGo = true; try { act("search"); } finally { searchGo = false; }
       if (save && (before < 1 || RULES.breath(save) < before)) squeeze();
-      if (save && !save.dead && !save.encounter && !save.question && !(save.altar && save.altar.open) && document.getElementById("found").hidden) { contWait = true; draw(); }
+      if (save && before >= 1 && !save.dead && !save.encounter && !save.question && !(save.altar && save.altar.open) && document.getElementById("found").hidden) resultBox();
       return;
     }
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
@@ -1637,11 +1649,8 @@
     else if (line) { codexSel = Number(line.dataset.i); showCodex(true); }
     else showCodex(false);     // [C]LOSE, Esc, or any other click on the page
   });
-  // A waiting search result is dismissed by any click or key, which does nothing else.
-  document.addEventListener("click", e => { if (contWait) { contWait = false; e.stopPropagation(); e.preventDefault(); draw(); } }, true);
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (contWait) { if (!/^(shift|tab|f\d+)$/.test(e.key.toLowerCase())) { e.preventDefault(); contWait = false; draw(); } return; }
     const key = e.key.toLowerCase();
     if (e.target && e.target.tagName === "INPUT") { if (key === "enter") { e.preventDefault(); confirmName(); } return; }   // typing the name
     if (!atTitle && needsName()) { const i = document.getElementById("playername"); if (i) i.focus(); if (key === "enter") confirmName(); return; }   // nothing else works until the run has a name
