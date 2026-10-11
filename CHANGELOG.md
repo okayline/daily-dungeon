@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.94 - The Name in Lights - Oct 11 2026, 09:15 HST
+
+![v0.94](screenshots/v0.94.png)
+
+- **A new title.** The game's name in block letters, across the whole screen.
+- **Under it,** the level's line of days on the left and the rumors on the right. The line's heading names the level, the moon and the lunar days: `B4F - New Moon - Lunar Days 1-8`.
+
 ## v0.93 - The Line of Days - Oct 11 2026, 08:57 HST
 
 ![v0.93](screenshots/v0.93.png)
