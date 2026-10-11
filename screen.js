@@ -318,7 +318,11 @@
     // The one "do the obvious thing" button, with its word inside the brackets: [ SEARCH ], [ CONSULT ], [ ENTER ].
     const actBtn = `[ ${st.actLabel ? String(st.actLabel).slice(0, 8) : "^"} ]`;
     overlay(VH - 2, 23 - Math.floor((actBtn.length - 1) / 2), actBtn);
-    for (const x of (!v.look && v.doors) || []) if (x.state === "locked" && x.side !== "C") overlay(VH - 3, x.side === "L" ? 9 : 27, x.side === "L" ? "[ < LEFT ]" : "[ RIGHT > ]");
+    for (const x of (!v.look && v.doors) || []) {
+      if (x.side === "C") continue;
+      if (x.state === "locked") overlay(VH - 3, x.side === "L" ? 9 : 27, x.side === "L" ? "[ < LEFT ]" : "[ RIGHT > ]");
+      else if (x.state === "open") overlay(VH - 3, x.side === "L" ? 9 : 28, "[ ENTER ]");      // the door she opened: its label becomes the way in
+    }
     const r = s => "|" + ljust(s, W - 2) + "|";
     const rc = s => "|" + center(s, W - 2) + "|";
     const S = headerLines(st.omenText, st.tz, now);
