@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.82";
+  const VERSION = "v0.83";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -360,10 +360,10 @@
     const PHASE = ["   ", "  ▓", " ▓█", "▓██", "███", "██▓", "█▓ ", "▓  "];
     // The dot sits over the middle of the lit part of today's cell (a half column right of the printed spot for the two quarters, which the page shifts).
     const DOT = [1, 2, 1, 1, 1, 1, 0, 0][idx];
-    // The strip closes in from both ends as the room heats (st.heatNow, 0 to 24): fully open when calm, shut at the top.
+    // The strip closes in from both ends as KURA runs out of breath (st.breathNow, 6 down to 0): open when rested, gone at 0.
     // It closes around the middle of what is drawn (columns 5 to 21 of the 24: the new-moon end is blank), so both
-    // sides shrink evenly: one column a side for every 2.7 heat or so, and nothing left at 24.
-    const bar = PHASE.join(""), shut = Math.max(0, Math.min(9, Math.round((st.heatNow || 0) / 24 * 9))), lo = 5 + shut, hi = 22 - shut;
+    // sides shrink evenly: a column and a half a side for each breath spent, and nothing left at 0.
+    const bar = PHASE.join(""), shut = Math.max(0, Math.min(9, Math.round((6 - (st.breathNow === undefined ? 6 : st.breathNow)) / 6 * 9))), lo = 5 + shut, hi = 22 - shut;
     const phaseV = " ".repeat(3 + 3 * idx + DOT) + ".", phaseRow = "   " + (shut ? " ".repeat(lo) + bar.slice(lo, Math.max(lo, hi)) + " ".repeat(24 - Math.max(lo, hi)) : bar);
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
       rule, money, mapHead, ...mp.map(m => " ".repeat(mapPad) + m), "", ...(mapRows === 4 ? [""] : []), rule, bottom];

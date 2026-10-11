@@ -868,7 +868,7 @@
         ["[H]", "Hold Omen, or Release Omen once one is banked"],
         ["[I]NVOKE", "the bag: 1-9 or arrows choose, Enter uses"],
         ["[R]UN in a fight", "run through a door (it may block you)"],
-        ["[S]EARCH", "search what KURA faces, as much as you like"],
+        ["[S]EARCH", "search what KURA faces (each takes a breath)"],
         ["[Y]ES  [N]O  [S]ILENT", "answer a question from the party or a demon"],
         ["1-8", "pick a gift when a demon asks for one"],
         ["[C]ODEX", "every demon and item found, over all runs"],
@@ -1640,6 +1640,12 @@
   // Live clock: redraw the moment the minute turns over (the colon blinks on its own),
   // and catch up with the real date so midnight brings the new day.
   let shownMinute = SMT.now().getMinutes();
+  // The moon strip opens again as KURA gets her breath back: redraw when the count changes.
+  setInterval(() => {
+    if (atTitle || !save || !save.dungeon || save.breathNow === undefined) return;
+    const n = RULES.breath(save);
+    if (n !== save.breathNow) { save.breathNow = n; draw(); }
+  }, 250);
   setInterval(() => {
     const m = SMT.now().getMinutes();
     if (m !== shownMinute) { shownMinute = m; if (!atTitle) tick(); draw(); }   // on the title, only the title redraws; the run waits for CONTINUE

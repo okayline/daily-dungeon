@@ -228,7 +228,6 @@
   function heatUp(st, amount) {
     const d = st.dungeon;
     const rs = RS(d), before = heatTier(rs.heat);
-    if (!(rs.heat > 0)) rs.heatAt = TIME.now().getTime();   // the room starts cooling from the moment it first warms
     rs.heat = Math.min(HEAT_MAX + 4, rs.heat + amount * omen(effectiveOmenDay(st)).fx.heat);
     const after = heatTier(rs.heat);
     st.stats = st.stats || {}; st.stats.maxHeat = Math.max(st.stats.maxHeat || 0, rs.heat);
@@ -330,7 +329,7 @@
   }
   // THE MOON. There is no ceiling: looking up ("U") is the open sky, with the real moon in it at her real phase.
   // SEARCHing the moon asks her. Once a night she may answer with what one of the still-locked doors hides (never
-  // which door): the fuller she is, the likelier, and a new moon never answers. Asking adds 2 heat.
+  // which door): the fuller she is, the likelier, and a new moon never answers. Asking costs a breath, and no heat.
   const MOON_SEEN = ["No moon tonight.", "A thin moon, just begun.", "Half a moon, waxing.", "A swelling moon, nearly full.", "The full moon, wide open.",
     "A heavy moon, just past full.", "Half a moon, waning.", "A thin moon, almost gone."];
   const MOON_ANSWER = [0, 0.15, 0.5, 0.85, 1, 0.85, 0.5, 0.15];
@@ -346,7 +345,7 @@
     if (m === 0) { st.log = "> " + pick(["KURA searches the sky. No moon tonight. No one to ask.", "KURA searches the sky. Only the dark, a long way up."]); return show(st); }
     if (st.moonDay === st.day) { st.log = "> " + pick(["The moon has said what she will tonight.", "KURA looks to the moon again. She has nothing more tonight."]); return show(st); }
     st.moonDay = st.day;
-    heatUp(st, 2);                                       // asking is no longer free: it stirs the room a little
+    spendBreath(st);
     tally(st, "moonAsked");
     st.log = "> KURA searches the moon.";
     // The doors still locked in this room; failing that, any still locked on the level she has seen.
@@ -526,7 +525,7 @@
     if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; st.extraUrgent = true; } // a heat tell takes line 3 right away (not over a question)
     RS(d);                                              // (converts an old save's room arrays)
     st.roomName = roomName(d, d.at);
-    st.heatNow = RS(d).heat || 0;                       // for the moon strip under the map, which closes as the room heats
+    st.breathNow = breathNow(st, true);                  // for the moon strip under the map, which closes as she tires
     if (st.look && !st.dead) st.roomName = moon() === 0 ? "THE SKY" : "THE MOON";   // looking up, the slot under the map names what she sees
     st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.facing, visited: allRooms(d).map(s => s.visited), found: allRooms(d).map(s => s.found) });
     const door = dir => doorWall(room, dir);
@@ -625,22 +624,22 @@
   }
   const STANDBY_LINES = ["> KURA kept still all day. The party sleeps deeper tonight.", "> A quiet day. Everyone wakes lighter.",
     "> Nothing moved, and nothing was lost. The room feels kinder.", "> The long stillness did its work."];
-  // A ROOM COOLS IN REAL TIME: one point of heat a minute, whether or not the game is open (rs.heatAt is when
-  // it last lost a point). The overnight halving in sync still applies on top.
-  const COOL_MS = 60000;
-  function cool(st) {
-    if (!st.dungeon) return;
-    const now = TIME.now().getTime();
-    for (const rs of allRooms(st.dungeon)) {
-      if (!rs) continue;
-      if (!(rs.heat > 0)) { delete rs.heatAt; continue; }
-      if (!rs.heatAt || rs.heatAt > now) rs.heatAt = now;
-      const m = Math.floor((now - rs.heatAt) / COOL_MS);
-      if (m > 0) { rs.heat = Math.max(0, rs.heat - m); rs.heatAt += m * COOL_MS; }
-    }
+  // BREATH. KURA's own tiredness: six breaths, one spent by every search (and by asking the moon). Out of breath,
+  // she can't search. It comes back by itself in real time, starting 2 seconds after the last one spent, and the
+  // lower it has run the slower it returns: BREATH_BACK[n] is the seconds to climb from n to n + 1, so a small dip
+  // is back in a couple of seconds and an empty bar takes about half a minute. It follows her from room to room.
+  // st.breath = { n, at }: n breaths as of the instant `at` (ms), which is when the next one starts coming back.
+  const BREATH_MAX = 6, BREATH_BACK = [10, 8, 6, 4, 3, 2], BREATH_WAIT = 2000;
+  function breathNow(st, write) {
+    const b = st.breath, now = TIME.now().getTime();
+    if (!b || !(b.n < BREATH_MAX)) return BREATH_MAX;
+    let n = Math.max(0, b.n), at = Math.min(b.at, now + BREATH_WAIT);     // (a clock that jumped back never strands her)
+    while (n < BREATH_MAX && now - at >= BREATH_BACK[n] * 1000) { at += BREATH_BACK[n] * 1000; n++; }
+    if (write) { if (n >= BREATH_MAX) delete st.breath; else st.breath = { n, at }; }
+    return n;
   }
+  function spendBreath(st) { const n = breathNow(st, true); st.breath = { n: n - 1, at: TIME.now().getTime() + BREATH_WAIT }; }
   function sync(st) {
-    cool(st);
     snapBack(st);
     const t = clock(st);
     if (rawClock(st) < t && !st.rewindNoted) { st.extra = "> The calendar won't turn back."; st.rewindNoted = true; }
@@ -936,7 +935,9 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
+    if (breathNow(st, true) < 1) { st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
     if (st.look === "U") return askMoon(st);              // looking up, SEARCH asks the moon
+    spendBreath(st);
     const d = st.dungeon, room = d.floor.rooms[d.at], found = RS(d).found, dir = st.facing;
     // A door can't be searched, but a locked one can be listened at (see KIND_HINT); a false one gives itself away.
     // Costs nothing, and never says the same thing twice in a row.
@@ -1522,7 +1523,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events", "path", "height", "climb"]) delete st[k];
+      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events", "path", "height", "climb", "breath"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
@@ -2883,7 +2884,7 @@
   const score = st => { const k = st.stats || {}, pacts = st.pacts || [];
     return { run: st.runId || "", floor: floorNum(st), days: st.day || 1, demons: k.beaten || 0, turns: st.steps || 0, align: String(st.align || "NEUTRAL").toUpperCase(),
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0 } }; };
-  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
+  const api = { setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);
