@@ -450,7 +450,11 @@
     // Each quarter is named for the moon it opens with: the new moon, the first quarter (half, waxing), the full
     // moon, the last quarter (half, waning).
     const level = `B${4 - q}F`, name = ["New Moon", "First Quarter", "Full Moon", "Last Quarter"][q];
-    return [center(`${level} - ${name} - Lunar Days ${first}-${last}`, VW), "", ...g.map(r => r.join("").replace(/\s+$/, ""))];
+    // The drawing first, its heading underneath. (Blank rows at the foot of the drawing are dropped, so the
+    // heading sits one row below the lowest branch.)
+    const rows = g.map(r => r.join("").replace(/\s+$/, ""));
+    while (rows.length > y0 + 1 && !rows[rows.length - 1]) rows.pop();
+    return [...rows, "", center(`${level} - ${name} - Lunar Days ${first}-${last}`, VW)];
   }
   function renderTitle(opts) {
     opts = opts || {};
