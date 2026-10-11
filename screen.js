@@ -316,7 +316,9 @@
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };
     overlay(VH - 1, 16, `[ < ]  ${st.look || st.facing || "?"}  [ > ]`);
     // The one "do the obvious thing" button, with its word inside the brackets: [ SEARCH ], [ CONSULT ], [ ENTER ].
-    const actBtn = `[ ${st.actLabel ? String(st.actLabel).slice(0, 8) : "^"} ]`;
+    // While one of the two doors stands open, [ ENTER ] sits under that door, so this one goes back to a plain [ ^ ].
+    const openSide = !v.look && (v.doors || []).some(x => x.state === "open" && x.side !== "C");
+    const actBtn = `[ ${st.actLabel && !openSide ? String(st.actLabel).slice(0, 8) : "^"} ]`;
     overlay(VH - 2, 23 - Math.floor((actBtn.length - 1) / 2), actBtn);
     for (const x of (!v.look && v.doors) || []) {
       if (x.side === "C") continue;
