@@ -447,8 +447,10 @@
     // The line itself: dashes between the day numbers, with a space either side of each number.
     const lab = g[y0].map(c => c !== " ");
     for (let x = x0 - 4; x <= x0 + gap * (days - 1) + 4; x++) if (x >= 1 && x < VW - 1 && !lab[x] && !lab[x - 1] && !lab[x + 1]) g[y0][x] = "-";
-    const level = `B${4 - q}F`, name = ["first", "second", "third", "last"][q];
-    return [center(`${level}  -  the moon's ${name} quarter`, VW), "", ...g.map(r => r.join("").replace(/\s+$/, ""))];
+    // Each quarter is named for the moon it opens with: the new moon, the first quarter (half, waxing), the full
+    // moon, the last quarter (half, waning).
+    const level = `B${4 - q}F`, name = ["new moon", "first quarter", "full moon", "last quarter"][q];
+    return [center(`${level}  -  ${name}  -  days ${first}-${last}`, VW), "", ...g.map(r => r.join("").replace(/\s+$/, ""))];
   }
   function renderTitle(opts) {
     opts = opts || {};

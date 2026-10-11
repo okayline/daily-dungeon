@@ -505,7 +505,7 @@
     try {
       const now = SMT.now(), Q = SMT.quarterOf(now), tz = SMT.zone(), days = d => Math.max(0, SMT.localDay(d, tz) - SMT.localDay(now, tz)), s = k => (k === 1 ? "" : "s");   // whole calendar days, as the LEVEL line counts them
       const left = days(Q.end);
-      cards.push(`The moon is in her ${["first", "second", "third", "last"][Q.q]} quarter. ${left ? `The next in ${left} day${s(left)}.` : "The next comes tonight."}`);
+      cards.push(`${["The new moon's week", "The first quarter's week", "The full moon's week", "The last quarter's week"][Q.q]}. ${left ? `The next in ${left} day${s(left)}.` : "The next comes tonight."}`);
       cards.push(left ? `The dark takes B${4 - Q.q}F in ${left} day${s(left)}.` : `The dark takes B${4 - Q.q}F tonight.`);
       let m = Q.n; while (SMT.quarter(m).q !== 1) m++;
       const full = days(SMT.quarter(m).end);
