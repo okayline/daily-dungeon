@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.62.2 - A Shorter Sentence - Oct 11 2026, 00:22 HST
+
+![v0.62.2](screenshots/v0.62.2.png)
+
+- **One door description ran off the edge of its line** and lost its last few letters. It's shorter now.
+
 ## v0.62.1 - Loose Threads - Oct 11 2026, 00:04 HST
 
 ![v0.62.1](screenshots/v0.62.1.png)
