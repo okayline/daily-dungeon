@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v0.85";
+  const VERSION = "v0.86";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -364,7 +364,9 @@
     // It closes around the middle of what is drawn (columns 5 to 21 of the 24: the new-moon end is blank), so both
     // sides shrink evenly: a column and a half a side for each breath spent, and nothing left at 0.
     const bar = PHASE.join(""), shut = Math.max(0, Math.min(9, Math.round((6 - (st.breathNow === undefined ? 6 : st.breathNow)) / 6 * 9))), lo = 5 + shut, hi = 22 - shut;
-    const phaseV = " ".repeat(3 + 3 * idx + DOT) + ".", phaseRow = "   " + (shut ? " ".repeat(lo) + bar.slice(lo, Math.max(lo, hi)) + " ".repeat(24 - Math.max(lo, hi)) : bar);
+    const phaseV = " ".repeat(3 + 3 * idx + DOT) + ".", top = Math.max(lo, hi);
+    // While it is closed in at all, a > and a < press on what is left of it from either side.
+    const phaseRow = "   " + (shut ? " ".repeat(lo - 1) + ">" + bar.slice(lo, top) + "<" + " ".repeat(24 - top - 1) : bar);
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
       rule, money, mapHead, ...mp.map(m => " ".repeat(mapPad) + m), "", ...(mapRows === 4 ? [""] : []), rule, bottom];
     stat.splice(stat.length - 3, 3, phaseV, phaseRow, bottom);

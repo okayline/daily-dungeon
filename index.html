@@ -192,6 +192,9 @@
           .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')
           .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>')
           .replace("[S]ILENT", '<span class="btn ask" data-act="qsilent">[S]ILENT</span>');
+        // A search result waiting to be read: a blinking _ after the log's middle line (in place of one of its spaces).
+        if (contWait && i === lines.length - 5) { const body = line.slice(1, -1), txt = body.replace(/\s+$/, "");
+          if (txt.length < body.length - 1) inner = esc(txt) + ' <span class="wait">_</span>' + " ".repeat(body.length - txt.length - 2); }
         return `|<span class="logline${gold ? " gold" : ""}">${inner}</span>|`;
       }
       if (i === lines.length - 2) {
@@ -1421,6 +1424,7 @@
     return true;
   }
 
+  let contWait = false;                         // a search result is on screen, waiting for a click or a key
   let searchWait = null, searchGo = false;      // the moment a wall search takes before its result shows
   function act(name) {
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
@@ -1450,6 +1454,8 @@
         if (++dots <= 3) return paint();
         clearInterval(searchWait); searchWait = null; save.log = was;
         searchGo = true; try { act("search"); } finally { searchGo = false; }
+        // The result waits on the log's middle line with a blinking _ until a click or a key (unless something opened over it).
+        if (save && !save.dead && !save.encounter && !save.question && document.getElementById("found").hidden) { contWait = true; draw(); }
       }, 250 + (6 - Math.min(6, RULES.breath(save))) * 50);   // slower as she tires: a second in all at full breath, two on her last
       return;
     }
@@ -1604,8 +1610,11 @@
     else if (line) { codexSel = Number(line.dataset.i); showCodex(true); }
     else showCodex(false);     // [C]LOSE, Esc, or any other click on the page
   });
+  // A waiting search result is dismissed by any click or key, which does nothing else.
+  document.addEventListener("click", e => { if (contWait) { contWait = false; e.stopPropagation(); e.preventDefault(); draw(); } }, true);
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (contWait) { if (!/^(shift|tab|f\d+)$/.test(e.key.toLowerCase())) { e.preventDefault(); contWait = false; draw(); } return; }
     const key = e.key.toLowerCase();
     if (e.target && e.target.tagName === "INPUT") { if (key === "enter") { e.preventDefault(); confirmName(); } return; }   // typing the name
     if (!atTitle && needsName()) { const i = document.getElementById("playername"); if (i) i.focus(); if (key === "enter") confirmName(); return; }   // nothing else works until the run has a name
