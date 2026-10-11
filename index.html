@@ -1457,7 +1457,7 @@
   let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent
   let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
   const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
-  let searchWait = null, searchGo = false;      // the moment a wall search takes before its result shows
+  let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   function act(name) {
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
     // screen (resetBox() -> answerConfirm(true) -> act("reset")); that's the title's own exit into the game.
@@ -1473,27 +1473,9 @@
       if (save.look) name = "search"; else       // looking up, [^] asks the moon
       name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
     }
-    // Searching a bare wall, or listening at a locked door, takes a moment: "KURA is searching" (or "listening"),
-    // a dot at a time, then the result. Nothing else can be pressed meanwhile. Only the log line changes: no
-    // dimming or other visual effect, ever. (Every wall and every door, open or shut. Not looking up, and not when she is out of breath.)
-    if (searchWait) return;
-    if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.look && !save.question
-        && RULES.breath(save) >= 1) {
-      const was = save.log, doing = RULES.available(save).locked[save.facing] ? "listening" : "searching"; let dots = 0;
-      const paint = () => { save.log = `> KURA is ${doing}` + " .".repeat(dots); draw(); };
-      paint();
-      searchWait = setInterval(() => {
-        if (++dots <= 3) return paint();
-        clearInterval(searchWait); searchWait = null; save.log = was;
-        squeeze();
-        searchGo = true; try { act("search"); } finally { searchGo = false; }
-        // The result comes up in a small box over the view and waits for its [ OK ] (unless something else opened).
-        if (save && !save.dead && !save.encounter && !save.question && !(save.altar && save.altar.open) && document.getElementById("found").hidden) resultBox();
-      }, 250 + (6 - Math.min(6, RULES.breath(save))) * 50);   // slower as she tires: a second in all at full breath, two on her last
-      return;
-    }
-    // Every other search is instant (scrying the moon, or being out of breath). A result gets the same box; being
-    // refused for want of breath only shows its line.
+    // (The "KURA is searching . . ." moment before a result was taken out in v0.88.2, at the dev's request "for now".)
+    // A search lands at once. Its result comes up in a small box with [ OK ] (unless something else opened: a find,
+    // a fight, the terminal); being refused for want of breath only shows its line.
     if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.question) {
       const before = RULES.breath(save);
       searchGo = true; try { act("search"); } finally { searchGo = false; }
@@ -1757,13 +1739,13 @@
   let shownMinute = SMT.now().getMinutes();
   // The moon strip opens again as KURA gets her breath back: redraw when the count changes.
   setInterval(() => {
-    if (atTitle || searchWait || !save || !save.dungeon || save.breathNow === undefined) return;
+    if (atTitle || !save || !save.dungeon || save.breathNow === undefined) return;
     const n = RULES.breath(save);
     if (n !== save.breathNow) { save.breathNow = n; draw(); }
   }, 250);
   setInterval(() => {
     const m = SMT.now().getMinutes();
-    if (m !== shownMinute && !searchWait) { shownMinute = m; if (!atTitle) tick(); draw(); }   // on the title, only the title redraws; the run waits for CONTINUE
+    if (m !== shownMinute) { shownMinute = m; if (!atTitle) tick(); draw(); }   // on the title, only the title redraws; the run waits for CONTINUE
   }, 1000);
 </script>
 </body>
