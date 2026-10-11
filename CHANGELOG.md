@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.86 - Wait For It - Oct 11 2026, 07:03 HST
+
+![v0.86](screenshots/v0.86.png)
+
+- **A search result waits for you.** It stays on the log with a blinking `_` until you click or press a key. So does being out of breath.
+- **The breath bar gets pressed.** A `>` and a `<` close on it for a second each time a search takes a breath.
+
 ## v0.85 - Word From Elsewhere - Oct 11 2026, 06:47 HST
 
 ![v0.85](screenshots/v0.85.png)
