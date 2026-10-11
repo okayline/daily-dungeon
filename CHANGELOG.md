@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.89 - The Ticker - Oct 11 2026, 07:50 HST
+
+![v0.89](screenshots/v0.89.png)
+
+- **A ticker runs along the bottom of the log,** right to left: how your own run stands, and word from everyone else.
+- **The flavor line moved to the top,** where the quotes are. What you just did stays in the middle.
+- **Searches are instant again.** The "searching . . ." wait is gone.
+
 ## v0.88.1 - Plain Boxes - Oct 11 2026, 07:39 HST
 
 ![v0.88](screenshots/v0.88.png)
