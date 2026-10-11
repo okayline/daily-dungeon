@@ -79,11 +79,11 @@
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
   /* A search result's color, by what it turned up. No glow on any of them. */
-  .logline.q-plain { color: var(--trail); }   /* nothing, or a common or uncommon thing: grey */
-  .logline.q-silver { color: #d6e8ff; }       /* SILVER: cooler and brighter than the log's own off-white */
-  .logline.q-rare { color: #6aa6e8; }         /* rare: blue */
-  .logline.q-mythic { color: #f5c542; }       /* mythic, and the deep find: a bright gold */
-  .logline.q-moon { color: #c9b6ff; }         /* a moon thing: lavender */
+  .q-plain { color: var(--trail); }   /* nothing, or a common or uncommon thing: grey */
+  .q-silver { color: #d6e8ff; }       /* SILVER: cooler and brighter than the log's own off-white */
+  .q-rare { color: #6aa6e8; }         /* rare: blue */
+  .q-mythic { color: #f5c542; }       /* mythic, and the deep find: a bright gold */
+  .q-moon { color: #c9b6ff; }         /* a moon thing: lavender */
   #ticker { display: inline-block; width: 76ch; overflow: hidden; white-space: pre; vertical-align: top; }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
@@ -195,7 +195,7 @@
       // straight even if a glyph in the font (an apostrophe, say) isn't exactly one cell wide.
       // Line 2 glows gold right after using an item.
       if (i >= lines.length - 6 && i <= lines.length - 4) {
-        let inner = esc(line.slice(1, -1)); const gold = i === lines.length - 6 ? resultGold : false;   // (a quality's class for a search result on the top line)
+        let inner = esc(line.slice(1, -1)); const gold = false;
         // A party member's question: [Y]ES and [N]O sit at the right end of the top line and answer it.
         // The bottom line is the ticker: the status report, this run's news and word of everyone else, typed out a line at a time.
         if (i === lines.length - 4) return `|<span class="logline"> <span id="ticker">${tickerHtml()}</span> </span>|`;
@@ -203,9 +203,13 @@
           .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')
           .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>')
           .replace("[S]ILENT", '<span class="btn ask" data-act="qsilent">[S]ILENT</span>');
-        // The beat before a search's result: a blinking _ after the middle line (in place of one of its spaces).
-        if (searchBeat && i === lines.length - 5) { const body = line.slice(1, -1), txt = body.replace(/\s+$/, "");
-          if (txt.length < body.length - 1) inner = esc(txt) + ' <span class="wait">_</span>' + " ".repeat(body.length - txt.length - 2); }
+        // The middle line, after a search: "KURA searches the WEST wall." stays as it is, and what came of it follows
+        // in its quality's color (grey for nothing or a common or uncommon thing, silver for SILVER, blue for a rare
+        // thing, gold for a mythic one or the deep find, lavender for a moon thing).
+        if (i === lines.length - 5) {
+          const m = /^( &gt; KURA (?:searches|scries) the [^.]+\.) (.+?)(\s*)$/.exec(inner);
+          if (m) inner = `${m[1]} <span class="${resultClass(m[2])}">${m[2]}</span>${m[3]}`;
+        }
         return `|<span class="logline${gold ? " " + gold : ""}">${inner}</span>|`;
       }
       if (i === lines.length - 2) {
@@ -283,21 +287,7 @@
       if (typeof bn === "number") { if ((seenBreath !== null && bn < seenBreath) || refused) squeeze(); seenBreath = bn; }
       seenLog = save.log;
       if (Date.now() < squeezeUntil) save.squeeze = true;      // (only for this frame: never saved)
-      // A search's result goes on its own line: the middle line keeps "KURA searches the WEST wall." and what came
-      // of it shows on the top line, in gold when it is something found. (Only on screen: the saved log is whole.)
-      let top = extraToShow(), whole = null; resultGold = false;
-      if (!save.dead && !save.question && !searchBeat) {
-        const m = /^(> KURA (?:searches|scries) the [^.]+\.) (.+)$/.exec(save.log || "");
-        if (m) {
-          whole = save.log; save.log = m[1]; top = "> " + m[2];
-          // The result is always in a quality's color: grey for nothing or a common or uncommon thing, blue for a
-          // rare one, yellow for a mythic one, the moon's own for a moon thing. SILVER is silver.
-          const it = (/^(?:KURA finds|A locker holds) (.+?)\.$/.exec(m[2]) || [])[1], tier = it ? RULES.tierOf(it) : null;
-          resultGold = /SILVER, loose in the rubble/.test(m[2]) ? "q-silver" : /^Deep in the stone/.test(m[2]) || tier === "MYTHIC" ? "q-mythic" : tier === "RARE" ? "q-rare" : tier === "MOON" ? "q-moon" : "q-plain";
-        }
-      }
-      const html = colorize(SMT.renderScreen(save, top)); delete save.squeeze;
-      if (whole !== null) save.log = whole;
+      const html = colorize(SMT.renderScreen(save, extraToShow())); delete save.squeeze;
       document.getElementById("screen").innerHTML = html;
     }
     catch (err) {                                  // never freeze on a bad frame: say so, and keep the keys working
@@ -1550,7 +1540,10 @@
   let seenBreath = null, seenLog = null;        // what the last frame showed, to notice a breath being spent
   let squeezeUntil = 0;                         // the > < that press on the breath bar for a second after a search
   const squeeze = () => { squeezeUntil = Date.now() + 1000; setTimeout(draw, 1050); };
-  var resultGold = false;                       // the top line is a find: drawn in gold
+  function resultClass(text) {                  // (text is already HTML-escaped; item names have nothing to escape)
+    const it = (/^(?:KURA finds|A locker holds) (.+?)\.$/.exec(text) || [])[1], tier = it ? RULES.tierOf(it) : null;
+    return /SILVER, loose in the rubble/.test(text) ? "q-silver" : /^Deep in the stone/.test(text) || tier === "MYTHIC" ? "q-mythic" : tier === "RARE" ? "q-rare" : tier === "MOON" ? "q-moon" : "q-plain";
+  }
   let searchBeat = null;                        // the beat between a search and its result box
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   function act(name) {
@@ -1576,12 +1569,16 @@
       searchGo = true; try { act("search"); } finally { searchGo = false; }
       if (save && (before < 1 || RULES.breath(save) < before)) squeeze();
       if (save && before >= 1 && !save.dead && !save.encounter && !save.question && !(save.altar && save.altar.open) && document.getElementById("found").hidden) {
-        // A beat before the result: the log says what she is doing, with a blinking _ after it; then the result
-        // appears on the line above, in its quality's color. (There is no result box any more.)
-        const full = save.log, m = /^> KURA (searches|scries) the [^.]+\./.exec(full || "");
-        save.log = m ? m[0] : "> KURA listens at the door.";
-        searchBeat = setTimeout(() => { searchBeat = null; save.log = full; draw(); }, 800);
-        draw();
+        // A beat before the result: the log says what she is doing and three dots follow, one at a time; then the
+        // whole line appears, with the result in its color. Nothing else can be pressed meanwhile.
+        const full = save.log, m = /^> KURA (searches|scries) the [^.]+/.exec(full || ""), lead = m ? m[0] : "> KURA listens at the door";
+        let dots = 0;
+        const paint = () => { save.log = lead + " .".repeat(dots); draw(); };
+        searchBeat = setInterval(() => {
+          if (++dots <= 3) return paint();
+          clearInterval(searchBeat); searchBeat = null; save.log = full; draw();
+        }, 200);
+        paint();
       }
       return;
     }
