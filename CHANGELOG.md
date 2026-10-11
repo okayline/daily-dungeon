@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.88.1 - Plain Boxes - Oct 11 2026, 07:39 HST
+
+![v0.88](screenshots/v0.88.png)
+
+- **The search box says only what was found,** not that KURA searched.
+- **No glow around any box.** The gold border stays.
+- **The countdown shows only when you are out of breath,** and counts down to when you can act again.
+
 ## v0.88 - Half a Breath - Oct 11 2026, 07:34 HST
 
 ![v0.88](screenshots/v0.88.png)
