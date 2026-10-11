@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v0.75 - The Path - Oct 11 2026, 02:42 HST
+
+![v0.75](screenshots/v0.75.png)
+
+- **THE PATH.** At the top of the log: your whole run drawn as a tree, floor by floor. Every room is a fork, with the door you took going on and the one you didn't ending in an `x`. Each room carries a small mark for what it was like.
+- **Tidier controls.** The word for what `[ ^ ]` will do sits just above it. Looking is on the bottom bar now, as `LOOK_[U]P` (then `LOOK_[D]OWN`). The left and right doors are on Q and E.
+- **The map** shows the doors ahead on its top row, with KURA in the middle.
+- **Dissonance is gentler.** Only a LAW and CHAOS pairing wears on the party now, and only once per fight won. The party you start with gets along.
+- **Hold Omen stays in the bag** even when it can't be used; it just goes grey.
+- **The end of a fight** can't be clicked through any more. It closes from its `[ OK ]`.
+
 ## v0.74 - Whispers - Oct 11 2026, 02:12 HST
 
 ![v0.74](screenshots/v0.74.png)
