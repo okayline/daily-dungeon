@@ -2896,12 +2896,15 @@
     const row = (label, cell) => { let s = label.padEnd(7); for (let i = 0; i < n; i++) s += String(cell(i)).padEnd(W); return s.replace(/\s+$/, ""); };
     // (Every wing has three rooms, so a count of them says nothing: this row is how many of the three she walked into.)
     const rooms = i => { let c = 0, v = 0; f.rooms.forEach((r, j) => { if (r && r.wing === i) { c++; if (RS(d, j).visited) v++; } }); return c ? `${v}/${c}` : "-"; };
+    const reached = i => f.rooms.some(r => r && r.wing === i);
     let chain = " ".repeat(7);
     for (let i = 0; i < n; i++) chain += (i === 0 ? "[v]" : i === n - 1 ? "[?]" : "< >") + (i < n - 1 ? "----" : "--[^]");
     const left = d.deadline !== undefined && st.today ? d.deadline - st.today.date : null;
     const out = [` ${st.floor}   the level the run ended on` + (left === null ? "" : left < 0 ? "        the dark took it" : `        ${left} day${left === 1 ? "" : "s"} were left`), "",
       row(" day", i => i + 1), chain, row(" seen", rooms),
-      row(" offer", i => (i < f.pairs && MAP_FEEL[f.offers[i][0]]) || ""), row("", i => (i < f.pairs && MAP_FEEL[f.offers[i][1]]) || "")];
+      // Only the offers of wings she reached: the pairs are the same for everyone on the level, and for her next
+      // run on it, so the days ahead stay unknown.
+      row(" offer", i => (i < f.pairs ? (reached(i) ? MAP_FEEL[f.offers[i][0]] : "?") : "")), row("", i => (i < f.pairs ? (reached(i) ? MAP_FEEL[f.offers[i][1]] : "?") : ""))];
     if (here !== undefined && here < n) out.push(" ".repeat(col(here)) + "^ here");
     return out;
   }
