@@ -1372,6 +1372,7 @@
     return true;
   }
 
+  let searchWait = null, searchGo = false;      // the moment a wall search takes before its result shows
   function act(name) {
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
     // screen (resetBox() -> answerConfirm(true) -> act("reset")); that's the title's own exit into the game.
@@ -1385,6 +1386,21 @@
       if (save.encounter) return;                  // in a fight, running is the [R]UN button in the fight box
       if (save.look) name = "search"; else       // looking up, [^] asks the moon
       name = !RULES.available(save).door[save.facing] ? "search" : "go-" + save.facing;
+    }
+    // Searching a bare wall takes a moment: "KURA is searching", a dot at a time, then what she found.
+    // Nothing else can be pressed meanwhile. (Not at a door, not looking up, and not when she is out of breath.)
+    if (searchWait) return;
+    if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.look && !save.question
+        && !RULES.available(save).door[save.facing] && RULES.breath(save) >= 1) {
+      const was = save.log; let dots = 0;
+      const paint = () => { save.log = "> KURA is searching" + " .".repeat(dots); draw(); };
+      paint();
+      searchWait = setInterval(() => {
+        if (++dots <= 3) return paint();
+        clearInterval(searchWait); searchWait = null; save.log = was;
+        searchGo = true; try { act("search"); } finally { searchGo = false; }
+      }, 250);
+      return;
     }
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
     if ((name === "qyes" || name === "qno" || name === "qsilent") && save) {
@@ -1642,13 +1658,13 @@
   let shownMinute = SMT.now().getMinutes();
   // The moon strip opens again as KURA gets her breath back: redraw when the count changes.
   setInterval(() => {
-    if (atTitle || !save || !save.dungeon || save.breathNow === undefined) return;
+    if (atTitle || searchWait || !save || !save.dungeon || save.breathNow === undefined) return;
     const n = RULES.breath(save);
     if (n !== save.breathNow) { save.breathNow = n; draw(); }
   }, 250);
   setInterval(() => {
     const m = SMT.now().getMinutes();
-    if (m !== shownMinute) { shownMinute = m; if (!atTitle) tick(); draw(); }   // on the title, only the title redraws; the run waits for CONTINUE
+    if (m !== shownMinute && !searchWait) { shownMinute = m; if (!atTitle) tick(); draw(); }   // on the title, only the title redraws; the run waits for CONTINUE
   }, 1000);
 </script>
 </body>
