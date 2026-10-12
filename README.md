@@ -1,6 +1,6 @@
 # Daily Digital Demon Dungeon
 
-*One key a day. The dark rises with the moon.*
+*One door a day. The dark rises with the moon.*
 
 **Play it:** [okayline.itch.io/4dungeon](https://okayline.itch.io/4dungeon) or [okayline.github.io/daily-dungeon](https://okayline.github.io/daily-dungeon/)
 
