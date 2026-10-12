@@ -422,7 +422,7 @@
     for (const n of fresh) ecoFetch("find", { name: n }).then(d => {
       if (!d || !d.ok || !d.stash || !save) return;
       ecoTake(n);
-      save.log = `> ${n.charAt(0).toUpperCase() + n.slice(1)} goes to the stash. [E]XCHANGE keeps it.`;
+      save.log = `> ${n.charAt(0).toUpperCase() + n.slice(1)} goes to the stash. The exchange screens keep it.`;
       persist(); draw();
     }).catch(() => {});
   }
@@ -1059,7 +1059,7 @@
     if (holdBtn) { const hl = document.createElement("div"); hl.append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : ""))); help.append(hl); }
     help.append("[1-9] choose  ", btn("[ENTER] use", "use"), "  ", btn("[C]LOSE", "close"));
   }
-  // [E]XCHANGE (v1.00): trading with other players, in one window over the view like INVOKE. Four tabs:
+  // THE EXCHANGE WINDOW (v1.00): opened from the screen in a dead end's wall; one window over the view like INVOKE. Four tabs:
   //   MARKET - public offers (others' only). ENTER takes one; one that asks for something takes a matching thing of yours.
   //   YOURS  - your open offers (ENTER cancels one) and MAKE AN OFFER: a thing, what it asks for, public or private.
   //   STASH  - MOON things kept between runs. ENTER takes one into this run, and it leaves the stash for good.
