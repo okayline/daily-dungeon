@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.00.1 - Where the Moon Things Go - Oct 11 2026, 16:55 HST
+
+![v1.00.1](screenshots/v1.00.1.png)
+
+- **A moon thing kept for later now says where it waits:** with the exchange screens, not behind a button that's gone.
+
 ## v1.00 - 100 - Oct 11 2026, 16:42 HST
 
 ![v1.00](screenshots/v1.00.png)
