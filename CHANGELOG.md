@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.00 - 100 - Oct 11 2026, 16:42 HST
+
+![v1.00](screenshots/v1.00.png)
+
+- **You can tell when someone else is in the pit.** The title counts who is down there right now, and on which level. In a run, the bottom line will tell you when others are on your level with you. Only how many, never who.
+- **The exchange.** At the end of every wing there is now a screen in the wall, its market line climbing and falling. Touch it to trade with other players: rare things, old relics, and what the moon leaves behind. Make an offer for nothing, or ask for something back. Share an offer by its code, or put it up for anyone. Every offer closes when the moon turns.
+- **Moon things keep.** Found in the right light, they wait for you between runs.
+- **Your password carries your key now.** Whoever holds it holds what you keep. Keep it to yourself.
+- **The market shows in the rumors** on the title.
+
 ## v0.99.4 - One Line for the Moon - Oct 11 2026, 13:45 HST
 
 ![v0.99.4](screenshots/v0.99.4.png)
