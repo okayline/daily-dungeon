@@ -162,7 +162,7 @@ async function rankOf(db, row) {
 // MOON CAP: a run may take in one MOON thing per quarter from outside (bought, or from the stash when someone else
 // found it). Finding is never capped by it.
 //
-//   POST /eco/find      {run, name}                 -> {ok, id, stash} | {ok:false, why}
+//   POST /eco/find      {run, name}                 -> {ok, id, name, stash} | {ok:false, why}   (name: the Worker's pick)
 //   POST /eco/mine      {run, bag:[names]}          -> {stash, bag, offers, fresh, moonCap, quarterEnd}
 //   GET  /eco/market                                -> {offers:[{code, name, tier, wants, bot?}]}
 //   GET  /eco/peek?code=                            -> {offer} | {gone: why}
@@ -181,7 +181,9 @@ const ECO_CATALOG = {
 };
 const ECO_TIER = {}; for (const t in ECO_CATALOG) for (const n of ECO_CATALOG[t]) ECO_TIER[n] = t;
 // Finds a day (UTC): per key, and per sender across every key it uses (so a pile of fresh keys doesn't multiply them).
-const ECO_DAILY = { RARE: 4, MYTHIC: 2, MOON: 1 }, ECO_DAILY_SENDER = { RARE: 8, MYTHIC: 4, MOON: 2 };
+// v1.01: tighter, and MOON finds also have a cap for the whole lunar month.
+const ECO_DAILY = { RARE: 3, MYTHIC: 2, MOON: 1 }, ECO_DAILY_SENDER = { RARE: 6, MYTHIC: 3, MOON: 2 };
+const ECO_MOON_MONTH = 2, ECO_MOON_MONTH_SENDER = 3;
 const ECO_NEW_KEYS_A_DAY = 5, ECO_OPEN_OFFERS = 3;
 // The moon's quarters and phases: the same math as screen.js (quarterOf, moonIndex).
 const ECO_QLEN = EPOCH_SYN / 4 * 86400000;
@@ -271,10 +273,12 @@ async function economy(req, env, url, pageOk, from) {
   if (path === "end" && req.method === "POST") { await ecoRetire(db, owner, run); return json({ ok: true }); }
   await ecoSettle(db, owner, run);
 
-  // A FIND, witnessed as it happens. The page names the thing; the Worker checks it exists, and keeps the limits.
+  // A FIND, witnessed as it happens. The page says what it found; the Worker keeps the limits, and (v1.01) rolls its
+  // own dice for WHICH thing of that tier it is, so nobody can ask for a particular one. The page renames its copy.
   if (path === "find" && req.method === "POST") {
-    const name = String(b.name || ""), tier = ECO_TIER[name];
+    const claimed = String(b.name || ""), tier = ECO_TIER[claimed];
     if (!tier) return json({ ok: false, why: "not tradeable" });
+    const pool = ECO_CATALOG[tier], name = pool[crypto.getRandomValues(new Uint32Array(1))[0] % pool.length];
     if (tier === "MOON" && !ECO_MOON_PHASES.includes(ecoMoonIndex())) return json({ ok: false, why: "moon" });
     const day = now - (now % 86400);
     const mine = await db.prepare(`SELECT COUNT(*) AS n FROM eco_items WHERE finder = ?1 AND tier = ?2 AND made >= ?3`).bind(owner, tier, day).first();
@@ -283,12 +287,21 @@ async function economy(req, env, url, pageOk, from) {
       const sender = await db.prepare(`SELECT COUNT(*) AS n FROM eco_items WHERE who = ?1 AND tier = ?2 AND made >= ?3`).bind(who, tier, day).first();
       if (sender.n >= ECO_DAILY_SENDER[tier]) return json({ ok: false, why: "enough today" });
     }
+    if (tier === "MOON") {
+      const month = epochStart();
+      const kept = await db.prepare(`SELECT COUNT(*) AS n FROM eco_items WHERE finder = ?1 AND tier = 'MOON' AND made >= ?2`).bind(owner, month).first();
+      if (kept.n >= ECO_MOON_MONTH) return json({ ok: false, why: "enough this moon" });
+      if (!bot) {
+        const sent = await db.prepare(`SELECT COUNT(*) AS n FROM eco_items WHERE who = ?1 AND tier = 'MOON' AND made >= ?2`).bind(who, month).first();
+        if (sent.n >= ECO_MOON_MONTH_SENDER) return json({ ok: false, why: "enough this moon" });
+      }
+    }
     const stash = tier === "MOON";
     const r = await db.prepare(`INSERT INTO eco_items (owner, run, name, tier, state, finder, who, made) VALUES (?1, ?2, ?3, ?4, ?5, ?1, ?6, ?7)`)
       .bind(owner, stash ? null : run, name, tier, stash ? "stash" : "bag", who, now).run();
     // Now and then, clear out things long gone (kept a while so the day's limits can count them).
     if (Math.random() < 0.02) await db.prepare(`DELETE FROM eco_items WHERE state IN ('gone', 'dead') AND made < ?1`).bind(now - 60 * 86400).run();
-    return json({ ok: true, id: r.meta.last_row_id, stash });
+    return json({ ok: true, id: r.meta.last_row_id, name, stash });
   }
 
   // WHAT'S MINE: the stash, this run's tradeable bag things, my open offers, things delivered to this run since

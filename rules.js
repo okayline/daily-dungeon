@@ -514,6 +514,8 @@
     relay: ["Tone room", "Static room", "Dish room"], vault: ["Heavy room", "Sealed room", "Hushed room"],
     forge: ["Ash room", "Solder room", "Soot room"], altar: ["The altar"],
     archive: ["Drive room", "Rack room", "Spin room"], hall: ["Passageway", "Conduit", "Crawlway", "Corridor", "Walkway", "Service way"], dead: ["Dead end", "Sealed end"],
+    // Since v1.00 every dead end (with no other kind) holds the exchange's screen, and is named for it.
+    exchange: ["Exchange", "Xchange", "Trade floor", "Market end", "Ticker room", "Trading gap", "Swap room"],
     plain: ["Dusty room", "Damp room", "Grey room", "Tiled room", "Mossy room", "Sooty room", "Round room", "Echo room", "Salt room",
       "Rusty room", "Hollow room", "Side room", "Back room", "Big room", "Small room", "Odd room", "Wet room", "Dry room", "Low room",
       "High room", "Lamp room", "Bent room", "Split room", "Dim room", "Old room", "Plain room", "Faded room", "Chalky room", "Bleak room",
@@ -523,9 +525,10 @@
     if (i === 0) return "The way in";
     if (allRooms(d)[i] && allRooms(d)[i].found.includes("stairs")) return "Stairs up";
     const rs = RS(d, i);
-    if (rs.name) return rs.name;
-    const rm = d.floor.rooms[i], used = new Set(allRooms(d).map(x => x.name).filter(Boolean));
-    const lists = [NAMES_BY_KIND[rm.kind || (rm.hall ? "hall" : rm.dead ? "dead" : "plain")] || NAMES_BY_KIND.plain, NAMES_BY_KIND.plain];
+    const rm = d.floor.rooms[i], exch = rm.dead && !rm.kind;
+    if (rs.name && !(exch && NAMES_BY_KIND.dead.includes(rs.name))) return rs.name;    // (a dead end named before v1.00 takes an exchange name)
+    const used = new Set(allRooms(d).map(x => x.name).filter(Boolean));
+    const lists = [NAMES_BY_KIND[rm.kind || (rm.hall ? "hall" : exch ? "exchange" : rm.dead ? "dead" : "plain")] || NAMES_BY_KIND.plain, NAMES_BY_KIND.plain];
     const h = Math.abs(Math.imul((d.floor.seed | 0) ^ Math.imul(i + 1, 0x9e3779b1), 0x85ebca6b) >>> 7);
     for (const list of lists) {
       for (let t = 0; t < list.length; t++) { const n = list[(h + t) % list.length]; if (!used.has(n)) return (rs.name = n); }

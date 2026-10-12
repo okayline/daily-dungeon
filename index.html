@@ -187,7 +187,8 @@
         const glyphs = s => esc(s).replace(/[░▒▓█]/g, ch => `<span class="cell ph"><span class="g">${ch}</span></span>`)
           // the > and < that press on the bar after a search: kept above the bar and a little outside it, so the bar's wider blocks never cover them
           .replace("&gt;", '<span class="mk" style="left:-.25ch;top:-1px">&gt;</span>').replace("&lt;", '<span class="mk" style="left:calc(.5ch + 2px);top:-1px">&lt;</span>');
-        const tail = i === 21 ? glyphs(line.slice(48, 73)) + `<span id="breathT">${breathTimer()}</span>` + esc(line.slice(78)) : glyphs(line.slice(48));
+        // (v1.00.2: the bar sits about two thirds of a column left of the panel's middle in text columns, so its row is nudged right by that much.)
+        const tail = i === 21 ? esc(line.slice(48, 49)) + `<span style="position:relative;left:.65ch">${glyphs(line.slice(49, 73))}</span>` + `<span id="breathT">${breathTimer()}</span>` + esc(line.slice(78)) : glyphs(line.slice(48));
         return left + tail;
       }
       // The v over today's phase (row 20, right panel).
@@ -419,13 +420,23 @@
     save.ecoSeen = mine.slice();
     if (save.dead && !save.ecoEnded && LEADERBOARD_URL && !save.cheated && !save.freeSteps) { save.ecoEnded = true; ecoFetch("end", {}).catch(() => {}); }
     if (!ecoOk()) return;
-    for (const n of fresh) ecoFetch("find", { name: n }).then(d => {
-      if (!d || !d.ok || !d.stash || !save) return;
-      ecoTake(n);
-      save.log = `> ${n.charAt(0).toUpperCase() + n.slice(1)} goes to the stash. The exchange screens keep it.`;
+    // v1.01: the Worker rolls its own dice for WHICH thing of that tier it is. If it picked another, the bag's copy
+    // (and the log line that named it) takes the Worker's name. The found box waits a moment for this (foundBox).
+    for (const n of fresh) ecoWait.push(ecoFetch("find", { name: n }).then(d => {
+      if (!d || !d.ok || !save) return;
+      const got = d.name || n;
+      if (d.stash) {
+        ecoTake(n); ecoStashed.push(got);
+        save.log = `> ${got.charAt(0).toUpperCase() + got.slice(1)} goes to the stash. The exchange screens keep it.`;
+      } else if (got !== n) {
+        const i = save.items.lastIndexOf(n); if (i >= 0) save.items[i] = got;
+        const j = (save.ecoSeen || []).lastIndexOf(n); if (j >= 0) save.ecoSeen[j] = got;
+        if (save.log) save.log = save.log.split(n).join(got);
+      }
       persist(); draw();
-    }).catch(() => {});
+    }).catch(() => {}));
   }
+  let ecoWait = [], ecoStashed = [];
   function flushEvents() {
     ecoScan();
     pingHere();
@@ -1105,6 +1116,7 @@
       }
       ex.market = market.error ? null : market;
     } catch (e) { ex.msg = "The exchange can't be reached."; }
+    ex.loaded = true;
     ex.busy = false; showExchange(true);
   }
   // Things of mine that can go into an offer or pay for one: this run's tradeable bag things, and the stash.
@@ -1139,7 +1151,10 @@
     if (!paintOnly) { EXW.tick++; if (EXW.tick % 3 === 0) { EXW.v.push(exStep(EXW.v[EXW.v.length - 1])); EXW.v.shift(); } if (EXW.tick % 2 === 0) EXW.tape++; }
     const wall = document.querySelectorAll("#screen .exq");
     if (wall.length >= 5) {
-      const W = wall[0].textContent.length, n = exCount(), up = EXW.v[EXW.v.length - 1] >= EXW.v[EXW.v.length - 2];
+      // The arrow follows the line's trend, not each step: it looks again about every 2 seconds (20 beats), comparing
+      // now with six steps back, and keeps its way on a tie.
+      if (EXW.up === undefined || (!paintOnly && EXW.tick % 20 === 0)) { const a = EXW.v[EXW.v.length - 1], b = EXW.v[EXW.v.length - 7]; if (a !== b || EXW.up === undefined) EXW.up = a >= b; }
+      const W = wall[0].textContent.length, n = exCount(), up = EXW.up;
       const tail = `${n} ON OFFER`;
       wall[0].textContent = (`EXCHANGE ${up ? "^" : "v"}`.padEnd(W - tail.length) + tail).slice(0, W);
       exChart(W, 4).forEach((r, j) => { wall[j + 1].textContent = r; });
@@ -1166,7 +1181,9 @@
     const note = () => { if (ex.msg) { add(" "); say(ex.msg); } };
     // Header: the name, the quarter's end, and the tabs.
     const end = ex.mine && ex.mine.quarterEnd ? Math.max(0, Math.ceil((ex.mine.quarterEnd - Date.now() / 1000) / 86400)) : null;
-    add("EXCHANGE".padEnd(EX_W - 18) + (end === null ? "" : `offers close in ${end}d`).padStart(18));
+    // "Offers close end of quarter (5d)": the days left, when they fit on the line.
+    const close = [end === null ? null : `Offers close end of quarter (${end}d)`, "Offers close end of quarter"].find(t => t && 8 + 2 + t.length <= EX_W);
+    add("EXCHANGE".padEnd(EX_W - close.length) + close);
     // The screen: a ticker of what's on offer, right to left, over the moving market line (exTick fills both).
     const SW = EX_W - 4, scrRow = id => { const d = add("  |", "exframe"); const sp = document.createElement("span"); sp.id = id; sp.className = ""; sp.style.color = "var(--fg)"; sp.textContent = " ".repeat(SW); d.append(sp, "|"); };
     add("  ." + "-".repeat(SW) + ".", "exframe");
@@ -1179,7 +1196,6 @@
     const why = exClosedWhy();
     const foot = (...parts) => { const f = add("", ""); parts.forEach(p => f.append(typeof p === "string" ? p : btn(p[0], "x", p[1]))); };
     if (why) { say(why); add(" "); foot(["[ESC] leave", "close"]); return; }
-    if (ex.busy) add("...");
     // A step in progress takes the whole window.
     if (ex.step === "take" && ex.peek) {
       const o = ex.peek, payWith = o.wants ? exHoldings().filter(it => exMatches(o.wants, it)) : [];
@@ -1213,7 +1229,7 @@
       if (ex.step === "cancel") { add(exFit(`CANCEL ${r.o.code}?`)); add(exFit(r.o.name + (RULES.tierOf(r.o.name) === "MOON" ? " goes back to the stash." : " comes back to the bag."))); }
       else {
         say(`Take ${r.s.name} into this run?`); say("It leaves the stash, and the exchange, for good.");
-        if (ex.mine && ex.mine.moonCap) say("This quarter's outside MOON is used. One you found yourself still comes.");
+        if (ex.mine && ex.mine.moonCap) say("This quarter's one from someone else is used. One you found yourself still comes.");
         else say("One found by someone else counts as this quarter's one.");
       }
       note();
@@ -1234,8 +1250,9 @@
       return;
     }
     ex.sel = Math.max(0, Math.min(ex.sel, rows.length - 1));
-    if (!rows.length) say(tab === "MARKET" ? "Nothing on offer right now." : "The stash is empty. MOON things found near full moon go here.");
-    rows.slice(0, 9).forEach((r, i) => add(exFit((i === ex.sel ? ">" : " ") + r.text), "btn", { i }));
+    if (!ex.loaded) add("...");                     // the first answer from the market hasn't come yet
+    else if (!rows.length) say(tab === "MARKET" ? "Nothing on offer right now." : "Special things go here.");
+    if (ex.loaded) rows.slice(0, 9).forEach((r, i) => add(exFit((i === ex.sel ? ">" : " ") + r.text), "btn", { i }));
     note();
     add(" ");
     foot("</> tabs  ", ["[ENTER]", "go"], "  ", ["[ESC] leave", "close"]);
@@ -1249,7 +1266,7 @@
     if (a !== "go") return;
     ex.msg = "";
     const run = async (path, body, done) => { ex.busy = true; showExchange(true); let d; try { d = await ecoFetch(path, body); } catch (e) { d = { error: "net" }; } ex.busy = false;
-      if (d.error || d.ok === false) { ex.msg = d.why || (d.error === "net" ? "The exchange can't be reached." : "The exchange said no."); return showExchange(true); }
+      if (d.error || d.ok === false) { ex.msg = d.error === "cap" ? "This quarter's one from someone else is used." : d.why || (d.error === "net" ? "The exchange can't be reached." : "The exchange said no."); return showExchange(true); }
       done(d); persist(); draw(); ex.step = null; ex.peek = null; await exRefresh(); };
     if (ex.step === "take") {
       const o = ex.peek, payWith = o.wants ? exHoldings().filter(it => exMatches(o.wants, it)) : [], pay = payWith.length ? payWith[ex.pay % payWith.length] : null;
@@ -1501,12 +1518,21 @@
   }
   // When a search turns something up, a box says what it was and waits for Enter, Space, Esc or a
   // click, so a quick run of searches can't skip past it. Holding A won't dismiss it.
+  // v1.01: while the exchange is deciding a find (above, ecoScan), the box waits for it, at most 1.2 seconds, so it
+  // shows the thing KURA really got; a MOON thing kept for the stash is listed as such.
   function foundBox(before) {
+    if (!ecoWait.length) return foundBoxNow(before);
+    const w = ecoWait.splice(0);
+    Promise.race([Promise.all(w), new Promise(r => setTimeout(r, 1200))])
+      .then(() => { if (save && document.getElementById("found").hidden) foundBoxNow(before); });
+  }
+  function foundBoxNow(before) {
     if (!save) return;
     const newItems = (save.items || []).slice((before.items || []).length);
     const silver = (save.silver || 0) - (before.silver || 0);
     const lines = [];
     for (const it of newItems) lines.push({ text: it, tier: RULES.tierOf(it) });
+    for (const it of ecoStashed.splice(0)) lines.push({ text: it + " (kept in the stash)", tier: "MOON" });
     if (silver > 0 && /SILVER, loose in the rubble/.test(save.log)) lines.push(silver + " SILVER");
     if (/Stairs lead up/.test(save.log)) lines.push("the stairs up");
     const box = document.getElementById("found");

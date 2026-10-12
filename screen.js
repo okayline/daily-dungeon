@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.00.1";
+  const VERSION = "v1.01";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -371,15 +371,18 @@
     // The strip closes in from both ends as KURA runs out of breath (st.breathNow, 6 down to 0): open when rested, gone at 0.
     // It closes around the middle of what is drawn (columns 5 to 21 of the 24: the new-moon end is blank), so both
     // sides shrink evenly: a column and a half a side for each breath spent, and nothing left at 0.
-    const bar = PHASE.join(""), shut = Math.max(0, Math.min(9, Math.round((6 - (st.breathNow === undefined ? 6 : st.breathNow)) / 6 * 9))), lo = 5 + shut, hi = 22 - shut;
+    // v1.00.2: the bar is one white run (█) with a single dark square (▓) at each end, across columns 3 to 22; it closes
+    // in from both ends (up to 10 columns a side) and what is left keeps a dark square at each end.
+    const shut = Math.max(0, Math.min(10, Math.round((6 - (st.breathNow === undefined ? 6 : st.breathNow)) / 6 * 10))), lo = 3 + shut, hi = 23 - shut;
+    const n = Math.max(0, hi - lo), body = n === 0 ? "" : n === 1 ? "▓" : "▓" + "█".repeat(n - 2) + "▓";
     // The marker over today's phase counts the breath the other way: one dot when she is rested, two as she tires, three
     // (". . .") when she is out. The first dot stays where the single dot always sat; the others follow it to the right.
     const bn = st.breathNow === undefined ? 6 : st.breathNow, nd = bn < 1 ? 3 : bn > 4 ? 1 : 2, mid = 1 + 3 * idx + DOT;
-    const phaseV = " ".repeat(mid) + Array(nd).fill(".").join(" "), top = Math.max(lo, hi);
+    const phaseV = " ".repeat(mid) + Array(nd).fill(".").join(" ");
     // For a second after a search (st.squeeze, set by the page for that one frame), a > and a < press on what is
     // left of it from either side.
     const mark = st.squeeze ? "><" : "  ";
-    const phaseRow = " " + (shut ? " ".repeat(lo - 1) + mark[0] + bar.slice(lo, top) + mark[1] + " ".repeat(24 - top - 1) : bar);
+    const phaseRow = " " + (shut ? " ".repeat(lo - 1) + mark[0] + body + mark[1] + " ".repeat(Math.max(0, 24 - hi - 1)) : " ".repeat(lo) + body + " ".repeat(24 - hi));
     const stat = [ljust(" PARTY", 19) + "HP" + " ".repeat(6) + "MP", rule, ...party.slice(0, 4),
       rule, money, mapHead, ...mp.map(m => " ".repeat(mapPad) + m), "", ...(mapRows === 4 ? [""] : []), rule, bottom];
     stat.splice(stat.length - 3, 3, phaseV, phaseRow, bottom);
