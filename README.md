@@ -1,41 +1,40 @@
 # Daily Digital Demon Dungeon
 
-**Play it here: https://okayline.github.io/daily-dungeon/**
+*One key a day. The dark rises with the moon. Get out before it takes your level.*
 
-<img width="60%" alt="Daily Digital Demon Dungeon, build v0.99.1" src="screenshots/v0.99.1.png" />
+**Play it:** [okayline.itch.io/4dungeon](https://okayline.itch.io/4dungeon) or [okayline.github.io/daily-dungeon](https://okayline.github.io/daily-dungeon/)
 
-An 80-column ASCII roguelike dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played one key a day on the real calendar. The real moon phase impacts gameplay in different ways.
+<img width="60%" alt="Daily Digital Demon Dungeon, build v1.02" src="screenshots/v1.02.png" />
 
-## How it plays
+An 80-column ASCII roguelike in the spirit of 80s CRPGs and Shin Megami Tensei, played on the real calendar. KURA wakes at the bottom of a pit four levels deep and climbs toward the surface, with the dark coming up behind her.
 
-- **Climb out.** KURA wakes at the bottom of a pit four levels deep (B4F, B3F, B2F, B1F) and climbs toward the surface. There is no ceiling: look up and it's the night sky and the real moon. Past the surface, keep climbing.
-- **The dark rises with the moon.** Each quarter of the lunar month the dark takes one level. Be gone before it takes yours, or the run is over. A level's last wing hides the way up.
-- **One key a day.** Spend it to unlock a door, or go on STANDBY and rest. Everything else (searching, turning, talking, walking through doors you've already opened) is free of the key.
-- **Wings and doors.** A level is a run of wings, one offer a day. Each wing hangs two locked doors off its rooms. Unlock one and the other seals for good.
-- **Search all you like,** but searching tires KURA. Her breath shows on the moon strip under the map: spend it too fast and she has to stop and recover, and pressing on only makes the wait longer. Something else may notice you, too.
-- **Listen at the doors.** Each gives away a little of what's behind it.
-- **Ask the moon.** Look up and ask her. Some nights she answers.
-- **Demons don't leave.** Fight them, talk to them, or run. Some want gifts. Some want to join you. Some are lying.
-- **Your party has opinions.** Talk to them. Don't push your luck. Mixed company wears on tempers.
-- **Every choice leans you.** LAW, NEUTRAL or CHAOS. The demons can tell.
-- **The moon is real. So is the omen.** One omen a day, the same for everyone. Three LAW-leaning days or three CHAOS-leaning days in a row and something changes.
-- **STANDBY can bank a day.** Hold instead of stepping and that day's omen is kept, to spend later instead of whatever the day brings.
-- **Everyone is in the same pit.** Everyone playing in the same moon quarter is on the same level, and the rooms on offer each day are the same for every player. Which door is which, and what's hidden where, is yours alone. The title screen carries rumors and counts from everyone else, and finished runs can be posted to the board.
-- **Don't drink the ichor.** Or do.
+## The Moon Is Real
 
-The header counts the lunar day (1 to 29) and names today's phase in Japanese, and the title carries a crescent over the lettering.
+- **The dark rises with the moon.** Each quarter of the lunar month, the dark takes a level. Leave before your level's quarter ends, or the run is over. Leaving early banks the days you didn't use.
+- **The moon sets the demons' mood.** Near the new moon they talk; near the full moon they're wild and hit harder.
+- **Full moon nights are rarer, and stranger.** Some things only turn up deep in the walls when the moon is full.
+- **Look up and ask her.** The real moon can tell you what a locked door hides, more often the fuller she is.
+- **Everyone is in the same pit.** Everyone playing in the same quarter is on the same level, and each day's rooms are the same for all. Which door is which is yours alone.
+- **You're not alone down there.** The game tells you when others are in the pit right now, and how many are on your level. Only how many, never who.
 
-Your run saves itself in your browser. Finish a run and you can post it to the leaderboard. `[?]` explains the keys and holds the password (to move a run to another device) and the leaderboard. `[L]OG` keeps the story.
+## Good To Know
+
+- **One key a day.** Spend it to unlock a door, or go on STANDBY and rest, which also keeps that day's omen.
+- **Breath.** Searching and asking the moon tire KURA; her breath is the bar under the map. Spend it too fast and she has to stop and recover.
+- **The omen.** One a day, the same for everyone, and it shifts the odds.
+- **Lean.** Every choice pulls you toward LAW, NEUTRAL or CHAOS. Three days leaning the same way in a row, and something unusual happens.
+- **Your party.** Up to three demons can join you. They have patience: rudeness, breaking things or mixing opposite sides can drive them off. Gifts help.
+- **The exchange.** Every dead end has a screen in its wall, a market line ticking across it. Trade rare finds with other players: give them away, ask for something back, or share an offer by its code. Moon things keep between runs. Every offer closes when the moon turns.
+- **The board.** Finished runs can be posted, and the title screen carries numbers and rumors from everyone else.
+- **Saves.** Your run saves in your browser. The `[?]` menu has a password to move a run to another device.
 
 ## Files
 
-- `index.html` is the page: buttons, keys, popups, the typed log line, the title screen, the in-browser save, and the `[?]` menu (password, codex, leaderboard).
-- `screen.js` draws the 80-column screen and keeps the time. Every line is checked to be exactly 80 characters.
-- `floor.js` rolls each level: its wings, their rooms and doors, and the stairs up hidden in the last wing. It also draws the minimap. The level's shape and the pair of rooms on offer each day are shared with every player this lunar month; which door is which, and what's hidden where, is rolled privately, per account.
-- `rules.js` holds the rules.
-- `leaderboard/` is the Cloudflare Worker + D1 leaderboard the page posts finished runs, events and presence to, and reads the title's feed from. See its own README to set one up.
-- `CHANGELOG.md` lists every update with its time and a screenshot.
-- `screenshots/` holds a screenshot of each build (the page itself uses the VT323 font).
-- `fonts/` holds the VT323 font the page uses, with its license (SIL Open Font License).
-- `archive/` keeps retired pieces of the project, for history.
-- `save.json` was the save file for the retired `/smt-screen` chat front end (see `archive/`); the page doesn't use it.
+- `index.html`: the page. The screen, keys and boxes, the title screen, the in-browser save, the exchange window, and the `[?]` menu (password, codex, board).
+- `screen.js`: draws the 80-column screen and keeps the time.
+- `floor.js`: rolls each level (its wings, rooms, doors and the stairs up) and draws the minimap.
+- `rules.js`: the rules.
+- `leaderboard/`: the Cloudflare Worker and D1 database behind the board, the title's feed, presence and the exchange. Its own README says how to set one up.
+- `CHANGELOG.md`: every update, with its time and a screenshot (in `screenshots/`).
+- `fonts/`: the VT323 font the page uses, with its license (SIL Open Font License).
+- `archive/`: retired pieces of the project, kept for history.
