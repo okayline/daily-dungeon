@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.01 - The House Rolls - Oct 11 2026, 17:15 HST
+
+![v1.01](screenshots/v1.01.png)
+
+- **The exchange decides what a find is worth trading.** When KURA turns up something rare, the exchange rolls its own dice for exactly which thing it is, and the box waits a moment to show you. Fewer finds a day count for trading, and moon things fewer still.
+- **The exchange window says when offers close:** at the end of the quarter, with the days left.
+- **Exchange rooms have their own names now.**
+- **The stash** just says special things go there.
+- **The screen's arrow** follows the market's trend instead of every flicker.
+- **The breath bar** is one bright bar with a dark square at each end, closing in from both sides, and sits in the middle of its panel.
+
 ## v1.00.1 - Where the Moon Things Go - Oct 11 2026, 16:55 HST
 
 ![v1.00.1](screenshots/v1.00.1.png)
