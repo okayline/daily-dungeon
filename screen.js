@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.01";
+  const VERSION = "v1.02";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -377,8 +377,13 @@
     const n = Math.max(0, hi - lo), body = n === 0 ? "" : n === 1 ? "▓" : "▓" + "█".repeat(n - 2) + "▓";
     // The marker over today's phase counts the breath the other way: one dot when she is rested, two as she tires, three
     // (". . .") when she is out. The first dot stays where the single dot always sat; the others follow it to the right.
-    const bn = st.breathNow === undefined ? 6 : st.breathNow, nd = bn < 1 ? 3 : bn > 4 ? 1 : 2, mid = 1 + 3 * idx + DOT;
-    const phaseV = " ".repeat(mid) + Array(nd).fill(".").join(" ");
+    const bn = st.breathNow === undefined ? 6 : st.breathNow;
+    // v1.01.1: the row over the bar counts the other way from it: one dot when she is rested (the bar full), one more
+    // for each breath spent, seven when she is out (the bar gone). Three columns apart and centered over the bar, so
+    // they grow out from the middle as the bar closes in. The bar's middle is column 13.5; with an odd count the middle
+    // dot falls on a half column, so the dots sit at 13 and the page nudges them half a column more (it counts them).
+    const have = 7 - Math.max(0, Math.min(6, Math.floor(bn + 1e-9))), first = Math.floor(13.5 - 1.5 * (have - 1));
+    const phaseV = Array.from({ length: have }, (_, k) => first + 3 * k).reduce((row, x) => row.padEnd(x) + ".", "");
     // For a second after a search (st.squeeze, set by the page for that one frame), a > and a < press on what is
     // left of it from either side.
     const mark = st.squeeze ? "><" : "  ";

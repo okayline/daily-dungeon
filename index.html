@@ -99,7 +99,8 @@
   .foundbox.fight pre { padding: 0 2ch; }   /* the fight box's text sits in from the edge */
   .foundbox.inframe .brow { display: flex; justify-content: space-between; }
   .foundbox .artframe { color: var(--trail); }
-  .exframe { color: var(--trail); }   /* the exchange window's screen frame (v1.00) */
+  .exframe { color: var(--trail); }
+  .bdot { transform: scale(1.5); transform-origin: 50% 70%; }   /* the breath dots over the bar (v1.01.1): a little bigger, in place */   /* the exchange window's screen frame (v1.00) */
   .foundbox .arrow { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   /* Rarity colors, Diablo-style. */
   .lit { color: var(--moon); text-shadow: 0 0 6px var(--moon); animation: breathe 4s ease-in-out infinite; }
@@ -192,7 +193,10 @@
         return left + tail;
       }
       // The v over today's phase (row 20, right panel).
-      if (i === 20) return esc(line.slice(0, 48)) + esc(line.slice(48)).replace(/\./g, `<span class="cell" style="position:relative;left:${[2, 6].includes(SMT.moonIndex(SMT.now())) ? ".65ch" : ".15ch"}">.</span>`);
+      // The breath dots over the bar (row 20): nudged the same .65ch as the bar below them, so they sit centered over it.
+      // Drawn half again as big (scaled in place, so the row keeps its 80 columns); an odd count is nudged half a column more (see screen.js).
+      if (i === 20) { const odd = ((line.slice(48).match(/\./g) || []).length) % 2 === 1;
+        return esc(line.slice(0, 48)) + esc(line.slice(48)).replace(/\./g, `<span class="cell bdot" style="position:relative;left:${odd ? "1.15ch" : ".65ch"}">.</span>`); }
       // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
       const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);
       if (i === 1) return moonBox(esc(line)).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
@@ -307,7 +311,7 @@
       if (typeof bn === "number") { if ((seenBreath !== null && bn < seenBreath) || refused) squeeze(); seenBreath = bn; }
       seenLog = save.log;
       if (Date.now() < squeezeUntil) save.squeeze = true;      // (only for this frame: never saved)
-      const html = colorize(SMT.renderScreen(save, extraToShow())); delete save.squeeze;
+      const html = colorize(SMT.renderScreen(save, beatLine1 || extraToShow())); delete save.squeeze;
       document.getElementById("screen").innerHTML = html;
       exTick(true);                                // the exchange's screen, if she faces one, fills in at once
     }
@@ -838,7 +842,7 @@
     } catch (e) { msg.textContent = "COULD NOT REACH THE BOARD. IS THE WORKER DEPLOYED WITH THE LATEST CODE?"; }
   }
   // In X mode (the infinite-steps cheat) the board becomes an admin list: up/down pick a row, D deletes it (needs the Worker's ADMIN_KEY).
-  let boardData = null, boardSel = 0;
+  let boardData = null, boardSel = 0, boardView = "board";
   function boardHead(pre, rest) {                  // "LEADERBOARD ... [C]LOSE", the close as a real button
     const c = document.createElement("span"); c.className = "btn"; c.dataset.close = "1"; c.textContent = "[C]LOSE";
     pre.textContent = ""; pre.append("LEADERBOARD".padEnd(41), c, "\n" + rest);
@@ -850,8 +854,26 @@
     d.rows.forEach((x, i) => lines.push(row(i + 1, x, admin && i === boardSel)));
     if (!d.rows.length) lines.push("  Nobody yet.");
     if (d.you) lines.push("  ...", row(d.you.rank, { ...d.you, you: true }));
-    lines.push("", admin ? "  X MODE: up/down choose, [D]ELETE removes it." : "  Ranked by floor, then days. Turns are for show.");
+    lines.push("", admin ? "  X MODE: up/down choose, [D]ELETE removes it. [H]ERE: who's here." : "  Ranked by floor, then days. Turns are for show.");
     boardHead(pre, lines.join("\n"));
+  }
+  // X MODE, [H]ERE (v1.01.1): every device seen this moon, from the Worker's /admin/here (the admin key only).
+  // Players only ever see counts; this is the admin's look at the rows behind them. No names, no addresses.
+  async function showPresence() {
+    const pre = document.querySelector("#board pre");
+    boardView = "here"; boardHead(pre, "\nLOADING...");
+    let key = ""; try { key = localStorage.getItem("dd-admin") || ""; } catch (e) {}
+    try {
+      const r = await fetch(LEADERBOARD_URL + "/admin/here", { headers: { "x-admin-key": key } });
+      if (r.status === 403) { boardHead(pre, "\nTHAT KEY WAS NOT ACCEPTED."); return; }
+      const d = await r.json(), lvl = h => (h <= 4 ? `B${5 - h}F` : `${h - 4}F`);
+      const ago = t => (t < 60 ? `${t}s` : t < 3600 ? `${Math.floor(t / 60)}m` : t < 86400 ? `${Math.floor(t / 3600)}h` : `${Math.floor(t / 86400)}d`) + " ago";
+      const lines = ["", `  RIGHT NOW ${d.now} (no bots)   TODAY ${d.today}   THIS MOON ${d.month}`, "", "  DEVICE   LEVEL  SEEN", ""];
+      for (const x of d.rows) lines.push(`  ${x.id.padEnd(8)} ${lvl(x.level).padEnd(6)} ${ago(x.ago).padEnd(9)}${x.bot ? " bot" : ""}`);
+      if (!d.rows.length) lines.push("  Nobody this moon.");
+      lines.push("", "  X MODE: [H]ERE back to the board.");
+      boardHead(pre, lines.join("\n"));
+    } catch (e) { boardHead(pre, "\nCOULD NOT REACH THE BOARD."); }
   }
   async function loadBoard() {
     const pre = document.querySelector("#board pre");
@@ -877,7 +899,7 @@
     const box = document.getElementById("board"), open = force === undefined ? box.hidden : force;
     box.hidden = !open;
     if (!open) return;
-    boardSel = 0;
+    boardSel = 0; boardView = "board";
     boardHead(box.querySelector("pre"), "\nLOADING...");
     loadBoard();
   }
@@ -1149,11 +1171,11 @@
   // Every 110 ms: the walk steps every third beat, the ticker every second. paintOnly: repaint without stepping.
   function exTick(paintOnly) {
     if (!paintOnly) { EXW.tick++; if (EXW.tick % 3 === 0) { EXW.v.push(exStep(EXW.v[EXW.v.length - 1])); EXW.v.shift(); } if (EXW.tick % 2 === 0) EXW.tape++; }
+    // The arrow follows the line's trend, not each step: it looks again about every 1.5 seconds (14 beats), comparing
+    // now with six steps back, and keeps its way on a tie.
+    if (EXW.up === undefined || (!paintOnly && EXW.tick % 14 === 0)) { const a = EXW.v[EXW.v.length - 1], b = EXW.v[EXW.v.length - 7]; if (a !== b || EXW.up === undefined) EXW.up = a >= b; }
     const wall = document.querySelectorAll("#screen .exq");
     if (wall.length >= 5) {
-      // The arrow follows the line's trend, not each step: it looks again about every 2 seconds (20 beats), comparing
-      // now with six steps back, and keeps its way on a tie.
-      if (EXW.up === undefined || (!paintOnly && EXW.tick % 20 === 0)) { const a = EXW.v[EXW.v.length - 1], b = EXW.v[EXW.v.length - 7]; if (a !== b || EXW.up === undefined) EXW.up = a >= b; }
       const W = wall[0].textContent.length, n = exCount(), up = EXW.up;
       const tail = `${n} ON OFFER`;
       wall[0].textContent = (`EXCHANGE ${up ? "^" : "v"}`.padEnd(W - tail.length) + tail).slice(0, W);
@@ -1520,7 +1542,10 @@
   // click, so a quick run of searches can't skip past it. Holding A won't dismiss it.
   // v1.01: while the exchange is deciding a find (above, ecoScan), the box waits for it, at most 1.2 seconds, so it
   // shows the thing KURA really got; a MOON thing kept for the stash is listed as such.
+  // (v1.01.1) While a search's result is still being typed, its box waits: the beat keeps it and opens it at the end.
+  let holdFound = false, heldFound = null;
   function foundBox(before) {
+    if (holdFound) { heldFound = before; return; }
     if (!ecoWait.length) return foundBoxNow(before);
     const w = ecoWait.splice(0);
     Promise.race([Promise.all(w), new Promise(r => setTimeout(r, 1200))])
@@ -1533,6 +1558,10 @@
     const lines = [];
     for (const it of newItems) lines.push({ text: it, tier: RULES.tierOf(it) });
     for (const it of ecoStashed.splice(0)) lines.push({ text: it + " (kept in the stash)", tier: "MOON" });
+    // v1.01.1: the box is for good finds only (a RARE, MYTHIC or MOON thing, or the stairs). Anything less (a common
+    // or uncommon thing, loose SILVER) is told on line 2 and goes into the bag without one.
+    const good = lines.some(l => typeof l === "object" && ["RARE", "MYTHIC", "MOON"].includes(l.tier)) || /Stairs lead up/.test(save.log || "");
+    if (!good) return;
     if (silver > 0 && /SILVER, loose in the rubble/.test(save.log)) lines.push(silver + " SILVER");
     if (/Stairs lead up/.test(save.log)) lines.push("the stairs up");
     const box = document.getElementById("found");
@@ -1938,11 +1967,17 @@
   // own status report goes next whenever a new one is waiting. Only the line's own span is rewritten.
   // (var and a function declaration, not let/const: the first frame is drawn before this point in the script is reached.)
   var TYPE_W = 72, typeLine = "", typeN = 0, typeMode = "gap", typeNext = 0, typeStatus = null;
+  // (v1.01.1) While a search plays out, this line goes quiet (typeQuiet): a bare > and the cursor. After a good find
+  // it says one thing about it whole, not typed (typeSay), holds it, and then goes back to its usual round.
+  var typeQuiet = false, typeHoldUntil = 0;
+  function typeHush() { typeQuiet = true; typeLine = ""; typeN = 0; typeMode = "gap"; const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml(); }
+  function typeSay(line) { typeLine = String(line || "").slice(0, TYPE_W); typeN = typeLine.length; typeMode = "hold"; typeHoldUntil = Date.now() + 6000; typeQuiet = false; const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml(); }
   function tickerHtml() { return "&gt; " + esc((typeLine || "").slice(0, typeN || 0)) + (typeMode === "hold" || typeMode === "gap" ? '<span class="wait">_</span>' : "_"); }   // the > is always there
   function typeStep() {
     let wait = 300;
     try {
       if (atTitle || !save || !save.dungeon) { wait = 500; }
+      else if (typeQuiet) { wait = 300; }
       else if (typeMode === "gap") {
         // (This line never says KURA: that name belongs to the line above, where she acts.)
         const status = String(save.status || "").replace(/^> /, "").replace(/KURA is/g, "She is").replace(/\bKURA\b/g, "she").trim(), feed = tickerFeed();
@@ -1953,7 +1988,7 @@
         const ch = typeLine[typeN - 1];
         wait = /[.,:;!?]/.test(ch) ? 420 : ch === " " ? 120 : 80 + Math.random() * 70;     // an unhurried hand: about eight letters a second, a breath at punctuation
         if (typeN >= typeLine.length) { typeMode = "hold"; wait = 5000; }   // a finished line stays five seconds
-      } else if (typeMode === "hold") { typeMode = "delete"; wait = 30; }
+      } else if (typeMode === "hold") { if (Date.now() < typeHoldUntil) wait = 300; else { typeMode = "delete"; wait = 30; } }
       else if (typeMode === "delete") { typeN = Math.max(0, typeN - 1); wait = 45; if (typeN === 0) { typeMode = "gap"; wait = 2200; } }   // one letter at a time, about twenty a second
       const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml();
     } catch (e) {}
@@ -1968,8 +2003,28 @@
     return /SILVER, loose in the rubble/.test(text) ? "q-silver" : /^Deep in the stone/.test(text) || tier === "MYTHIC" ? "q-mythic" : tier === "RARE" ? "q-rare" : tier === "MOON" ? "q-moon" : "q-plain";
   }
   let searchBeat = null;                        // the beat between a search and its result box
+  // (v1.01.1) LINE 1 during a good find: someone in the party reacts while the dots run on. Whoever is standing,
+  // not KURA; with nobody, KURA's own breath.
+  let beatLine1 = null;
+  function partyLeans() {
+    const who = (save.party || []).slice(1).filter(p => p.hp > 0).map(p => p.name);
+    if (!who.length) return "> KURA holds her breath.";
+    const n = who[Math.floor(Math.random() * who.length)];
+    return "> " + [`${n} leans closer.`, `${n} goes quiet.`, `${n} stops fidgeting.`, `${n} holds very still.`, `${n} looks over KURA's shoulder.`][Math.floor(Math.random() * 5)];
+  }
+  // LINE 3 after a good find: the pit answers, in the line's own voice (it never says KURA). Others on her level right
+  // now (the live count) hear it; alone, the dark does.
+  function searchEcho(best) {
+    const lv = save.height || 1, mine = ((liveNow && liveNow.levels) || []).find(x => x.level === lv), others = mine ? mine.n - 1 : 0;
+    const pick = a => a[Math.floor(Math.random() * a.length)];
+    if (best === "MOON") return pick(["The moon looks down a little longer.", "Somewhere above, the moon turns its face this way."]);
+    if (best === "stairs") return pick(["Cold air comes down from above.", "Somewhere above, the dark opens a little."]);
+    if (others > 0) return pick(["On this level, someone else stops to listen.", "Someone else on this level looks up.", "Far off on this level, a search goes quiet."]);
+    return pick(["Somewhere above, the dark shifts.", "The walls settle, a little further off.", "Down here, something old notices."]);
+  }
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   function act(name) {
+    if (!searchGo && !searchBeat) beatLine1 = null;     // the party's reaction to a search lasts until she does something else
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
     // screen (resetBox() -> answerConfirm(true) -> act("reset")); that's the title's own exit into the game.
     if (atTitle) leaveTitle();
@@ -1995,24 +2050,54 @@
       const lead = save.look ? `> KURA scries the ${SMT.moonIndex(SMT.now()) === 0 ? "sky" : "moon"}`
         : save.view && save.view.end === "exchange" ? "> KURA reaches for the screen"
         : can.door[save.facing] ? "> KURA listens at the door" : `> KURA searches the ${WALL[save.facing] || ""} wall`;
-      let dots = 0, shown = 0, full = null, head = null, parts = [];
+      // v1.01.1: THE RESULT HAS WEIGHT. The dots run longer the better the find (a RARE thing or the stairs three more,
+      // a MYTHIC or MOON thing five), then the result is typed out a letter at a time, a sentence at a time with a
+      // beat between. A real find's box waits until the typing is done.
+      const TYPE_MS = 30, BEAT_MS = 1000, DOT_MS = 200, MORE_DOT_MS = 260, WEIGHT = { RARE: 3, MYTHIC: 5, MOON: 5 };
+      let dots = 0, extra = 0, full = null, head = null, parts = [], shown = 0, typed = 0, good = false, best = null;
+      // The cadence (v1.01.1): line 2 is KURA searching; for a good find, line 1 is the party reacting while the dots
+      // run on; line 2 types the find; then line 3, quiet the whole time, says one thing about it. A plain result has
+      // no reaction, and line 3 just picks up again.
+      typeHush();
+      const done = () => {
+        if (good) typeSay(searchEcho(best));
+        else typeQuiet = false;
+      };
+      const showHeld = () => { if (heldFound) { const b = heldFound; heldFound = null; if (save && document.getElementById("found").hidden) foundBox(b); } };
       const step = () => {
-        if (dots < 3) { dots++; save.log = lead + ".".repeat(dots); draw(); searchBeat = setTimeout(step, 200); return; }
+        if (full === null && dots < 3) { dots++; save.log = lead + ".".repeat(dots); draw(); searchBeat = setTimeout(step, DOT_MS); return; }
         if (full === null) {                              // the dots are done: now the search itself
           save.log = was;
-          searchBeat = null; searchGo = true; try { act("search"); } finally { searchGo = false; }
-          if (!save || save.dead || save.encounter || save.question || (save.altar && save.altar.open) || !document.getElementById("found").hidden) return;
+          const had = (save.items || []).length;
+          searchBeat = null; searchGo = true; holdFound = true;
+          try { act("search"); } finally { searchGo = false; holdFound = false; }
+          if (!save || save.dead || save.encounter || save.question || (save.altar && save.altar.open) || !document.getElementById("found").hidden) { showHeld(); typeQuiet = false; return; }
           full = save.log;
           const m = /^> KURA (?:searches|scries) the [^.]+\.+/.exec(full || "");
           head = m ? m[0] : null;
           const rest = head && full.startsWith(head + " ") ? full.slice(head.length + 1) : null;
           parts = rest ? (rest.match(/[^.!?]+[.!?]+(?:\s+|$)/g) || [rest]).map(x => x.trim()) : [];
-          if (parts.length < 2) return;                   // one sentence: it is already up, whole
+          if (!parts.length) { showHeld(); typeQuiet = false; return; }      // nothing to type (a door, the screen): it is already up, whole
+          const gainedNames = (save.items || []).slice(had), gained = gainedNames.map(n => WEIGHT[RULES.tierOf(n)] || 0);
+          extra = Math.max(0, ...gained, /Stairs lead up/.test(full) ? 3 : 0);
+          good = extra > 0;
+          best = /Stairs lead up/.test(full) && !gained.some(w => w) ? "stairs" : (gainedNames.map(n => RULES.tierOf(n)).find(t => t === "MOON" || t === "MYTHIC") || gainedNames.map(n => RULES.tierOf(n)).find(t => t === "RARE") || null);
+          if (good) beatLine1 = partyLeans();
+          save.log = head; draw();
+          searchBeat = setTimeout(step, extra ? MORE_DOT_MS : TYPE_MS);
+          return;
         }
-        shown++;
-        if (shown >= parts.length) { searchBeat = null; save.log = full; draw(); return; }
-        save.log = head + " " + parts.slice(0, shown).join(" "); draw();
-        searchBeat = setTimeout(step, 550);
+        if (extra > 0) { extra--; head += "."; save.log = head; draw(); searchBeat = setTimeout(step, MORE_DOT_MS); return; }
+        // Type the current sentence a letter at a time; between sentences, a beat.
+        const sentence = parts[shown] || "";
+        if (typed < sentence.length) {
+          typed++;
+          save.log = head + " " + parts.slice(0, shown).concat(sentence.slice(0, typed)).join(" "); draw();
+          searchBeat = setTimeout(step, TYPE_MS); return;
+        }
+        shown++; typed = 0;
+        if (shown >= parts.length) { searchBeat = null; save.log = head + " " + parts.join(" "); draw(); showHeld(); done(); return; }
+        searchBeat = setTimeout(step, BEAT_MS);
       };
       save.log = lead; draw();
       searchBeat = setTimeout(step, 200);
@@ -2270,8 +2355,9 @@
     if (!document.getElementById("board").hidden) {
       e.preventDefault();
       if (key === "c" || key === "b" || key === "escape") toggleBoard(false);
-      else if (save && save.freeSteps && boardData && (key === "arrowdown" || key === "arrowup")) { boardSel = (boardSel + (key === "arrowdown" ? 1 : boardData.rows.length - 1)) % Math.max(1, boardData.rows.length); renderBoard(); }
-      else if (key === "d" && save && save.freeSteps) deleteEntry();
+      else if (save && save.freeSteps && boardData && boardView === "board" && (key === "arrowdown" || key === "arrowup")) { boardSel = (boardSel + (key === "arrowdown" ? 1 : boardData.rows.length - 1)) % Math.max(1, boardData.rows.length); renderBoard(); }
+      else if (key === "d" && save && save.freeSteps && boardView === "board") deleteEntry();
+      else if (key === "h" && save && save.freeSteps) { if (boardView === "here") { boardView = "board"; boardData ? renderBoard() : loadBoard(); } else showPresence(); }
       return;
     }
     if (!document.getElementById("log").hidden) {

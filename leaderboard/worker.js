@@ -7,6 +7,7 @@
 //   POST /here    {id, level}                                  -> {ok, now}   (a "someone is here" ping: daily, and every few minutes while playing; now = who is here right now)
 //   GET  /feed                                                 -> everything the title screen shows, in one read
 //   GET  /admin   (header x-admin-key)                         -> {ok} if the key is right, else 403 (the game's X menu asks this)
+//   GET  /admin/here (header x-admin-key)                      -> every device seen this moon, for the X-mode board (v1.01.1)
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
 const MAX = { floor: 20, days: 400 };
@@ -507,6 +508,21 @@ export default {
       if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
       if (!env.ADMIN_KEY || req.headers.get("x-admin-key") !== env.ADMIN_KEY) return json({ error: "forbidden" }, 403, allow);
       return json({ ok: true }, 200, allow);
+    }
+
+    // ADMIN PRESENCE (v1.01.1): every device seen this moon, newest first, for the game's X-mode board. The admin key
+    // only. A row is a short piece of its random id, its level, how long ago it was seen, and whether it's a bot;
+    // never the sender's hash. Plus the counts: right now (no bots), the last day, and this moon.
+    if (url.pathname === "/admin/here" && req.method === "GET") {
+      if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
+      if (!env.ADMIN_KEY || req.headers.get("x-admin-key") !== env.ADMIN_KEY) return json({ error: "forbidden" }, 403, allow);
+      const now = Math.floor(Date.now() / 1000), since = epochStart();
+      const rows = (await env.DB.prepare(`SELECT id, level, at FROM present WHERE at > ?1 ORDER BY at DESC LIMIT 60`).bind(since).all()).results;
+      const count = async (where, ...args) => (await env.DB.prepare(`SELECT COUNT(*) AS n FROM present WHERE ${where}`).bind(...args).first()).n;
+      return json({
+        now: await count(`at > ?1 AND id NOT LIKE 'bot%'`, now - LIVE_WINDOW), today: await count(`at > ?1`, now - 86400), month: await count(`at > ?1`, since),
+        rows: rows.map(r => ({ id: r.id.startsWith("bot") ? r.id.slice(3, 9) : r.id.slice(0, 6), bot: r.id.startsWith("bot"), level: r.level, ago: now - r.at })),
+      }, 200, allow);
     }
 
     // Removing an entry takes the admin key (a Worker secret: `npx wrangler secret put ADMIN_KEY`).
