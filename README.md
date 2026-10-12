@@ -2,7 +2,7 @@
 
 *One door a day. The dark rises with the moon.*
 
-**Play it:** [okayline.itch.io/4dungeon](https://okayline.itch.io/4dungeon) or [okayline.github.io/daily-dungeon](https://okayline.github.io/daily-dungeon/)
+**Play it:** [okayline.itch.io/4dungeon](https://okayline.itch.io/4dungeon)
 
 <img width="60%" alt="Daily Digital Demon Dungeon, build v1.02" src="screenshots/v1.02.png" />
 
