@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.02 - Hold Your Breath - Oct 11 2026, 17:37 HST
+
+![v1.02](screenshots/v1.02.png)
+
+- **Searching has weight.** What KURA turns up is typed out a letter at a time, with a beat between sentences. When something good is coming, the wait runs a little longer.
+- **The party leans in** when a search is about to turn up something good.
+- **The pit answers.** The bottom line goes quiet while KURA searches, and after a good find, it has something to say.
+- **The find box is for good finds now.** Lesser things go straight into the bag.
+- **The dots over the breath bar** count the other way: one when she's rested, more as she tires.
+- **The exchange screen's arrow** moves a little quicker.
+
 ## v1.01 - The House Rolls - Oct 11 2026, 17:15 HST
 
 ![v1.01](screenshots/v1.01.png)
