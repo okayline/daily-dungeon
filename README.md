@@ -1,31 +1,32 @@
 # Daily Digital Demon Dungeon
 
-*One key a day. The dark rises with the moon. Get out before it takes your level.*
+*One key a day. The dark rises with the moon.*
 
 **Play it:** [okayline.itch.io/4dungeon](https://okayline.itch.io/4dungeon) or [okayline.github.io/daily-dungeon](https://okayline.github.io/daily-dungeon/)
 
 <img width="60%" alt="Daily Digital Demon Dungeon, build v1.02" src="screenshots/v1.02.png" />
 
-An 80-column ASCII roguelike in the spirit of 80s CRPGs and Shin Megami Tensei, played on the real calendar. KURA wakes at the bottom of a pit four levels deep and climbs toward the surface, with the dark coming up behind her.
+An 80-column ASCII roguelike in the spirit of 80s CRPGs and Shin Megami Tensei, played on the real calendar. Open one door a day on the real Lunar calendar. The moon phase in real life impacts gameplay in different ways.
 
 ## The Moon Is Real
 
-- **The dark rises with the moon.** Each quarter of the lunar month, the dark takes a level. Leave before your level's quarter ends, or the run is over. Leaving early banks the days you didn't use.
-- **The moon sets the demons' mood.** Near the new moon they talk; near the full moon they're wild and hit harder.
-- **Full moon nights are rarer, and stranger.** Some things only turn up deep in the walls when the moon is full.
-- **Look up and ask her.** The real moon can tell you what a locked door hides, more often the fuller she is.
+- **The Dark rises with the Moon.** Each quarter of the lunar month, the dark consumes a level. Ascend before the quarter ends to survive the floor, survive all four floors to complete one Lunar Cycle and finish the run!
+- **The Moon sets the Mood.** The moon's real phase has in-game effects.  Near the new moon demons are more open, and near the full moon they are more wild.  In between it shifts a little each day.  Not only demons, but most of the game's mechanics are affected by the real moon phase.
+- **Full moon nights are Rarer, and Stranger.** The deep gives up odd things that only show up under the brightest light of the moon.
 - **Everyone is in the same pit.** Everyone playing in the same quarter is on the same level, and each day's rooms are the same for all. Which door is which is yours alone.
 - **You're not alone down there.** The game tells you when others are in the pit right now, and how many are on your level. Only how many, never who.
+- **Look up and ask her.** There is no ceiling, only the night sky and the real moon. Some nights she gives you hints about the rooms.  The fuller she is, the happier she seems?
+
 
 ## Good To Know
 
 - **One key a day.** Spend it to unlock a door, or go on STANDBY and rest, which also keeps that day's omen.
-- **Breath.** Searching and asking the moon tire KURA; her breath is the bar under the map. Spend it too fast and she has to stop and recover.
-- **The omen.** One a day, the same for everyone, and it shifts the odds.
-- **Lean.** Every choice pulls you toward LAW, NEUTRAL or CHAOS. Three days leaning the same way in a row, and something unusual happens.
-- **Your party.** Up to three demons can join you. They have patience: rudeness, breaking things or mixing opposite sides can drive them off. Gifts help.
-- **The exchange.** Deep in the pit, a screen is still trading. What you find down there doesn't have to stay yours.
-- **The board.** Finished runs can be posted, and the title screen carries numbers and rumors from everyone else.
+- **Breath.** Actions like searching and walking tire you out. Looking around is free.  Breath shows on the strip under the map. Spend it too fast and you have to stop and recover for a few seconds.
+- **The Omen.** Once a day the Moon gives her Omen.  It is the same Omen for everyone, and it changes the odds of what the day brings.
+- **Alignment.** Choices can push you one way or the other, and demons (and your party members) can tell.
+- **Your Party.** Start with some friends. Demons can join you (up to three), and each has patience.  Wear anybody's patience thin and they get restless and may leave. Gifts help.
+- **The Exchange.** Deep in the pit, a screen is still trading. What you find down there doesn't have to stay yours.
+- **The Board.** Finished runs can be posted, and the title screen carries numbers and rumors from everyone else.
 - **Saves.** Your run saves in your browser. The `[?]` menu has a password to move a run to another device.
 
 ## Files
