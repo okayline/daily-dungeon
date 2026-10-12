@@ -24,7 +24,7 @@ An 80-column ASCII roguelike in the spirit of 80s CRPGs and Shin Megami Tensei, 
 - **The omen.** One a day, the same for everyone, and it shifts the odds.
 - **Lean.** Every choice pulls you toward LAW, NEUTRAL or CHAOS. Three days leaning the same way in a row, and something unusual happens.
 - **Your party.** Up to three demons can join you. They have patience: rudeness, breaking things or mixing opposite sides can drive them off. Gifts help.
-- **The exchange.** Every dead end has a screen in its wall, a market line ticking across it. Trade rare finds with other players: give them away, ask for something back, or share an offer by its code. Moon things keep between runs. Every offer closes when the moon turns.
+- **The exchange.** Deep in the pit, a screen is still trading. What you find down there doesn't have to stay yours.
 - **The board.** Finished runs can be posted, and the title screen carries numbers and rumors from everyone else.
 - **Saves.** Your run saves in your browser. The `[?]` menu has a password to move a run to another device.
 
