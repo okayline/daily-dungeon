@@ -179,9 +179,10 @@
 
     // BONUS ROOM: whether one happens at all is decided once a day, privately, in rules.js's sync() --
     // not here. This just places whatever that daily roll already decided (floor.pendingBonus) into
-    // one of the new wing's open rooms (its dead end, else its passage) as THE ARCHIVE, the first
-    // chance it gets. Once per floor. Never swaps a room behind a hinted door, so hints stay true.
-    const bonusSlot = names.includes("X") ? "X" : names.includes("P") ? "P" : null;
+    // the new wing's PASSAGE as THE ARCHIVE, the first chance it gets. Once per floor. Never swaps a room
+    // behind a hinted door, so hints stay true. Since v1.00 it never takes the dead end (every dead end holds
+    // the exchange's screen, the same for everyone) and never the stairs wing (the stairs may be in its passage).
+    const bonusSlot = names.includes("P") && stage < floor.pairs ? "P" : null;
     const bonusN = !floor.bonusRolled && stage > 0 && bonusSlot && floor.pendingBonus ? bonusSlot : null;
     if (bonusN) { floor.bonusRolled = true; floor.pendingBonus = false; }
     // ANTI-BONUS ROOM (THE VOID): the mirror case, same deal -- rules.js's daily roll only sets this

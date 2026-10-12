@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS present (
   who   TEXT                          -- hash of the sender, for the rate limit only
 );
 CREATE INDEX IF NOT EXISTS present_at_idx ON present (at);
+-- Live presence: lets a new device's rate-limit check read only that sender's rows. Bot ids start "bot".
+CREATE INDEX IF NOT EXISTS present_who_idx ON present (who, at);
 
 -- NEWS (v0.90): the ambient events again, now with where and who. x is a small JSON object of checked fields:
 -- lv (level height), d (day on the level), k (room kind), a (L/N/C), p (party size), c (levels into the run),
@@ -72,3 +74,58 @@ CREATE TABLE IF NOT EXISTS news (
 );
 CREATE INDEX IF NOT EXISTS news_type_idx ON news (type, id);
 CREATE INDEX IF NOT EXISTS news_who_idx ON news (who, made);
+
+-- THE EXCHANGE (v1.00): the player economy. See the long note in worker.js above economy().
+-- OWNERS: one row a key (only its SHA-256 is kept). run: the one living run it deals for; moon_q: the quarter its
+-- one outside MOON thing was taken in; who: the sender's hash, to slow down piles of new keys.
+CREATE TABLE IF NOT EXISTS eco_owners (
+  owner  TEXT PRIMARY KEY,
+  run    TEXT,
+  bot    INTEGER NOT NULL DEFAULT 0,
+  made   INTEGER NOT NULL,
+  moon_q INTEGER,
+  who    TEXT
+);
+CREATE INDEX IF NOT EXISTS eco_owners_who_idx ON eco_owners (who, made);
+-- ITEMS: every RARE, MYTHIC or MOON thing the Worker saw found. state: bag | stash | escrow | gone | dead.
+-- finder and who count the day's finds; fresh = delivered to a run's bag, not yet picked up by its page.
+CREATE TABLE IF NOT EXISTS eco_items (
+  id     INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner  TEXT NOT NULL,
+  run    TEXT,
+  name   TEXT NOT NULL,
+  tier   TEXT NOT NULL,
+  state  TEXT NOT NULL,
+  finder TEXT NOT NULL,
+  who    TEXT,
+  made   INTEGER NOT NULL,
+  fresh  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS eco_items_owner_idx ON eco_items (owner, state);
+CREATE INDEX IF NOT EXISTS eco_items_finder_idx ON eco_items (finder, tier, made);
+CREATE INDEX IF NOT EXISTS eco_items_who_idx ON eco_items (who, tier, made);
+-- OFFERS: one thing for nothing, any thing of a tier ("tier:RARE") or one named thing ("name:a moonstone").
+-- state: open | taken | cancelled | closed (the quarter ended) | dead (its run ended).
+CREATE TABLE IF NOT EXISTS eco_offers (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  code    TEXT NOT NULL UNIQUE,
+  owner   TEXT NOT NULL,
+  run     TEXT,
+  item    INTEGER NOT NULL,
+  wants   TEXT NOT NULL DEFAULT '',
+  public  INTEGER NOT NULL DEFAULT 0,
+  bot     INTEGER NOT NULL DEFAULT 0,
+  quarter INTEGER NOT NULL,
+  made    INTEGER NOT NULL,
+  state   TEXT NOT NULL,
+  taker   TEXT,
+  paid    INTEGER,
+  done    INTEGER
+);
+CREATE INDEX IF NOT EXISTS eco_offers_market_idx ON eco_offers (state, quarter, public, bot, id);
+CREATE INDEX IF NOT EXISTS eco_offers_owner_idx ON eco_offers (owner, state);
+-- RETIRED RUNS: a run that ended (or was replaced by a newer one on the same key) can't deal again.
+CREATE TABLE IF NOT EXISTS eco_retired (
+  run TEXT PRIMARY KEY,
+  at  INTEGER NOT NULL
+);

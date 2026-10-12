@@ -558,7 +558,7 @@
     const stairsAhead = RS(d).found.includes("stairs") && st.facing === stairsDir(d.floor, d.at);
     st.view = {
       left: [!door(LEFT[st.facing]), true], right: [!door(RIGHT[st.facing]), true],
-      end: stairsAhead ? "stairs" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : "wall",
+      end: stairsAhead ? "stairs" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : facingExchange(st) ? "exchange" : "wall",
       lock: stairsAhead ? null : isSealed(d, st.facing) ? "x" : looksLocked(d, st.facing) ? "+" : null,    // the knob: + asks for the key, x is sealed
     };
     return st;
@@ -945,8 +945,8 @@
     if (rs.walls) return rs.walls;
     const room = d.floor.rooms[i];
     // The terminal's wall can't be searched for hidden things (it wakes the terminal instead), so nothing hides there.
-    const altar = room.kind === "altar" ? altarDir(d.floor, i) : null;
-    const free = CW.filter(x => !doorWall(room, x) && x !== altar);
+    const altar = room.kind === "altar" ? altarDir(d.floor, i) : null, exch = exchDir(d.floor, i);
+    const free = CW.filter(x => !doorWall(room, x) && x !== altar && x !== exch);
     const w = { taken: {} };
     free.forEach(x => { w[x] = []; w.taken[x] = 0; });
     const sd = stairsDir(d.floor, i);
@@ -976,6 +976,12 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
+    if (facingExchange(st)) {                             // the exchange's screen: free (even out of breath), and the page opens the window
+      act(st, "exchange:open");
+      st.log = "> KURA touches the screen. The market wakes.";
+      st.exchangeOpen = true;
+      return show(st);
+    }
     if (breathNow(st, true) < 1) { if (!/breath|needs a moment/.test(st.log || "")) tally(st, "breathOut"); nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
     if (st.look === "U") return askMoon(st);              // looking up, SEARCH asks the moon
     spendBreath(st);
@@ -1389,6 +1395,24 @@
     return ALTAR_TALK[i];
   }
   const facingAltar = st => !!(st.dungeon && altarDir(st.dungeon.floor, st.dungeon.at) === st.facing);
+  // THE EXCHANGE (v1.00): every dead end has a screen set into one wall (never a door wall, never the stairs wall),
+  // where players trade. Searching that wall wakes it, free of breath; the page opens the exchange window.
+  // A dead end whose walls were laid out before v1.00 may still hide something behind that wall: until it is found,
+  // the wall searches like any other, and the screen only shows once the wall is bare.
+  function exchDir(fl, i) {
+    const room = fl.rooms[i];
+    if (!room || !room.dead || room.kind) return null;
+    const free = CW.filter(x => !doorWall(room, x) && !(fl.stairs === i && x === stairsDir(fl, i)));
+    return free.length ? free[(fl.seed + i * 13) % free.length] : null;
+  }
+  function exchHere(d, i) {
+    const x = exchDir(d.floor, i);
+    if (!x) return null;
+    const rs = RS(d, i), w = rs.walls;
+    if (w && w[x] && (w.taken[x] || 0) < w[x].length) return null;
+    return x;
+  }
+  const facingExchange = st => !!(st.dungeon && !st.look && exchHere(st.dungeon, st.dungeon.at) === st.facing);
   function altarUsed(st) { const d = st.dungeon; return !!(d && RS(d).altarDay === st.day); }
   function altarGifts(st) {
     const n = 20 * floorNum(st), out = [{ silver: n, ok: (st.silver ?? 0) >= n, label: `${n} SILVER` }];
