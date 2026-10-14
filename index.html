@@ -67,6 +67,10 @@
   .btn.flee { color: var(--bright); animation: blink 1.2s steps(1) infinite; }
   .unsaved { color: var(--gold); }
   .frame { position: relative; }
+  /* The title logo: an image over the banner's rows, sized in the screen's own units (same font size as the pre), so it
+     scales with the text. Half a row down from the banner's top, eight rows tall; the column comes from SMT.LOGO. */
+  .titlelogo { position: absolute; pointer-events: none; font-size: clamp(6px, calc((100vw - 32px) / 49), 22px);
+    top: calc(6.5 * 1.05em); height: calc(8 * 1.05em); width: auto; }
   .logview { position: absolute; inset: 0; background: rgba(7, 9, 10, 0.96); overflow: auto; cursor: pointer;
     border: 1px solid var(--trail); box-sizing: border-box; padding: 1.5em 2ch; }
   .logview pre { white-space: pre-wrap; }
@@ -124,7 +128,7 @@
 </style>
 </head>
 <body>
-  <div class="frame"><pre id="screen">LOADING...</pre>
+  <div class="frame"><pre id="screen">LOADING...</pre><img id="logo" class="titlelogo" src="title-logo.png" alt="Daily Digital Demon Dungeon" hidden>
     <div id="log" class="logview" role="dialog" aria-modal="true" aria-label="Adventure log" hidden><pre></pre></div>
     <div id="inv" class="viewpop" role="dialog" aria-modal="true" aria-label="Invoke: your bag" hidden><pre></pre></div>
     <div id="exch" class="viewpop" role="dialog" aria-modal="true" aria-label="Exchange: trading with other players" hidden><pre></pre></div>
@@ -263,8 +267,8 @@
         .replace(/([一-鿿])/g, '<span class="kanji"><span class="g">$1</span></span>');
       if (i === 2 || i === 3) return moonBox(esc(line));
       if (i === 4) return moonBox(esc(line)).replace("^^^", '<span class="moon">^^^</span>');
-      // The wordmark (rows 6 to 13): each block glyph boxed to one cell, like the moon's, so the letters hold their shape.
-      if (i >= 6 && i <= 13) {
+      // The banner (rows 6 to 14): each block glyph boxed to one cell, like the moon's, so the letters hold their shape.
+      if (i >= 6 && i <= 14) {
         const wm = t => esc(t).replace(/[▀▄█▓▌▐]/g, ch => `<span class="cell wm"><span class="g">${ch}</span></span>`);
         const C = SMT.CRES, b = i - 6 - C.row;
         if (b < 0 || b >= C.rows) return wm(line);
@@ -714,6 +718,7 @@
   }
   function leaveTitle() {
     atTitle = false;
+    document.getElementById("logo").hidden = true;
     if (titleTimer) { clearInterval(titleTimer); titleTimer = null; }
   }
   function drawTitle() {
@@ -727,6 +732,9 @@
       document.getElementById("screen").textContent = "The title screen could not be drawn. Reload to try again.";
     }
     document.getElementById("ver").textContent = SMT.VERSION;
+    const logo = document.getElementById("logo"), L = SMT.LOGO;
+    logo.style.left = `calc(${1 + L.col}ch + (${L.cols}ch - ${8 * 1.05 * 2.004}em) / 2)`;   // centered in its columns (the image is about 2:1)
+    logo.hidden = !atTitle;
   }
   // NEW RUN with nothing to lose skips the confirm; CONTINUE only fires with something real to resume.
   function freshRun() {

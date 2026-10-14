@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.02";
+  const VERSION = "v1.03";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -483,27 +483,23 @@
     const moon = `${["1st", "2nd", "3rd", "4th"][q]} QTR - ${kanji} ${name.padEnd(9)} - Lunar Days ${(first + "-" + last).padEnd(5)}`, pad = Math.max(0, VW - colsOf(moon)), lead = Math.floor(pad / 2);
     return [...rows, ...Array(Math.max(0, 8 - rows.length - 2)).fill(""), " ".repeat(lead) + moon + " ".repeat(pad - lead), ""];
   }
-  // The title's crescent moon: seven rows of block characters, thirteen columns wide. Only the shape lives here; the
+  // The title's crescent moon: nine rows of block characters (drawn half a row up, so it spans the logo's eight), fifteen columns wide. Only the shape lives here; the
   // page colors it (blue, the dotted block on the inner edge matches the lettering's dots).
-  const CRESCENT = [" ▀▀▀▓▓█▄▄    ", "     ▀▓▓███▄ ", "       ▓▓███▄", "       ▓▓████", "       ▓▓███▀", "     ▄▓▓███▀ ", "▄▄▄▓▓██▀▀    "];
-  const CRES_W = 13, CRES_ROW = 1, CRES_COL = 3;   // CRES_COL: where it starts in the frame (the group of moon, gap and lettering is centered)
+  const CRESCENT = [" ▄▄▄▄▄▄▄       ", "     ▀▓▓▓█▄▄   ", "       ▀▓▓███▄ ", "        ▓▓█████", "        ▓▓█████", "        ▓▓█████", "       ▄▓▓███▀ ", "    ▄▄█▓▓█▀▀   ", "▀▀▀▀▀▀▀▀       "];
+  const CRES_W = 15, CRES_ROW = 0, CRES_COL = 8;
+  // The logo (the dev's own slanted lettering) is an image, title-logo.png, laid over the banner by the page:
+  // LOGO_COL is the frame column it starts at (crescent, a four-column gap, then the logo), LOGO_COLS its width.
+  const LOGO_COL = CRES_COL + CRES_W + 4, LOGO_COLS = 42;   // CRES_COL: where it starts in the frame (the group of moon, gap and lettering is centered)
   function renderTitle(opts) {
     opts = opts || {};
     const now = opts.now || SMT_now();
     const S = headerLines(opts.omenText || "", opts.tz, now);
-    // THE WORDMARK runs the full width of the frame, in block letters (the dev's own lettering), on the first eight
-    // rows of the main area. Under it, side by side: this quarter's level as a line of days (see levelBones) on the
-    // left, eight rows; the rumor cards on the right.
-    const MARK = ["          ▄                       ▄       ▄", "█▀▄ ▄▀█ █ █  █ █      █▀▄ █ ▄▀▀ █ █▄  ▄▀█ █", "▓ ▐ ▓▄▌ ▓ ▓   ▀▌      ▓ ▐ ▓ ▌ ▌ ▓ ▐ ▄ ▓▄▌ ▓", "▀▀▀ ▌ ▀ ▀ ▀▀ ▀▀▀      ▀▀▀ ▀  ▀▀ ▀  ▀▀ ▌ ▀ ▀▀", "", "█▀▄ ▄▀▀ ▄▀▄▀▄ ▄▀▄ ▄▀▄      █▀▄ █ ▄ ▄▀▄ ▄▀▀ ▄▀▀ ▄▀▄ ▄▀▄", "▓ ▐ ▌▀▄ ▓ ▌ ▌ ▐ ▓ ▓ ▌      ▓ ▐ ▐ ▓ ▓ ▌ ▌ ▌ ▌▀▄ ▐ ▓ ▓ ▌", "▀▀▀  ▀▀ ▀ ▀ ▀  ▀▀ ▌ ▀      ▀▀▀  ▀▀ ▌ ▀  ▀▀  ▀▀  ▀▀ ▌ ▀"];
-    const TOP = 9;                                       // rows the wordmark takes (eight, and a blank one)
-    const markTop = MARK.slice(0, 4), markBot = MARK.slice(5, 8), wide = a => Math.max(...a.map(l => l.length));
+    // THE LOGO is an image the page lays over the first eight rows of the main area (see LOGO_COL), so the banner
+    // here only carries the crescent. Under it, side by side: this quarter's level as a line of days (see levelBones)
+    // on the left, eight rows; the rumor cards on the right.
+    const TOP = 9;                                       // rows the logo and crescent take
     const banner = Array.from({ length: TOP }, () => "");
-    // A waxing crescent sits to the left of the lettering, the same on every day: lit on the right, the dotted
-    // block along its inner edge, one row down so it spans the letters' eight rows (rows 1 to 7 of the banner).
-    const logoW = Math.max(wide(markTop), wide(markBot)), gl = CRES_COL, x0 = gl + CRES_W + 3;
-    markTop.forEach((l, i) => { banner[i] = " ".repeat(x0 + Math.floor((logoW - wide(markTop)) / 2)) + l; });
-    markBot.forEach((l, i) => { banner[5 + i] = " ".repeat(x0 + Math.floor((logoW - wide(markBot)) / 2)) + l; });
-    CRESCENT.forEach((m, i) => { banner[CRES_ROW + i] = " ".repeat(gl) + m + ljust(banner[CRES_ROW + i], gl + CRES_W).slice(gl + CRES_W); });
+    CRESCENT.forEach((m, i) => { banner[CRES_ROW + i] = " ".repeat(CRES_COL) + m; });
     const view = Array.from({ length: VH }, () => " ".repeat(VW));
     levelBones(now).forEach((l, i) => { if (TOP + i < VH) view[TOP + i] = colsOf(l) >= VW ? l.slice(0, VW) : l + " ".repeat(VW - colsOf(l)); });
     // Sidebar: a pinned "RUMORS AND SECRETS" header (never scrolls) over an auto-advancing card ticker.
@@ -574,7 +570,7 @@
     return `this season leans ${side}   [${bar}]  ${lawPct} / ${chaosPct}`;
   }
 
-  const api = { VERSION, CRES: { w: CRES_W, row: CRES_ROW, col: CRES_COL, rows: CRESCENT.length }, moonNote, renderView, renderScreen, renderTitle, moonIndex, epochIndex, quarterOf, quarter, QUARTER_END, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
+  const api = { VERSION, CRES: { w: CRES_W, row: CRES_ROW, col: CRES_COL, rows: CRESCENT.length }, LOGO: { col: LOGO_COL, cols: LOGO_COLS }, moonNote, renderView, renderScreen, renderTitle, moonIndex, epochIndex, quarterOf, quarter, QUARTER_END, utcDay, now, setSkew, trusted, zone, localDay, localISO, get moonLines() { return MOONLINE_ALL; } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SMT = api;
 })(this);
