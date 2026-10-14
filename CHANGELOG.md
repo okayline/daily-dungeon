@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.03 - A Name Over the Gate - Oct 13 2026, 20:31 HST
+
+![v1.03](screenshots/v1.03.png)
+
+- **New lettering on the title.** The name over the pit is drawn in a new hand now, slanted, across two lines.
+- **The crescent grew to match**, and sits level with the name.
+
 ## v1.02 - Hold Your Breath - Oct 11 2026, 17:37 HST
 
 ![v1.02](screenshots/v1.02.png)
