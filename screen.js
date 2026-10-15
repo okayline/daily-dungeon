@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.03";
+  const VERSION = "v1.04";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -345,7 +345,7 @@
     const silverStr = ` SILVER ${(st.silver ?? st.macca ?? 0).toLocaleString("en-US")}`;
     // The ALIGN tag sits between SILVER and ICHOR: < on the LAW side or > on the CHAOS side only when the last
     // action pulled that way. Spaced out when there is room (< [NEU] >), tight when the amounts are big.
-    const pull = st.pull || 0, aTag = String(st.align).slice(0, 3).toUpperCase();
+    const pull = st.pull || 0, aTag = ({ LAW: "KPT", NEUTRAL: "STR", CHAOS: "FRL" })[String(st.align || "NEUTRAL").toUpperCase()] || "STR";   // v1.04: KURA's natural half
     const gapN = PW - silverStr.length - magStr.length;
     const lA = pull < 0 ? "<" : " ", rA = pull > 0 ? ">" : " ";
     const tag = gapN >= 11 ? `${lA} [${aTag}] ${rA}` : gapN >= 9 ? `${lA}[${aTag}]${rA}` : "";

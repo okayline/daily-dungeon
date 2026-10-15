@@ -254,8 +254,8 @@
       // span the market timer fills (see exTick), top row first.
       .replace(/\u2800+/g, m => `<span class="exq">${" ".repeat(m.length)}</span>`)
       // The ALIGN arrow (which way the last action pulled KURA) glows white.
-      .replace(/&lt;( ?\[(?:LAW|NEU|CHA)\])/, '<span class="pull">&lt;</span>$1')
-      .replace(/(\[(?:LAW|NEU|CHA)\] ?)&gt;/, '$1<span class="pull">&gt;</span>');
+      .replace(/&lt;( ?\[(?:KPT|STR|FRL)\])/, '<span class="pull">&lt;</span>$1')
+      .replace(/(\[(?:KPT|STR|FRL)\] ?)&gt;/, '$1<span class="pull">&gt;</span>');
   }
   // The title screen's own colorizer: the header (rows 0-5) is identical to the in-run screen's and
   // gets the same treatment; everything below it is new (no minimap, no party, no [Y]/[N] questions).
@@ -427,7 +427,7 @@
     for (const n of mine) { const i = left.indexOf(n); if (i >= 0) left.splice(i, 1); else fresh.push(n); }
     save.ecoSeen = mine.slice();
     if (save.dead && !save.ecoEnded && LEADERBOARD_URL && !save.cheated && !save.freeSteps) { save.ecoEnded = true; ecoFetch("end", {}).catch(() => {}); }
-    if (!ecoOk()) return;
+    if (!ecoOk() || !RULES.EXCHANGE_ON) return;      // v1.04: the exchange is parked; finds stay in the bag
     // v1.01: the Worker rolls its own dice for WHICH thing of that tier it is. If it picked another, the bag's copy
     // (and the log line that named it) takes the Worker's name. The found box waits a moment for this (foundBox).
     for (const n of fresh) ecoWait.push(ecoFetch("find", { name: n }).then(d => {
@@ -581,7 +581,7 @@
   // The exchange in the feed (v1.00): the newest public offers and the latest trades, nobody named, no bots.
   function marketCards() {
     const m = titleStats && titleStats.market, out = [];
-    if (!m) return out;
+    if (!m || !RULES.EXCHANGE_ON) return out;          // parked since v1.04
     const asks = w => (!w ? "free" : w.startsWith("tier:") ? "for any " + w.slice(5) : "for " + w.slice(5));
     for (const o of m.open || []) out.push(`MARKET: ${o.name}, ${asks(o.wants)}. Code ${o.code}`);
     for (const t of m.traded || []) out.push(t.paid ? `Traded: ${t.name}, for ${t.paid}` : `Given away: ${t.name}`);
@@ -1008,6 +1008,7 @@
 
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
+  const HOLD_OMEN_ON = false;
   let invList = [], invSel = 0, logGlow = false, ichorPick = -1, holdBtn = null;   // ichorPick: who the picker is on (-1: closed); holdBtn: Hold/Release Omen's own button, not a numbered slot
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
   function textBox(title, tag, lines, W = 70) {
@@ -1052,7 +1053,7 @@
     // THE HELD DAY); releasing it starts a flat 7-real-day cooldown, during which it shows Hold Omen
     // again but greyed out and inert, with the days left to go.
     holdBtn = null;
-    if (save) {
+    if (save && HOLD_OMEN_ON) {                     // v1.04: Hold Omen is taken out of the bag for now (the rules still know it)
       const av = RULES.available(save);
       if (save.bankedOmen !== undefined && !save.useBanked) holdBtn = { label: "Release Omen", action: "release" };
       else if (av.hold) holdBtn = { label: "Hold Omen", action: "hold" };
@@ -1074,7 +1075,9 @@
       return;
     }
     if (ichorPick >= 0) ichorPick = -1;
-    add("INVOKE", "");
+    // KURA's aura sits beside the title: her two-word name and how loud she is (v1.04).
+    const au = save ? RULES.aura(save) : null;
+    add(au ? "INVOKE".padEnd(41 - (au.name.length + au.loud.length + 2)) + `${au.name}  ${au.loud}` : "INVOKE", "");
     add(" ");
     if (!invList.length) add("Nothing yet. Search the walls.");
     invList.forEach((it, i) => add(
@@ -1084,7 +1087,7 @@
     const it = invList[invSel];
     if (it) {
       add(" ");
-      const tag = it.ichor ? `${save.ichor} in hand` : "";
+      const tag = it.ichor ? `${save.ichor} in hand` : RULES.itemAlignName(it.name);
       const lines = it.ichor ? [it.text, "Enter: choose who gets it."]
         : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
       textBox(it.name, tag, lines, 41).forEach(l => add(l, ""));
@@ -1385,13 +1388,14 @@
         ["[M]OON", "look up at the moon; again to look level"],
         ["[S]CRY", "looking up: ask the moon (it takes a breath)"],
         ["[F]IGHT  [T]ALK", "deal with a demon; with none, TALK to the party"],
-        ["[G]IVE", "at a wall terminal, or in a fight: offer a gift"],
-        ["[H]", "Hold Omen, or Release Omen once one is banked"],
+        ["[A]URA in a fight", "read a demon's aura (free)"],
+        ["[G]IVE", "at a wall terminal, or in a talk: offer a gift"],
+        ["[B]EHOLD  [P]EACE", "in a talk: hold something up, or offer it to make peace"],
         ["[I]NVOKE", "the bag: 1-9 or arrows choose, Enter uses"],
         ["[R]UN in a fight", "run through a door (it may block you)"],
         ["[S]EARCH", "search what KURA faces (each takes a breath)"],
         ["[Y]ES  [N]O  [S]ILENT", "answer a question from the party or a demon"],
-        ["1-8", "pick a gift when a demon asks for one"],
+        ["1-8", "pick a gift, or a thing to hold up"],
         ["[C]ODEX", "every demon and item found, over all runs"],
         ["[L]OG", "the adventure log"],
         ["[P]ASSWORD", "keep or move this run, or paste one in"],
@@ -1837,6 +1841,18 @@
         const row = document.createElement("div"); row.append(opt("[B]ACK", "offer-none")); pre.appendChild(row);
         return;
       }
+      if (e.stage === "pick") {                        // BEHOLD / PEACE: what KURA carries, each with how it reads and how loud
+        add(e.pickFor === "peace" ? "PEACE with what?" : "BEHOLD what?");
+        add(" ");
+        RULES.moveItems(save).forEach((g, i) => {
+          const right = ` ${g.tag} ${".".repeat(g.loud)}`, room = COLS - 4 - right.length;
+          const nm = g.label.length > room ? g.label.slice(0, room - 2) + ".." : g.label.padEnd(room);
+          const line = document.createElement("div"); line.append(opt(`[${i + 1}] ${nm}${right}`, "pick-" + i)); pre.appendChild(line);
+        });
+        add(" ");
+        const row = document.createElement("div"); row.append(opt("[B]ACK", "pick-none")); pre.appendChild(row);
+        return;
+      }
       if (e.stage === "gift") {                        // the demon asks for a gift: what it said, then the list
         for (const l of lines) for (const w of wrapText(l, COLS)) add(w, lineClass(l));
         add(" ");
@@ -1845,7 +1861,7 @@
           if (!g.ok) o.classList.add("off");
           line.append(o); pre.appendChild(line);
         });
-        const row = document.createElement("div"); row.append(opt("[N]OTHING", "give-none")); pre.appendChild(row);
+        const row = document.createElement("div"); row.append(e.fromChat ? opt("[B]ACK", "give-none") : opt("[N]OTHING", "give-none")); pre.appendChild(row);
         return;
       }
       const wrapped = [];
@@ -1876,17 +1892,27 @@
         const d = add(w, c);
         if ((replayWait || final) && bi === body.length - 1) { const s = document.createElement("span"); s.className = "wait"; s.textContent = " _"; d.append(s); }   // waiting: for a click between lines, and for your choice after the last one
       });
-      const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1;
+      const twoRows = final && (e.stage === "chat" || e.stage === "hostile");   // a talk: words on one row, item moves under them
+      const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1 - (twoRows ? 1 : 0);
       for (let i = 0; i < rest; i++) add(" ");
       const row = document.createElement("div"); row.className = "brow";
       const left = document.createElement("span");
       if (final) {
-        if (e.stage === "chat") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"), "   ", opt("[S]ILENT", "silent"));   // a third answer: say nothing
+        if (e.stage === "chat" || e.stage === "hostile") {   // a third answer: say nothing. A fighting demon won't hear words: they're dimmed.
+          const w = [opt("[Y]ES", "yes"), opt("[N]O", "no"), opt("[S]ILENT", "silent")];
+          if (e.stage === "hostile") w.forEach(o => { o.className += " off"; });
+          left.append(w[0], "   ", w[1], "   ", w[2]);
+          row.append(left); pre.appendChild(row);
+          const row2 = document.createElement("div"); row2.className = "brow"; const l2 = document.createElement("span");
+          l2.append(opt("[G]IVE", "talkgive"), "   ", opt("[B]EHOLD", "behold"), "   ", opt("[P]EACE", "peace"));
+          row2.append(l2); pre.appendChild(row2);
+          return;
+        }
         else if (e.stage === "ask" || e.stage === "join") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
         else if (e.stage === "swap") {
           save.party.forEach((p, i) => { if (i > 0) left.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
           left.append(opt("[N]O", "swap-none"));
-        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[G]IVE", "offer"), "   ", (() => { const r = opt("[R]UN", "run"); if (save.encounter.ranTried || !["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
+        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[A]URA", "aura"), "   ", (() => { const r = opt("[R]UN", "run"); if (save.encounter.ranTried || !["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
       }
       row.append(left);
       pre.appendChild(row);
@@ -2127,12 +2153,12 @@
       document.querySelectorAll(".btn.ask").forEach(el => { el.classList.remove("nudge"); void el.offsetWidth; el.classList.add("nudge"); });
       return;
     }
-    if (name === "run" && save && save.encounter && save.encounter.ranTried) { save.log = "> KURA already tried to run. FIGHT, TALK, or GIVE."; persist(); draw(); encounterBox(); return; }
+    if (name === "run" && save && save.encounter && save.encounter.ranTried) { save.log = "> KURA already tried to run. FIGHT or TALK."; persist(); draw(); encounterBox(); return; }
     if (name === "run" && save && save.encounter) {
       // Running takes any way out, whichever way KURA faces: an open door first, a locked one (it takes the key) if that's all there is.
       const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]), free = out.filter(d => !can.locked[d]);
       const pool = free.length ? free : out;
-      if (!pool.length) { save.log = "> There is no way out today. FIGHT, TALK, or GIVE."; persist(); draw(); encounterBox(); return; }
+      if (!pool.length) { save.log = "> There is no way out today. FIGHT or TALK."; persist(); draw(); encounterBox(); return; }
       name = "go-" + pool[Math.floor(Math.random() * pool.length)];
     }
     if (name !== "invoke" && name !== "codex") logGlow = false;
@@ -2171,6 +2197,9 @@
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false) : name === "silent" ? RULES.answer(save, "silent")
       : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
       : name.startsWith("offer-") ? RULES.offerGive(save, name === "offer-none" ? null : Number(name.slice(6)))
+      : name.startsWith("pick-") ? RULES.movePick(save, name === "pick-none" ? null : Number(name.slice(5)))
+      : name === "aura" ? RULES.readAura(save) : name === "behold" ? RULES.itemMove(save, "behold") : name === "peace" ? RULES.itemMove(save, "peace")
+      : name === "talkgive" ? RULES.talkGive(save) : name === "hback" ? RULES.hostileBack(save)
       : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
       : name === "altar" ? RULES.altarOpen(save)
       : name === "altar-next" ? RULES.altarNext(save)
@@ -2316,12 +2345,14 @@
       if (fbox.dataset.mode === "encounter") {
         const st2 = save.encounter && save.encounter.stage;
         let k;
-        if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", escape: "give-none" }[key];
+        if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", b: save.encounter.fromChat ? "give-none" : null, escape: "give-none" }[key];
         else if (st2 === "offer") k = /^[1-8]$/.test(key) ? "offer-" + (Number(key) - 1) : { b: "offer-none", n: "offer-none", escape: "offer-none" }[key];
-        else if (st2 === "chat") k = { y: "yes", enter: "yes", n: "no", s: "silent", escape: "no" }[key];
+        else if (st2 === "chat") k = { y: "yes", enter: "yes", n: "no", s: "silent", escape: "no", g: "talkgive", b: "behold", p: "peace" }[key];
+        else if (st2 === "hostile") k = { g: "talkgive", b: "behold", p: "peace", escape: "hback" }[key];
+        else if (st2 === "pick") k = /^[1-8]$/.test(key) ? "pick-" + (Number(key) - 1) : { b: "pick-none", escape: "pick-none" }[key];
         else if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", g: "offer", i: "invoke", r: "run" }[key];
+        else k = { f: "fight", t: "talk", a: "aura", i: "invoke", r: "run" }[key];
         if (k) act(k);
       } else if (fbox.dataset.mode === "found" || fbox.dataset.mode === "done") { if (key === "enter") closeFound(); }   // a find only closes on its [ OK ] (Enter or a click), never by a stray key
       else if (key === "enter" || key === " " || key === "escape") closeFound();

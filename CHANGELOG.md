@@ -2,6 +2,20 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.04 - Read the Room - Oct 14 2026, 18:30 HST
+
+![v1.04](screenshots/v1.04.png)
+
+- **Aura.** Everything has one now: every demon, every thing in the bag, and KURA. Machine things read as SIGNAL, HUM or STATIC; old and living things as KEPT, STRAY or FERAL; things that are both get one of each. The codex says what each one means.
+- **`[A]URA` in a fight.** KURA sizes the demon up: what it reads as, how loud it is, and what it might like. It's free. KURA has opinions.
+- **Talking got hands.** `[G]IVE` moved into the talk, next to two new moves: `[B]EHOLD` holds something up for the demon to see (KURA keeps it), and `[P]EACE` offers something to calm it down. The wrong thing can make it worse.
+- **An angry demon can still be reached.** It won't hear words anymore, but TALK lets KURA show it something. It keeps swinging while she tries.
+- **KURA can be loud.** What she carries adds to her aura, and the bag shows how loud she is. A loud aura gets noticed: by demons, by the dungeon, and by the moon.
+- **KURA's tag** next to SILVER is now KPT, STR or FRL.
+- **The moon has moods.** She's solemn when she's dim and has more to say when she's full.
+- **The exchange is closed for now.** Its screens are gone from the dead ends, and things found stay in the bag. Nothing kept with it is lost.
+- **Hold Omen** is gone from the bag for now.
+
 ## v1.03 - A Name Over the Gate - Oct 13 2026, 20:31 HST
 
 ![v1.03](screenshots/v1.03.png)
