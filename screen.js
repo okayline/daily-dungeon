@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.06";
+  const VERSION = "v1.07";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -313,7 +313,12 @@
     now = now || SMT_now(); extra = extra || "";
     const idx = moonIndex(now);
     const v = st.view;
-    const view = v.look ? renderLook("U", false, idx) : renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
+    // (v1.07) Looking up is the real night sky over the player, when the sky is loaded (see sky.js).
+    const SKY = typeof window !== "undefined" ? window.SKY : (() => { try { return require("./sky.js"); } catch (e) { return null; } })();
+    let sky = null;
+    if (v.look && SKY) { sky = SKY.render(now, st.tz || zone(), st.facing || "N", idx); api.lastSky = sky; } else api.lastSky = null;
+    const view = sky ? [...sky.rows, ...Array.from({ length: VH - sky.rows.length }, () => " ".repeat(VW))]
+      : v.look ? renderLook("U", false, idx) : renderView(v.left, v.right, v.end, (v.end === "dark" || (v.end === "door" && v.lock)) ? 2 : 1, v.lock);
     // Look controls at the foot of the 3D view: [ < ] and [ > ] turn KURA to look around (never move her),
     // and the letter between them is the way she faces. Moving is N/S/E/W in the menu.
     const overlay = (row, col, t) => { view[row] = view[row].slice(0, col) + t + view[row].slice(col + t.length); };

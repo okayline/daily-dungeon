@@ -2,6 +2,18 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.07 - Look Up - Oct 15 2026, 00:18 HST
+
+![v1.07](screenshots/v1.07.png)
+
+- **Looking up shows the real night sky over you.** The stars are where they really are right now, for where you are, and the moon is where she really is, at her real phase. If she's set or hasn't risen yet, she isn't there.
+- **The sky turns.** Stay looking up and it moves with the real night. Turning while looking up turns the sky overhead with you.
+- **The brightest stars** shine in their own soft colors, and the ones that are up are named along the bottom. The place and time sit in the corner.
+- **Fight text** shows two lines at a time. New lines rise in from the bottom and the older ones roll up, so it's easier to follow.
+- **The APPEARS screen** unfolds more slowly, without blank lines between.
+- **INVOKE:** ICHOR is always listed, even at 0. An empty bag just says so. Pressing a number uses that thing right away.
+- **A party member's line stays on the top line** until something else replaces it, instead of going blank.
+
 ## v1.06 - A Word With the Moon - Oct 14 2026, 23:35 HST
 
 ![v1.06](screenshots/v1.06.png)

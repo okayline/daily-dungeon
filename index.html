@@ -123,6 +123,9 @@
   .ver { white-space: pre-line; text-align: right; font-size: 12px; line-height: 14px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
   .cheat { text-align: left; padding: 2px 0 0 1ch; margin-top: -16px; }   /* the X cheat menu: three lines, left-justified; the build number stays at the right */
   .cheat:empty { display: none; }
+  .sky-mid { color: #8a9196; } .sky-far { color: #4d5357; } .sky-moon { color: #ece6cc; text-shadow: 0 0 6px rgba(236, 230, 204, 0.5); }   /* (v1.07) the night sky */
+  .skystamp-at { display: inline-block; position: relative; width: 0; height: 1em; vertical-align: top; }
+  .skystamp { position: absolute; right: 0; bottom: -0.55em; font-size: 0.6em; white-space: nowrap; color: #8b9499; text-shadow: none; }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   .t-ICHOR { color: var(--demon); }
   .foundbox .demon { color: var(--demon); }
@@ -141,6 +144,7 @@
     <div id="ver" class="ver"></div>
     <div id="cheat" class="ver cheat"></div>
     <div id="found" class="foundbox" role="dialog" aria-modal="true" aria-live="polite" hidden><pre></pre></div></div>
+<script src="sky.js"></script>
 <script src="screen.js"></script>
 <script src="floor.js"></script>
 <script src="rules.js"></script>
@@ -159,11 +163,29 @@
     const t = Math.max(-1, Math.min(1, ((save && save.alignScore) || 0) / 6)), end = hex(t < 0 ? "#a990f5" : "#ff7aa8");
     return "#" + NEU.map((v, i) => Math.round(v + (end[i] - v) * Math.abs(t)).toString(16).padStart(2, "0")).join("");
   }
+  // (v1.07) THE NIGHT SKY, when KURA looks up: the view's columns (screen rows 6-20) get their stars colored, the
+  // guide's names in their pastels, and the place and time tucked small into the sky's bottom-right corner.
+  function skyLeft(line, i) {
+    const sky = save && save.look && SMT.lastSky, y = i - 6;
+    if (!sky || y < 0 || y >= sky.rows.length) return null;
+    let out = esc(line[0]);
+    const guideAt = {}; if (y === 13) for (const g of sky.guide) guideAt[g.x] = g;
+    for (let x = 0; x < 47; x++) {
+      const ch = line[1 + x] || " ", g = guideAt[x];
+      if (g) { const t = line.slice(1 + x, 1 + x + g.len); out += `<span style="color:${g.color};text-shadow:none"><span class="cell"><span class="g">${esc(t[0])}</span></span>${esc(t.slice(1))}</span>`; x += g.len - 1; continue; }
+      const col = sky.color[y + "," + x];
+      if (!col) out += esc(ch);
+      else if (col[0] === "#") out += `<span class="cell skystar" style="color:${col};text-shadow:0 0 6px ${col}"><span class="g">${esc(ch)}</span></span>`;
+      else out += `<span class="${col}">${esc(ch)}</span>`;
+      if (y === 11 && x === 45) out += `<span class="skystamp-at"><span class="skystamp">${esc(sky.stamp)}</span></span>`;
+    }
+    return out + esc(line[48] || "");
+  }
   function colorize(text) {
     const lines = text.split("\n");
     return lines.map((line, i) => {
       if (i >= 15 && i <= 19) {
-        const left = esc(line.slice(0, 49)), right = line.slice(49);
+        const left = skyLeft(line, i) || esc(line.slice(0, 49)), right = line.slice(49);
         // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
         // The locked door KURA faces gets a slightly brighter #: it sits in the gap beside her @ on that side.
         const ctr = (lines[17] || "").slice(49).indexOf("@"), face = save && save.facing;
@@ -260,6 +282,7 @@
         .replace("[?]", '<span class="btn" data-act="about">[?]</span>')
         .replace("[L]OG", '<span class="btn" data-act="log">[L]OG</span>')
         .replace("[R]ESET", '<span class="btn" data-act="reset">[R]ESET</span>');
+      const sl = skyLeft(line, i); if (sl) return sl + esc(line.slice(49));      // (v1.07) the night sky's rows
       return esc(line);
     }).join("\n")
       // The exchange's screen in the room view (v1.00): its cells are drawn as U+2800; each row of them becomes a
@@ -1094,7 +1117,8 @@
     placeInView(box);
     invList = save ? RULES.inventory(save).flatMap(it => Array.from({ length: it.count }, () => ({ ...it, count: 1 }))) : [];   // one line per thing (v1.05.1)
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
-    if (save && (save.ichor || 0) > 0) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
+    // (v1.06.1: ICHOR is always shown, even at 0.)
+    if (save) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
       text: "Demon blood and old light. Heals demons. Not meant for KURA." });
     // Hold Omen / Release Omen: its own button on the INVOKE header now, not a slot in the numbered
     // list -- it's a standing action always in the same place, not something to dig for among found
@@ -1129,10 +1153,13 @@
     const head = `INVOKE   BAG ${(save && save.items || []).length}/${RULES.BAG_MAX}`;
     add(au ? head.padEnd(41 - (au.name.length + au.loud.length + 2)) + `${au.name}  ${au.loud}` : head, "");
     const ich = invList.length && invList[0].ichor ? 1 : 0;      // ICHOR is a count, not a thing: it sits above the bag as 0
-    invList.forEach((it, i) => add(
+    const empty = !(save && (save.items || []).length);
+    add(" ");                                                    // (v1.06.1) a little air under the title, above ICHOR
+    invList.forEach((it, i) => { add(
       `${i === invSel ? ">" : " "} ${it.ichor ? 0 : i - ich + 1}  ${it.ichor ? `ICHOR  (${save.ichor})` : it.name}`.replace(/^(.{42}).{4,}$/, "$1..."),
-      "btn", i));
-    for (let k = invList.length - ich; k < RULES.BAG_MAX; k++) add(`  ${k + 1}  .`, "dim");
+      "btn", i); });
+    if (empty) add("  1  The bag is empty", "dim");               // (v1.06.1) no row of empty slots when there's nothing in it
+    else for (let k = invList.length - ich; k < RULES.BAG_MAX; k++) add(`  ${k + 1}  .`, "dim");
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
     // The chosen thing (v1.05.1, compact so a full bag fits): a rule with its name and tag, then what it is.
     const it = invList[invSel];
@@ -1140,8 +1167,10 @@
       const tag = it.ichor ? `${save.ichor} in hand` : RULES.itemAlignName(it.name);
       const nm = it.ichor ? "ICHOR" : it.name, room = 41 - 4 - tag.length - 2;
       const shown = nm.length > room ? nm.slice(0, room - 2) + ".." : nm;
+      const descRows = (it.ichor ? [it.text] : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : [])]).reduce((n, l) => n + wrapText(l, 41).length, 0);
+      if (descRows < 2) add(" ");                                // (v1.06.1) a blank line above the chosen thing's rule, given up for a two-line description
       add(`-- ${shown} ${"-".repeat(Math.max(1, 41 - 4 - shown.length - tag.length - 1))} ${tag}`, "dim");
-      const lines = it.ichor ? [it.text, "Enter: choose who gets it."]
+      const lines = it.ichor ? [it.text]
         : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : [])];
       for (const l of lines) for (const w of wrapText(l, 41)) add(w, "");
     }
@@ -1151,9 +1180,11 @@
     // overlays the 3D view), and "[1-9] choose  [ENTER] use  [H] Release Omen  [C]LOSE" alone runs
     // past that width (49-54 chars depending on label/cooldown), which would silently clip or scroll.
     // Both lines live in the one foot block, which stays pinned to the bottom of the box however long the list gets.
+    if (empty) add(" ");
     const help = add("", "");
+    if (empty) help.style.marginTop = "0";                       // (v1.06.1) with nothing in the bag, the foot comes up under the list
     if (holdBtn) { const hl = document.createElement("div"); hl.append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : ""))); help.append(hl); }
-    help.append("[1-9] choose  ", btn("[ENTER] use", "use"), "  ", btn("[C]LOSE", "close"));   // (0 picks ICHOR when there is some)
+    help.append("[1-9] use  ", btn("[C]LOSE", "close"));   // (v1.06.1: a number uses it straight away; 0 is ICHOR when there is some; arrows and Enter still work)
   }
   // THE EXCHANGE WINDOW (v1.00): opened from the screen in a dead end's wall; one window over the view like INVOKE. Four tabs:
   //   MARKET - public offers (others' only). ENTER takes one; one that asks for something takes a matching thing of yours.
@@ -1511,6 +1542,7 @@
     const it = invList[i];
     if (!it || !save) return;
     const log = save.log;
+    if (it.ichor && !(save.ichor > 0)) { save.log = "> There's no ICHOR left."; persist(); draw(); return showInv(true); }
     if (it.ichor && !drink) { ichorPick = 0; return showInv(true); }
     save = it.ichor ? RULES.giveIchor(save, Number(drink) || 0) : RULES.useItem(save, it.name);
     ichorPick = -1;
@@ -1788,6 +1820,15 @@
     return true;
   }
 
+  // (v1.06.1) A line that rolls in: the new rows rise in from a row below and fade up, and the rows that stay slide up
+  // by however many rows dropped off the top, so the scroll reads as a scroll.
+  function rollUp(kept, fresh, dropped) {
+    const rh = (fresh[0] || kept[0] || {}).offsetHeight || 18, ms = 420;
+    if (dropped) kept.forEach(n => n.animate([{ transform: `translateY(${dropped * rh}px)` }, { transform: "none" }], { duration: ms, easing: "ease-out" }));
+    fresh.forEach(n => n.animate([{ transform: `translateY(${rh}px)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: ms, easing: "ease-out" }));
+  }
+  let fightRows = 0;
+  const INTRO_BEAT = 1100;      // (v1.06.1: slower, so a line can be read before the next rolls in)
   let introAt = 0, introTimer = null, introSeen = null, introShown = 0, introSaid = [];      // the fight's opening unfolds a beat at a time too, a little quicker than its ending
   // A button on the new-demon screen: it counts as [ OK ], then does what it says. Not before the screen has unfolded.
   function introGo(name) {
@@ -1863,16 +1904,16 @@
       const groups = [], grp = fn => { const at = pre.children.length; fn(); groups.push([...pre.children].slice(at)); };
       const said = [save.extra && save.extra.includes(e.name) ? save.extra : null, ...lines].filter(Boolean).map(l => String(l).replace(/^> /, ""));
       // (v1.06) Only three lines of text show at a time: a new one rolls in at the bottom and the oldest scrolls off the top.
-      const SHOW = 3, rowsOf = said.map(l => wrapText(l, COLS).length + 1);
-      const iRows = Math.max(0, ...rowsOf.map((_, i) => rowsOf.slice(i, i + SHOW).reduce((a, b) => a + b, 0)));   // the tallest three in a row (the stance row takes [ OK ]'s place: same one row)
+      const SHOW = 2, rowsOf = said.map(l => wrapText(l, COLS).length);     // (v1.06.1: two at a time)
+      const iRows = 1 + Math.max(0, ...rowsOf.map((_, i) => rowsOf.slice(i, i + SHOW).reduce((a, b) => a + b, 0)));   // the tallest three in a row (the stance row takes [ OK ]'s place: same one row)
       const iArt = Math.min(5, ROWS - 2 - iRows - 1 - 1);      // title, blank, text (+ a blank after each), [ OK ], and the blank under the art
       if (iArt >= 3) grp(() => artSlot(iArt));
       grp(() => { add(`${e.name} APPEARS`, "demon"); add(" "); });
       const tight = 2 + iRows + 1 > ROWS;                       // too much to say (an aura remark on top): drop the blanks between lines so [ OK ] stays in the box
-      said.forEach((l, i) => grp(() => { for (const w of wrapText(l, COLS)) add(w); if (!tight || i === said.length - 1) add(" "); }));
+      said.forEach(l => grp(() => { for (const w of wrapText(l, COLS)) add(w); }));   // (v1.06.1) no blank lines between them
       // v1.04.1: the stance row instead of [ OK ], so a demon can be read (AURA) before anything else. It shows last,
       // once everything above has unfolded, and nothing works before then (see introGo).
-      grp(() => { const row = document.createElement("div"); row.className = "brow"; const l = document.createElement("span");
+      grp(() => { add(" "); const row = document.createElement("div"); row.className = "brow"; const l = document.createElement("span");
         l.append(opt("[F]IGHT", "fight"), "   ", opt("[W]ORD", "word"), "   ", (() => { const a = opt("[A]URA", "aura"); if (RULES.auraUsed(save)) a.className += " off"; return a; })(), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
         row.append(l); pre.appendChild(row); });
       // Only the first showing unfolds; a redraw shows it whole. Nothing skips it: [ OK ] works once it is on screen.
@@ -1886,20 +1927,25 @@
       introSeen = ikey; introShown = shown; introSaid = said;
       if (introTimer) { clearTimeout(introTimer); introTimer = null; }
       // Groups up to `upTo` are revealed; of the revealed text lines only the last three are drawn.
-      // (v1.06) The newest line sits at the top, just under the title, and the older ones scroll down.
-      const titleEnd = groups[head - 1][groups[head - 1].length - 1];
-      const paint = upTo => {
+      // (v1.06.1) New lines come in at the bottom and the older ones scroll up and off the top.
+      let seen = new Set();
+      const paint = (upTo, slide) => {
+        const was = seen, now = new Set(), fresh = [], kept = [];
+        let dropped = 0;
         groups.forEach((g, i) => {
           const isText = i >= head && i < head + said.length, on = i < upTo && (!isText || i >= Math.min(upTo, head + said.length) - SHOW);
           g.forEach(n => { n.style.display = on ? "" : "none"; });
+          if (!isText) return;
+          if (on) { now.add(i); (was.has(i) ? kept : fresh).push(...g); } else if (was.has(i)) dropped += g.length;
         });
-        for (let i = head; i < head + said.length; i++) titleEnd.after(...groups[i]);      // oldest first, each new one in above it
+        seen = now;
+        if (slide) rollUp(kept, fresh, dropped);
       };
       let upTo = shown;
       paint(upTo);
       if (groups.length > shown) {
-        const step = () => { upTo++; paint(upTo); if (upTo < groups.length) { introShown++; introTimer = setTimeout(step, 450); } else { introTimer = null; introAt = Date.now() - 300; } };
-        introTimer = setTimeout(step, 450);
+        const step = () => { upTo++; paint(upTo, true); if (upTo < groups.length) { introShown++; introTimer = setTimeout(step, INTRO_BEAT); } else { introTimer = null; introAt = Date.now() - 300; } };
+        introTimer = setTimeout(step, INTRO_BEAT);
       }
       return true;
     }
@@ -1919,7 +1965,7 @@
         const v = RULES.offerView(save);
         if (!v) return;
         const fit = t => (t.length > COLS - 4 ? t.slice(0, COLS - 6) + ".." : t);
-        for (const l of e.stage === "leave" ? lines : tail(lines, 3).reverse()) for (const w of wrapText(l, COLS)) add(w, lineClass(l));   // newest on top (the leave question reads in order)
+        for (const l of e.stage === "leave" ? lines : tail(lines, 3)) for (const w of wrapText(l, COLS)) add(w, lineClass(l));
         add(" ");
         if (e.stage === "leave") {
           const row = document.createElement("div"); row.className = "brow"; const l = document.createElement("span");
@@ -1937,15 +1983,11 @@
         const row = document.createElement("div"); row.append(opt("[ESC] LEAVE IT", "opick-none")); pre.appendChild(row);
         return;
       }
-      const maxLines = 3;                              // three lines of text (v1.04.1: room for what KURA did, the reply, and the blow)
-      // (v1.06) The newest line is at the top and the older ones scroll down; past three rows the oldest drops off the bottom.
-      const perLine = gl.map(l => wrapText(l, COLS).map(w => [w, lineClass(l)]));
-      const body = []; let cursorAt = -1;
-      for (let i = perLine.length - 1; i >= 0 && body.length < maxLines; i--) {
-        const rows = perLine[i].slice(0, maxLines - body.length);
-        if (i === perLine.length - 1) cursorAt = rows.length - 1;
-        body.push(...rows);
-      }
+      const maxLines = 2;                              // (v1.06.1: two lines of text at a time; new ones roll in at the bottom)
+      // (v1.06.1) New lines come in at the bottom and the older ones roll up; past three rows the oldest drops off the top.
+      const wrapped = [];
+      for (const l of gl) for (const w of wrapText(l, COLS)) wrapped.push([w, lineClass(l)]);
+      const body = tail(wrapped, maxLines), cursorAt = body.length - 1;
       let art = Math.min(5, ROWS - 5 - body.length - 1);
       if (art < 3) art = 0;
       if (art) {                                       // the art slot: a faint empty frame for now
@@ -1966,10 +2008,17 @@
       arrow(who === "demon", `${e.name}   ${barFor(final || prevDemonHp === null || (partyIdx < 0 ? shown >= 1 : shown > partyIdx) ? e.hp : prevDemonHp)}`, "demon", `ROUND ${round}`);
       arrow(who === null, kura ? `${"KURA".padEnd(e.name.length)}   ${barOf(final || prevKuraHp === null || (hitIdx >= 0 && shown > hitIdx) ? kura.hp : prevKuraHp, kura.hpmax)}` : "KURA");
       add(" ");                                        // a blank line between the names and what happened
+      const bodyNodes = [];
       body.forEach(([w, c], bi) => {
-        const d = add(w, c);
+        const d = add(w, c); bodyNodes.push(d);
         if ((replayWait || final) && bi === cursorAt) { const s = document.createElement("span"); s.className = "wait"; s.textContent = " _"; d.append(s); }   // waiting: for a click between lines, and for your choice after the last one
       });
+      // (v1.06.1) While the round plays back, each new line slides up in from below and the others visibly roll up.
+      if (replayWait && !final) {
+        const newRows = shown ? wrapText(gl[gl.length - 1], COLS).length : 0, keptN = Math.max(0, body.length - newRows);
+        rollUp(bodyNodes.slice(0, keptN), bodyNodes.slice(keptN), Math.max(0, fightRows - keptN));
+      }
+      fightRows = final ? 0 : body.length;
       const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1;
       for (let i = 0; i < rest; i++) add(" ");
       const row = document.createElement("div"); row.className = "brow";
@@ -2018,6 +2067,7 @@
     if (ms === null) breathCount = 0;
     return (ms === null ? "" : (ms / 1000).toFixed(1) + "s").padStart(5);
   };
+  setInterval(() => { if (save && save.look && !atTitle && document.getElementById("found").hidden) draw(); }, 30000);   // (v1.07) the sky keeps turning while she looks up
   setInterval(() => { const el = document.getElementById("breathT"); if (el && !atTitle) { const t = breathTimer(); if (el.textContent !== t) el.textContent = t; } }, 100);   // only its own five cells change: the screen is not redrawn
   // THE TICKER along the bottom log line: one long tape of news, moved a character at a time, right to left.
   // It carries the run's own status report (each new one joins the tape as it comes) and the title feed's lines
@@ -2523,7 +2573,7 @@
       if (key === "i" || key === "c" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
       else if (key === "h") { e.preventDefault(); holdAction(); }
       else if (/^[0-9]$/.test(key)) { e.preventDefault(); const ich = invList.length && invList[0].ichor ? 1 : 0, n = Number(key);   // 0 is ICHOR, 1-9 the bag
-        if (n === 0 ? ich : n <= invList.length - ich) { invSel = n === 0 ? 0 : n - 1 + ich; showInv(true); } }
+        if (n === 0 ? ich : n <= invList.length - ich) { invSel = n === 0 ? 0 : n - 1 + ich; showInv(true); useInv(invSel); } }   // (v1.06.1) pressing the number uses it
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
       return;

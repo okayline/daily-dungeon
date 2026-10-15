@@ -428,7 +428,11 @@
     sky: ["No roof, only sky.", "Open sky.", "The night, far up.", "Broken walls, then sky."],
   };
   function sight(st) {
-    if (st.look === "U") return pick(SEE.sky) + " " + MOON_SEEN[moon()];
+    if (st.look === "U") {                               // (v1.07) the moon only if she's really up over the player
+      const SKY = root.SKY || (() => { try { return require("./sky.js"); } catch (e) { return null; } })();
+      const mp = SKY && moon() !== 0 ? SKY.moonPos(TIME.now(), st.tz) : null;
+      return pick(SEE.sky) + " " + (!mp || mp.up ? MOON_SEEN[moon()] : mp.rising ? "The moon hasn't risen yet." : "The moon has set.");
+    }
     const v = st.dungeon ? (show(st), st.view.end) : "wall";
     if (v === "door" && st.dungeon && !looksLocked(st.dungeon, st.facing) && !isSealed(st.dungeon, st.facing)) return pick(SEE.arch);   // an open door is an arch, not a shut door
     return pick(SEE[v] || SEE.wall);
@@ -1023,7 +1027,7 @@
   function act(st, key) {                  // every action counts a STEP and marks the game unsaved
     st.steps = (st.steps || 0) + 1;
     st.unsaved = true;
-    if (st.talkLine) { if (st.extra === st.talkLine) st.extra = ""; delete st.talkLine; }   // a party member's reply doesn't outstay the next action
+    if (st.talkLine) delete st.talkLine;     // (v1.06.1: a party member's line stays up until something else takes line 1, so it never goes blank)
     if (st.altar) st.altar = null;           // walking off closes the terminal
     bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
     if (key && key.startsWith("search:")) { st.stats = st.stats || {}; st.stats.maxWall = Math.max(st.stats.maxWall || 0, st.loop.n); }   // the longest run at one wall
@@ -1664,8 +1668,13 @@
       delete st.tell;
       return show(st);
     }
-    delete st.look;
     st.facing = how === "L" ? LEFT[st.facing] : RIGHT[st.facing];
+    if (st.look) {                                       // (v1.07) turning while looking up turns the sky overhead
+      act(st, "turn");
+      st.log = `> KURA turns ${NAME[st.facing]}, still looking up.`;
+      if (!nag(st)) drift(st);
+      return show(st);
+    }
     act(st, "turn");
     st.log = `> KURA turns to face ${NAME[st.facing]}. ${sight(st)}`;
     if (!nag(st)) drift(st);
