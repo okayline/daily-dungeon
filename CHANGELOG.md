@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.05.2 - Reading the Room - Oct 14 2026, 20:26 HST
+
+![v1.05.2](screenshots/v1.05.2.png)
+
+- **AURA plays out like a search.** Line 2 shows what KURA does, three dots, then what came of it, all on the same line and in her own color.
+- **AURA can't be double-pressed.** Nothing else works until the read is done, so a quick second press no longer gets lost.
+
 ## v1.05.1 - Pack Light - Oct 14 2026, 20:16 HST
 
 ![v1.05.1](screenshots/v1.05.1.png)

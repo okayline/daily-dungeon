@@ -2195,11 +2195,14 @@
     dead: ["Dead end. I can feel it. Spiritually.", "Small vibes. Nowhere-to-go small."],
     plain: ["Mid. Just mid.", "Nothing special back there. No offense to it."],
   };
-  const AURA_FARM = ["KURA aura-farms.", "KURA checks her aura. And everyone else's.", "KURA takes a read on the party.", "KURA vibe-checks the party."];
+  const AURA_FARM = ["KURA aura-farms", "KURA checks everyone's aura", "KURA takes a read on the party", "KURA vibe-checks the party"];
+  // (v1.05.2) A read is one line 2, like a search: what she does, three dots, what came of it (the page types it out).
+  // Too long for the 77 columns, the lead shortens to "KURA reads" (every result fits after that).
+  const auraLine = (lead, result) => { const l = `> ${lead}... ${result}`; return l.length <= 77 ? l : `> KURA reads... ${result}`.slice(0, 77); };
   const AURA_SELF_TALK = {
-    fun: ['KURA: "Okay but why am I like this."', 'KURA: "Not me projecting onto a hallway."', 'KURA: "I\'m carrying so much. Emotionally? Also literally."',
-      'KURA: "Growth is realizing the door was never the problem."', 'KURA: "I think I\'m the main character. That\'s concerning."'],
-    plain: ["KURA wonders, briefly, what she's doing down here."],
+    fun: ['"Okay but why am I like this."', '"Not me projecting onto a hallway."', '"I\'m carrying so much. Emotionally? Also literally."',
+      '"Growth is realizing the door was never the problem."', '"I think I\'m the main character. That\'s concerning."'],
+    plain: ["She wonders, briefly, what she's doing down here."],
   };
   const AURA_PARTY = {      // what each one says about KURA's aura: [quiet or noticed, loud]
     ELF: [['ELF: "Steady, today. Good. Stay that way."', 'ELF: "You are hard to read. I like that."'], ['ELF: "You burn bright, little lantern. Too bright."', 'ELF: "Your aura is showing. Tuck it in."']],
@@ -2225,7 +2228,6 @@
     tally(st, "auraReads");
     const au = aura(st), loud = au.band === 2 ? 1 : 0, r = Math.random();
     const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
-    st.log = "> " + pick(AURA_FARM.filter(l => "> " + l !== st.log));
     let line;
     if (r < 0.2 || (!friends.length && au.band === 0)) line = pickMix(AURA_SELF_TALK.fun, AURA_SELF_TALK.plain);
     else if (au.band > 0 && (r < 0.4 || !friends.length)) line = pick(NOTICE_LINE[au.band === 2 ? "up2" : "up1"]);    // the dungeon notices, drily
@@ -2233,24 +2235,24 @@
       const p = pick(friends), own = AURA_PARTY[p.name];
       line = own ? pick(own[loud]) : fill(pick((AURA_FAMILY[isProgram(p.name) ? "data" : familyOf(p.name)] || AURA_FAMILY.folklore)[loud]), p.name);
     }
-    st.extra = "> " + line; delete st.tell;
+    st.log = auraLine(pick(AURA_FARM), line);
     st.line3 = `She reads as ${au.name}. ${["Quiet.", "Noticed.", "Loud."][au.band]}`;
     return show(st);
   }
   function auraDoor(st, d, room, dir) {
     const rs = RS(d); rs.auraDoors = rs.auraDoors || {};
     const where = `the ${DIR_WORD[dir]} door`;
-    if (rs.auraDoors[dir]) { act(st, "aura:door"); st.log = `> KURA reads ${where} again.`; st.extra = rs.auraDoors[dir]; delete st.tell; return show(st); }
-    if (isSealed(d, dir)) { act(st, "aura:door"); st.log = `> KURA reads ${where}.`; st.extra = '> KURA: "That door is done. Like, done done."'; delete st.tell; return show(st); }
+    const said = q => `"${String(q).replace(/^> KURA: "/, "").replace(/"$/, "")}"`;    // (a v1.05 save kept the whole line-1 text)
+    if (rs.auraDoors[dir]) { act(st, "aura:door"); st.log = auraLine(`KURA reads ${where} again`, said(rs.auraDoors[dir])); return show(st); }
+    if (isSealed(d, dir)) { act(st, "aura:door"); st.log = auraLine(`KURA reads ${where}`, said("That door is done. Like, done done.")); return show(st); }
     if (breathNow(st, true) < 1) { nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
     spendBreath(st);
     act(st, "aura:door");
     tally(st, "auraReads");
     const to = d.floor.rooms[room.doors[dir]];
     const k = (to && to.kind) || (to && to.hall ? "hall" : to && to.dead ? "dead" : to ? "plain" : FLOOR.kindBehind(d.floor, d.at, dir));
-    st.log = `> KURA reads ${where}.`;
-    st.extra = rs.auraDoors[dir] = `> KURA: "${pick(AURA_DOOR[k] || AURA_DOOR.plain)}"`;
-    delete st.tell;
+    rs.auraDoors[dir] = pick(AURA_DOOR[k] || AURA_DOOR.plain);
+    st.log = auraLine(`KURA reads ${where}`, said(rs.auraDoors[dir]));
     return show(st);
   }
   // Demons remark on KURA's aura when she walks in loud, each family its own way.

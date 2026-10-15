@@ -91,6 +91,7 @@
   .q-rare { color: #6aa6e8; }         /* rare: blue */
   .q-mythic { color: #f5c542; }       /* mythic, and the deep find: a bright gold */
   .q-moon { color: #c9b6ff; }         /* a moon thing: lavender */
+  .q-aura { color: #e3a6c4; }         /* (v1.05.2) what an AURA read turned up: a soft pink, KURA's own */
   #ticker { display: inline-block; width: 76ch; overflow: hidden; white-space: pre; vertical-align: top; }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
@@ -227,6 +228,8 @@
         if (i === lines.length - 5) {
           const m = /^( &gt; KURA (?:searches|scries) the [^.]+\.+) (.+?)(\s*)$/.exec(inner);
           if (m) inner = `${m[1]} <span class="${resultClass(m[2])}">${m[2]}</span>${m[3]}`;
+          const a = !m && /^( &gt; KURA (?:aura-farms|checks everyone|takes a read|vibe-checks|reads)[^.]*\.\.\.) (.+?)(\s*)$/.exec(inner);
+          if (a) inner = `${a[1]} <span class="q-aura">${a[2]}</span>${a[3]}`;
         }
         return `|<span class="logline${gold ? " " + gold : ""}">${inner}</span>|`;
       }
@@ -2094,6 +2097,7 @@
     return pick(["Somewhere above, the dark shifts.", "The walls settle, a little further off.", "Down here, something old notices."]);
   }
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
+  let auraGo = false;                           // (the same for an AURA read)
   function act(name) {
     line3Calm = Date.now();                          // line 3 waits a moment after anything she does before it starts a new line
     if (!searchGo && !searchBeat) beatLine1 = null;     // the party's reaction to a search lasts until she does something else
@@ -2116,6 +2120,25 @@
     // is pressed. If nothing opens, the result follows a sentence at a time ("A crack." ... "It goes nowhere.").
     // Nothing else can be pressed meanwhile. Out of breath, there is no beat: the refusal shows at once.
     if (searchBeat) return;
+    // AURA OUT OF A FIGHT (v1.05.2) has a search's beat: line 2 says what she does, three dots, then what came of it is
+    // typed out after them. The rules decide it all at once; the page only holds it back. Nothing else works meanwhile.
+    if (name === "aura" && save && !auraGo && !save.encounter && !save.dead && !save.question) {
+      auraGo = true; try { act("aura"); } finally { auraGo = false; }
+      const full = save.log || "", m = /^(> KURA [^.]*?)\.\.\. (.+)$/.exec(full);
+      if (!m) return;                                      // out of breath: the refusal is already up
+      const head = m[1], rest = m[2];
+      let dots = 0, typed = 0;
+      typeHush();
+      const step = () => {
+        if (dots < 3) { dots++; save.log = head + ".".repeat(dots); draw(); searchBeat = setTimeout(step, 200); return; }
+        typed = Math.min(rest.length, typed + 1); save.log = head + "... " + rest.slice(0, typed); draw();
+        if (typed < rest.length) { searchBeat = setTimeout(step, 30); return; }
+        searchBeat = null; save.log = full; typeQuiet = false; draw();
+      };
+      save.log = head; draw();
+      searchBeat = setTimeout(step, 200);
+      return;
+    }
     if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.question) {
       if (RULES.breath(save) < 1) { searchGo = true; try { act("search"); } finally { searchGo = false; } return; }
       const was = save.log, can = RULES.available(save), WALL = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
@@ -2251,11 +2274,7 @@
     }
     remember(name === "reset" || save.steps !== steps ? "" : log);
     if (name !== "reset") line3After(name, hadFight, kuraHp);
-    // AURA out of a fight: line 2 (what KURA does) shows first; whoever answers comes up on line 1 a beat later.
-    let auraBeat = null;
-    if (name === "aura" && !save.encounter && save.extra && save.extra !== exBefore) { auraBeat = save.extra; save.extra = exBefore; }
     persist(); draw();
-    if (auraBeat) { const at = save.steps; setTimeout(() => { if (save && save.steps === at && !atTitle) { save.extra = auraBeat; heldExtra = null; persist(); draw(); } }, 800); }
     // A blocked run says so in a box that waits for [ OK ]; then the fight box plays the demon's reply.
     if (name !== "reset" && save.encounter && save.encounter.ranTried && !ranBefore && !save.dead) {
       blockedRun = true; noticeBox([`${save.encounter.name} blocked your way.`]);
