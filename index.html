@@ -85,7 +85,7 @@
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
   /* A search result's color, by what it turned up. No glow on any of them. */
-  .q-plain { color: #cbbf9f; }        /* nothing, or a common or uncommon thing: warm sand (v1.04.4, was grey) */
+  .q-plain { color: #b4b4b0; }        /* nothing, or a common or uncommon thing: light grey (was sand in v1.04.4, a darker grey before) */
   .q-silver { color: #d6e8ff; }       /* SILVER: cooler and brighter than the log's own off-white */
   .q-rare { color: #6aa6e8; }         /* rare: blue */
   .q-mythic { color: #f5c542; }       /* mythic, and the deep find: a bright gold */
@@ -95,6 +95,9 @@
   .foundbox .gold { color: var(--gold); }
   .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
   .nameinput.bad { border-color: var(--demon); }
+  .pname { cursor: pointer; }
+  .pnamefield { position: absolute; box-sizing: border-box; padding: 0 2px; z-index: 5; outline: none; }
+  #board .auto { color: var(--trail); }
   .passfield { display: block; width: 100%; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; resize: none; margin: 4px 0; }
   /* The fight box sits inside the 3D view (rows 6-20, columns 1-47), like the bag, so the party and map stay in sight. */
   .foundbox.inframe { left: auto; top: auto; transform: none; border: none; outline: 1px solid var(--trail); box-shadow: none;
@@ -153,6 +156,8 @@
   function colorize(text) {
     const lines = text.split("\n");
     return lines.map((line, i) => {
+      // The player's name (party panel, first row) is clickable: it opens the name box.
+      if (i === 8 && save && !save.dead && save.playerName) return esc(line.slice(0, 50)) + `<span class="pname" title="Rename">${esc(line.slice(50, 59))}</span>` + esc(line.slice(59));
       if (i >= 15 && i <= 19) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
         // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
@@ -235,6 +240,7 @@
         return esc(line)
           .replace("[F]IGHT", '<span class="btn" data-act="fight">[F]IGHT</span>')
           .replace("[T]ALK", '<span class="btn" data-act="talk">[T]ALK</span>')
+          .replace("[A]URA", '<span class="btn" data-act="aura">[A]URA</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace(/\[S\]EARCH|\[S\]CRY/, m => b(m, "search", can.search))
           .replace("[M]OON", b("[M]OON", "look", !!save && !save.encounter && !save.dead))
@@ -305,7 +311,7 @@
     return h.text;
   }
   // Put back the fight or altar box that belongs to the run (after a cancelled question, a loaded password...).
-  function restoreBoxes() { if (save) { if (nameBox()) return; encounterBox(); altarBox(); } }
+  function restoreBoxes() { if (save) { encounterBox(); altarBox(); } }
   function draw() {
     if (atTitle) return drawTitle();               // a stray redraw (the clock, a closing box) must never paint the run over the title
     if (!save) return;
@@ -533,7 +539,7 @@
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.dispatchEvent(new Event("resize")));   // popups are placed by measuring the font
     // The title screen shows first either way (CONTINUE is the explicit resume now); this only decides
     // whether CONTINUE has anything to resume. tick()/draw() wait for that button, same for a fresh save.
-    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 11 && s.party) save = s;
+    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 11 && s.party) save = RULES.named(s);
     else { if (s) stash("-old"); save = null; }
     sweepCheats();
     showTitle();
@@ -740,14 +746,14 @@
   function freshRun() {
     save = RULES.reset(save || {});
     save.history = [];
-    remember(""); persist(); draw(); nameBox();
+    remember(""); persist(); draw();
   }
   function titleAction(name) {
     if (!atTitle) return;
     if (name === "title-continue") {
       if (!titleCanContinue()) return;
       leaveTitle();
-      try { tick(); flashStatus(); draw(); if (!nameBox()) { encounterBox(); altarBox(); } }
+      try { tick(); flashStatus(); draw(); encounterBox(); altarBox(); }
       catch (err) { console.error(err); try { localStorage.setItem(KEY + "-corrupt", localStorage.getItem(KEY)); } catch (e) {} save = null; freshRun(); }
     } else if (name === "title-new") {
       if (save) resetBox();           // something exists to lose: confirm first (answerConfirm -> act("reset") leaves the title)
@@ -775,64 +781,50 @@
     else done(false);
   }
   // LEADERBOARD: post this run's score once, and read the top of the board. Ranked by floor, then days; TURNS are shown only.
-  // THE NAME: asked when a run begins (and on an old save that has none). It follows PARTY in the sidebar and goes on the board.
-  const needsName = () => !!(save && !save.dead && (!save.playerName || save.needName));
-  function nameBox() {
-    if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
-    const box = document.getElementById("found"), pre = box.querySelector("pre");
-    if (!needsName()) { if (box.dataset.mode === "name") { box.hidden = true; box.dataset.mode = ""; pre.innerHTML = ""; } return false; }
-    box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
-    placeInView(box, 15);
-    box.dataset.mode = "name";
-    pre.innerHTML = "";
-    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
-    const PAD = " ".repeat(10), IN = 23, say = "> WHO ARE YOU?";
-    add(PAD + ".-----------------------.", "artframe");
-    const s1 = document.createElement("div"), s2 = document.createElement("div");
-    s1.className = s2.className = "artframe screen";
-    pre.append(s1, s2);
-    add(PAD + "'-----------------------'", "artframe");
-    add(" ", ""); add(" ", "");
-    const row = document.createElement("div"), inp = document.createElement("input");
-    inp.className = "nameinput"; inp.id = "playername"; inp.maxLength = 10; inp.spellcheck = false; inp.autocomplete = "off"; inp.value = save.playerName || "";
-    row.append("  NAME  ", inp);
-    pre.appendChild(row);
-    const warn = add("  3 TO 10 LETTERS, NUMBERS, SPACE _ . -", "dim"); warn.id = "namewarn";
-    add(" ");
-    const go = document.createElement("div"), btn = document.createElement("span");
-    btn.className = "btn"; btn.dataset.namego = "1"; btn.textContent = "  [ENTER] BEGIN"; go.appendChild(btn); pre.appendChild(go);
-    // the terminal screen: line 1 types the question, line 2 is the same drifting wave as the altar's
-    const WAVE = ["_", ".", "-", "'"];
-    let tick = 0;
-    const paint = () => {
-      const typed = Math.min(say.length, Math.floor(tick / 2));
-      let w = ""; for (let x = 0; x < IN; x++) w += WAVE[Math.round((Math.sin((x - tick * 0.35) * 2 * Math.PI / 11) + 1) / 2 * 3)];
-      s1.textContent = PAD + "|" + (" " + say.slice(0, typed) + (typed >= say.length ? (Math.floor(tick / 8) % 2 === 0 ? "_" : " ") : "_")).padEnd(IN) + "|";
-      s2.textContent = PAD + "|" + w + "|";
-      tick++;
-    };
-    paint();
-    altarTimer = setInterval(paint, 55);
-    setTimeout(() => { inp.focus(); inp.select(); }, 50);
-    return true;
+  // THE NAME: a run starts with a placeholder (RULES.named) and never waits for one. Clicking the name in the party
+  // panel turns that spot into a field, right where the name sits: Enter keeps a good name (a bad one turns the border
+  // red), Escape or clicking away leaves it as it was. The post row at the end of a run can rename too.
+  const nameProblem = v => !v ? "TYPE A NAME FIRST." : v.length < 3 ? "TOO SHORT: AT LEAST 3 CHARACTERS." : v.length > 10 ? "TOO LONG: 10 CHARACTERS AT MOST." : "LETTERS, NUMBERS, SPACE _ . - ONLY.";
+  // A name field keeps its keys to itself (so typing B or C is a letter, not a command): Enter and Escape do its two jobs.
+  function nameField(inp, onEnter, onEscape) {
+    inp.className = "nameinput"; inp.maxLength = 10; inp.spellcheck = false; inp.autocomplete = "off"; inp.value = (save && save.playerName) || "";
+    inp.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); onEnter(); } else if (e.key === "Escape") { e.preventDefault(); onEscape(); } });
+    inp.addEventListener("input", () => inp.classList.remove("bad"));
+    return inp;
   }
-  function confirmName() {
-    const inp = document.getElementById("playername");
-    if (!inp || !needsName()) return;
-    const next = RULES.setName(save, inp.value);
-    if (next === save) {                                   // not a good name: say so
-      const w = document.getElementById("namewarn"), v = inp.value.trim();
-      if (w) { w.textContent = !v ? "  TYPE A NAME FIRST." : v.length < 3 ? "  TOO SHORT: AT LEAST 3 CHARACTERS." : v.length > 10 ? "  TOO LONG: 10 CHARACTERS AT MOST." : "  LETTERS, NUMBERS, SPACE _ . - ONLY."; w.className = "demon"; }
-      inp.focus(); return;
-    }
-    if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
-    save = next; persist(); nameBox(); draw();
-    restoreBoxes();
+  let panelName = null;
+  function placePanelName() {                       // over the name and level (row 8, columns 50 to 62 of the screen)
+    if (!panelName) return;
+    const scr = document.getElementById("screen"), r = scr.getBoundingClientRect();
+    const rows = scr.textContent.split("\n").length, rh = r.height / rows, cw = r.width / 80, cs = getComputedStyle(scr);
+    Object.assign(panelName.style, { left: scr.offsetLeft + 50 * cw + "px", top: scr.offsetTop + 8 * rh + "px", width: 13 * cw + "px", height: rh + "px", fontFamily: cs.fontFamily, fontSize: cs.fontSize, letterSpacing: cs.letterSpacing, lineHeight: rh + "px" });
+  }
+  function editName() {
+    if (panelName || !save || save.dead || atTitle) return;
+    const inp = nameField(document.createElement("input"), keepName, dropName);
+    inp.id = "pnamefield"; inp.classList.add("pnamefield");
+    inp.addEventListener("blur", () => setTimeout(dropName, 0));
+    panelName = inp; document.querySelector(".frame").appendChild(inp); placePanelName();
+    inp.focus(); inp.select();
+  }
+  function dropName() { if (panelName) { const p = panelName; panelName = null; p.remove(); } }
+  function keepName() {
+    if (!panelName || !save) return;
+    const next = RULES.setName(save, panelName.value);
+    if (next === save) { panelName.classList.add("bad"); return; }
+    save = next; persist(); dropName(); draw();
   }
   async function submitScore() {
-    const msg = document.getElementById("scoremsg"), name = (save && save.playerName) || "";
+    const msg = document.getElementById("scoremsg");
     if (!LEADERBOARD_URL || !save || !save.dead || save.submitted || !msg) return;
     if (save.cheated) { msg.textContent = "THIS RUN USED A TESTING CHEAT, SO IT CAN'T BE POSTED."; return; }
+    const field = document.getElementById("postname");     // the post row's name: a rename right before posting
+    if (field) {
+      const next = RULES.setName(save, field.value);
+      if (next === save) { msg.textContent = nameProblem(field.value.trim()); field.focus(); return; }
+      save = next; persist();
+    }
+    const name = save.playerName || "";
     if (!/^[A-Za-z0-9 _.\-]{3,10}$/.test(name)) { msg.textContent = "NO NAME ON THIS RUN."; return; }
     msg.textContent = "SENDING...";
     try {
@@ -853,7 +845,7 @@
   let boardData = null, boardSel = 0, boardView = "board";
   function boardHead(pre, rest) {                  // "LEADERBOARD ... [C]LOSE", the close as a real button
     const c = document.createElement("span"); c.className = "btn"; c.dataset.close = "1"; c.textContent = "[C]LOSE";
-    pre.textContent = ""; pre.append("LEADERBOARD".padEnd(41), c, "\n" + rest);
+    pre.textContent = ""; pre.append("LEADERBOARD".padEnd(41), c, "\n", ...[].concat(rest));
   }
   function renderBoard() {
     const pre = document.querySelector("#board pre"), d = boardData, admin = !!(save && save.freeSteps);
@@ -863,7 +855,13 @@
     if (!d.rows.length) lines.push("  Nobody yet.");
     if (d.you) lines.push("  ...", row(d.you.rank, { ...d.you, you: true }));
     lines.push("", admin ? "  X MODE: up/down choose, [D]ELETE removes it. [H]ERE: who's here." : "  Ranked by floor, then days. Turns are for show.");
-    boardHead(pre, lines.join("\n"));
+    // a placeholder name (nobody renamed it) is dim; everything else stays plain text
+    const auto = new Set([...d.rows, ...(d.you ? [d.you] : [])].filter(x => RULES.isAutoName(x.name)).map(x => x.name.toUpperCase()));
+    boardHead(pre, lines.map((l, i) => {
+      const nm = l.slice(7, 17).trim();
+      if (i < 3 || !auto.has(nm)) return l + "\n";
+      const sp = document.createElement("span"); sp.className = "auto"; sp.textContent = l; return [sp, "\n"];
+    }).flat());
   }
   // X MODE, [H]ERE (v1.01.1): every device seen this moon, from the Worker's /admin/here (the admin key only).
   // Players only ever see counts; this is the admin's look at the rows behind them. No names, no addresses.
@@ -945,7 +943,9 @@
         if (save.submitted) row.append(`POSTED AS ${String(save.submitted.name).toUpperCase()}.  RANK ${save.submitted.rank}.  `, button("[B]OARD", "board"));
         else if (save.cheated) row.append("THIS RUN USED A TESTING CHEAT AND CAN'T BE POSTED.  ", button("[B]OARD", "board"));
         else {
-          row.append(button(`[P]OST YOUR HIGH SCORE AS ${String(save.playerName || "?").toUpperCase()}`, "submit"), document.createElement("br"), button("[B]OARD", "board"));
+          const inp = nameField(document.createElement("input"), submitScore, () => inp.blur());
+          inp.id = "postname";
+          row.append("POST AS ", inp, "  ", button("[P]OST", "submit"), document.createElement("br"), button("[B]OARD", "board"));
         }
         const msg = document.createElement("div"); msg.id = "scoremsg"; msg.textContent = " ";
         post.push(row, msg);
@@ -1037,6 +1037,7 @@
     const b = document.getElementById("inv"); if (!b.hidden) placeInView(b);
     const x = document.getElementById("exch"); if (!x.hidden) placeInView(x);
     const f = document.getElementById("found"); if (!f.hidden && f.classList.contains("inframe")) placeInView(f, 15);
+    placePanelName();
   });
   function showInv(open) {
     const box = document.getElementById("inv");
@@ -1389,6 +1390,7 @@
         ["[S]CRY", "looking up: ask the moon (it takes a breath)"],
         ["[F]IGHT  [T]ALK", "deal with a demon; with none, TALK to the party"],
         ["[A]URA in a fight", "read a demon's aura (free, once a round)"],
+        ["[A]URA otherwise", "read the party's aura, or a door (a breath)"],
         ["[G]IVE", "at a wall terminal: make an offering"],
         ["[B]EHOLD", "hold something up to a demon (it may want it)"],
         ["[I]NVOKE", "the bag: 1-9 or arrows choose, Enter uses"],
@@ -2049,7 +2051,7 @@
         typeN++;
         const ch = typeLine[typeN - 1];
         wait = /[.,:;!?]/.test(ch) ? 420 : ch === " " ? 120 : 80 + Math.random() * 70;     // an unhurried hand: about eight letters a second, a breath at punctuation
-        if (typeN >= typeLine.length) { typeMode = "hold"; wait = 5000; }   // a finished line stays five seconds
+        if (typeN >= typeLine.length) { typeMode = "hold"; wait = 4000; }   // a finished line stays four seconds
       } else if (typeMode === "hold") { if (Date.now() < typeHoldUntil) wait = 300; else { typeMode = "delete"; wait = 30; } }
       else if (typeMode === "delete") { typeN = Math.max(0, typeN - 1); wait = 45; if (typeN === 0) { typeMode = "gap"; wait = 2200; } }   // one letter at a time, about twenty a second
       const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml();
@@ -2234,6 +2236,7 @@
       : name.startsWith("altar-") ? RULES.altarGive(save, name === "altar-none" ? null : Number(name.slice(6)))
       : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R") : name === "look" ? RULES.turn(save, "U")
       : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
+    if (save.line3) { line3Next = save.line3; delete save.line3; }   // AURA's own read goes on line 3, next
     if (name === "reset") {
       save.history = [];
       if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
@@ -2242,7 +2245,6 @@
     remember(name === "reset" || save.steps !== steps ? "" : log);
     if (name !== "reset") line3After(name, hadFight, kuraHp);
     persist(); draw();
-    if (name === "reset" && nameBox()) return;
     // A blocked run says so in a box that waits for [ OK ]; then the fight box plays the demon's reply.
     if (name !== "reset" && save.encounter && save.encounter.ranTried && !ranBefore && !save.dead) {
       blockedRun = true; noticeBox([`${save.encounter.name} blocked your way.`]);
@@ -2275,6 +2277,7 @@
 
   document.getElementById("screen").addEventListener("click", e => {
     const fb = document.getElementById("found");
+    if (!atTitle && e.target.closest(".pname")) { if (fb.hidden || fb.dataset.mode === "encounter") editName(); return; }   // rename in place (not while a box waits for an answer)
     if (!fb.hidden && fb.dataset.mode !== "encounter") return;   // a box waiting for its answer: the buttons behind it do nothing
     if (atTitle) {
       const b = e.target.closest(".btn");
@@ -2297,7 +2300,6 @@
   });
   document.getElementById("board").addEventListener("click", () => toggleBoard(false));   // no other interactive bits in here: any click closes
   document.getElementById("found").addEventListener("click", e => {
-    if (document.getElementById("found").dataset.mode === "name") { if (e.target.closest("[data-namego]")) confirmName(); return; }
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
     if (e.target.closest("[data-intro]")) return introOK();
     const mode = document.getElementById("found").dataset.mode;
@@ -2348,8 +2350,7 @@
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
-    if (e.target && e.target.tagName === "INPUT") { if (key === "enter") { e.preventDefault(); confirmName(); } return; }   // typing the name
-    if (!atTitle && needsName()) { const i = document.getElementById("playername"); if (i) i.focus(); if (key === "enter") confirmName(); return; }   // nothing else works until the run has a name
+    if (e.target && e.target.tagName === "INPUT") return;    // a field's own keys (see nameField)
     const fbox = document.getElementById("found");
     if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (e.repeat) return; if (key === "enter") introOK(); else { const k = { f: "fight", t: "talk", a: "aura", r: "run" }[key]; if (k) introGo(k); } return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
@@ -2442,7 +2443,7 @@
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
-    const k = { "?": "about", c: "codex", f: "fight", t: "talk", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
+    const k = { "?": "about", c: "codex", f: "fight", t: "talk", a: "aura", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
       s: "search", g: "altar", m: "look", arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") {   // testing cheats, behind the admin key: X toggles infinite steps, Shift+X jumps a day
       e.preventDefault(); if (gating) return;

@@ -1696,7 +1696,7 @@
     // things are hidden, and which room (if any) turns out to be a bonus or an omen-streak room on this floor --
     // never the shared shape (wing count, topology, which kinds are paired) that every player's floor agrees on.
     st.pseed = 1 + Math.floor(Math.random() * 4294967295);
-    st.runId = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(""); delete st.submitted; st.needName = true;   // the leaderboard takes one entry per run; every new run asks the player's name (kept as the default)
+    st.runId = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(""); delete st.submitted; st = named(st, true);   // the leaderboard takes one entry per run; a chosen name carries over, a placeholder is rerolled
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },
@@ -2132,7 +2132,8 @@
   function readAura(st) {
     st = copy(st);
     const e = st.encounter;
-    if (!e || st.dead) return show(st);
+    if (st.dead) return show(st);
+    if (!e) return auraOut(st);
     if (e.auraRound === e.round) { st.round = [`KURA already read ${e.name}.`]; st.roundOver = false; return show(st); }   // once a round
     e.auraRound = e.round;
     act(st, "aura:demon");
@@ -2146,6 +2147,83 @@
     tally(st, "auraReads");
     st.log = `> KURA reads ${the(n)}'s aura.`;
     st.round = lines; st.roundOver = false;
+    return show(st);
+  }
+  // [A]URA OUT OF A FIGHT (v1.05). AURA is the party's and KURA's temperament (the dungeon's own temper is its VIBES:
+  // the heat, which the party's TALK lines carry). Facing a door, KURA reads it: a hunch about what is behind it, in
+  // her voice, vaguer than a scrap or SCAN (the warm ones, the soft ones and the cold ones sound alike on purpose). It
+  // costs a breath, once per door; reading it again repeats the hunch for free. Facing anything else she aura-farms:
+  // line 1 is someone reacting (a party member, the dungeon when she is loud, or KURA herself), line 3 is her own read.
+  const DIR_WORD = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
+  const AURA_DOOR = {
+    den: ["Whatever's back there is giving cozy.", "Warm vibes. Like, actually warm."],
+    forge: ["It's giving workshop. Warm, kinda crunchy.", "Warm vibes, but make it industrial."],
+    bay: ["That door is giving nap.", "Soft vibes. Suspiciously soft."],
+    altar: ["That door wants something from me. I can tell.", "Soft vibes, but kinda holy? Ew."],
+    vault: ["Cold vibes. Rich-people cold.", "That door is gatekeeping something."],
+    relay: ["Cold vibes. And it won't stop talking.", "Static back there. It's trying to tell me something."],
+    archive: ["That door has so many tabs open.", "Giving librarian. Dusty, but organized."],
+    void: ["Nothing back there. Like, emotionally.", "The vibes are gone. Just gone."],
+    hall: ["It's a hallway. It's giving hallway.", "Long, skinny, boring. A hallway, probably."],
+    dead: ["Dead end. I can feel it. Spiritually.", "Small vibes. Nowhere-to-go small."],
+    plain: ["Mid. Just mid.", "Nothing special back there. No offense to it."],
+  };
+  const AURA_FARM = ["KURA aura-farms.", "KURA checks her aura. And everyone else's.", "KURA takes a read on the party.", "KURA vibe-checks the party."];
+  const AURA_SELF_TALK = {
+    fun: ['KURA: "Okay but why am I like this."', 'KURA: "Not me projecting onto a hallway."', 'KURA: "I\'m carrying so much. Emotionally? Also literally."',
+      'KURA: "Growth is realizing the door was never the problem."', 'KURA: "I think I\'m the main character. That\'s concerning."'],
+    plain: ["KURA wonders, briefly, what she's doing down here."],
+  };
+  const AURA_PARTY = {      // what each one says about KURA's aura: [quiet or noticed, loud]
+    ELF: [['ELF: "Steady, today. Good. Stay that way."', 'ELF: "You are hard to read. I like that."'], ['ELF: "You burn bright, little lantern. Too bright."', 'ELF: "Your aura is showing. Tuck it in."']],
+    PIXIE: [['PIXIE: "You\'re so quiet! Are you mad at me?"', 'PIXIE: "You smell like a library."'], ['PIXIE: "You\'re glowing again. It\'s embarrassing."', 'PIXIE: "Everyone can SEE you. Like, everyone."']],
+    "CU SITH": [["CU SITH leans on KURA's leg, content.", "CU SITH sniffs KURA's bag, then yawns."], ["CU SITH sniffs KURA's bag and sneezes.", "CU SITH's ears go flat at KURA's bag."]],
+    WATCHDOG: [['WATCHDOG: "EMISSIONS LOW. GOOD."'], ['WATCHDOG: "YOU ARE A BEACON. LOWER IT."']],
+    PATCH: [['PATCH: "READINGS NORMAL. ENJOY IT."'], ['PATCH: "YOUR SIGNAL IS SPIKING. HOLD STILL."']],
+    CACHE: [['CACHE: "SAVING THIS CALM. FOR LATER."'], ['CACHE: "I KEPT A COPY OF THAT ENERGY."']],
+    SCAN: [['SCAN: "SWEEPING... YOU READ FAINT."'], ['SCAN: "SWEEPING... OFF THE SCALE."']],
+    COMPILER: [['COMPILER: "QUIET INPUT. ACCEPTABLE."'], ['COMPILER: "TOO MUCH INPUT. I CANNOT WORK LIKE THIS."']],
+  };
+  const AURA_FAMILY = {
+    data: [['{n}: "SIGNAL STABLE. CARRY ON."'], ['{n}: "USER IS BROADCASTING. PLEASE STOP."']],
+    hardware: [['{n}: "you\'re pretty chill today huh"'], ['{n}: "dude. your bag is humming."']],
+    hybrid: [['{n}: "Quiet today, traveler. Good."'], ['{n}: "You blaze, traveler. Dim it."']],
+    folklore: [['{n}: "You walk softly today, child."'], ['{n}: "Child. Everyone can smell you."']],
+  };
+  function auraOut(st) {
+    if (!ensureFloor(st)) return show(st);
+    const d = st.dungeon, room = d.floor.rooms[d.at], dir = st.facing;
+    if (st.look !== "U" && dir && dir in room.doors) return auraDoor(st, d, room, dir);
+    act(st, "aura:room");
+    tally(st, "auraReads");
+    const au = aura(st), loud = au.band === 2 ? 1 : 0, r = Math.random();
+    const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
+    st.log = "> " + pick(AURA_FARM.filter(l => "> " + l !== st.log));
+    let line;
+    if (r < 0.2 || (!friends.length && au.band === 0)) line = pickMix(AURA_SELF_TALK.fun, AURA_SELF_TALK.plain);
+    else if (au.band > 0 && (r < 0.4 || !friends.length)) line = pick(NOTICE_LINE[au.band === 2 ? "up2" : "up1"]);    // the dungeon notices, drily
+    else {
+      const p = pick(friends), own = AURA_PARTY[p.name];
+      line = own ? pick(own[loud]) : fill(pick((AURA_FAMILY[isProgram(p.name) ? "data" : familyOf(p.name)] || AURA_FAMILY.folklore)[loud]), p.name);
+    }
+    st.extra = "> " + line; delete st.tell;
+    st.line3 = `She reads as ${au.name}. ${["Quiet.", "Noticed.", "Loud."][au.band]}`;
+    return show(st);
+  }
+  function auraDoor(st, d, room, dir) {
+    const rs = RS(d); rs.auraDoors = rs.auraDoors || {};
+    const where = `the ${DIR_WORD[dir]} door`;
+    if (rs.auraDoors[dir]) { act(st, "aura:door"); st.log = `> KURA reads ${where} again.`; st.extra = rs.auraDoors[dir]; delete st.tell; return show(st); }
+    if (isSealed(d, dir)) { act(st, "aura:door"); st.log = `> KURA reads ${where}.`; st.extra = '> KURA: "That door is done. Like, done done."'; delete st.tell; return show(st); }
+    if (breathNow(st, true) < 1) { nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
+    spendBreath(st);
+    act(st, "aura:door");
+    tally(st, "auraReads");
+    const to = d.floor.rooms[room.doors[dir]];
+    const k = (to && to.kind) || (to && to.hall ? "hall" : to && to.dead ? "dead" : to ? "plain" : FLOOR.kindBehind(d.floor, d.at, dir));
+    st.log = `> KURA reads ${where}.`;
+    st.extra = rs.auraDoors[dir] = `> KURA: "${pick(AURA_DOOR[k] || AURA_DOOR.plain)}"`;
+    delete st.tell;
     return show(st);
   }
   // Demons remark on KURA's aura when she walks in loud, each family its own way.
@@ -3263,7 +3341,21 @@
 
   // What the leaderboard gets: deepest floor, days survived, demons beaten, and the real turn count (never the on-screen one).
   const NAME_OK = /^[A-Za-z0-9 _.\-]{3,10}$/;
-  function setName(st, name) {                             // the player's name, asked at the start of every run
+  // A run never waits for a name: it starts with a placeholder (dry, file-ish, nothing that is a demon or a program
+  // in the game) and the player can rename any time by clicking the name in the party panel, or when posting.
+  const AUTO_NAMES = ["UNTITLED", "NEWFOLDR", "TEMPFILE", "GUEST", "NO NAME", "DRAFT 2", "READONLY", "DEFAULT", "BADSECTR", "ORPHAN", "STALE", "PENDING", "REDACTED"];
+  const isAutoName = name => AUTO_NAMES.includes(String(name || "").toUpperCase());
+  function named(st, fresh) {                              // give a run a name if it has none (fresh: a new run rerolls a placeholder)
+    if (st.playerName && !st.needName && !(fresh && isAutoName(st.playerName))) return st;
+    if (!fresh) st = copy(st);
+    if (!st.playerName || isAutoName(st.playerName)) {
+      const pool = AUTO_NAMES.filter(n => n !== st.playerName);
+      st.playerName = pool[Math.floor(Math.random() * pool.length)];
+    }
+    delete st.needName;
+    return st;
+  }
+  function setName(st, name) {                             // the player's own name, typed in the name box or the post row
     name = String(name || "").trim().replace(/\s+/g, " ");
     if (!NAME_OK.test(name)) return st;
     st = copy(st); st.playerName = name.toUpperCase(); delete st.needName;
@@ -3301,7 +3393,7 @@
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0,
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, itemMove, moveItems, movePick, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, itemMove, moveItems, movePick, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

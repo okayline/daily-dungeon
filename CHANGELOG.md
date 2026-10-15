@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.05 - Aura Farming - Oct 14 2026, 19:42 HST
+
+![v1.05](screenshots/v1.05.png)
+
+- **`[A]URA` works anywhere now.** Facing a door, KURA reads it and gets a hunch about what's behind it. That takes a breath, and the hunch stays the same if she asks again. Facing anything else, she checks the party's aura and her own: someone reacts, and the bottom line says how she reads.
+- **No name to start a run.** Every run begins under a placeholder name. Click the name in the party panel to change it any time, or change it when you post your score.
+- **Placeholder names are dimmed on the leaderboard.**
+- **Plain search results are light grey** instead of sand.
+- **The bottom line holds a finished line for four seconds** instead of five.
+
 ## v1.04.4 - Sand and Moonlight - Oct 14 2026, 19:10 HST
 
 ![v1.04.4](screenshots/v1.04.4.png)
