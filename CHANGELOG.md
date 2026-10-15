@@ -2,6 +2,16 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.12.1 - Softer Edges - Oct 15 2026, 09:48 HST
+
+![v1.12.1](screenshots/v1.12.1.png)
+
+- **Party members ask questions much later.** Only after you've talked with them a good many times, and never on the first talk of the day.
+- **Your answers read as actions** ("KURA waves at the moon.") and not as "KURA answers: no".
+- **The gift box is tucked away.** It takes a few searches at the end of a wing to turn up, and the room hints when you're close.
+- **The heat color is a gradient,** from pastel yellow through orange to red, and it only shows after an AURA read.
+- **The moon view has no [ ^ ] button.**
+
 ## v1.12 - A Warm Little Room - Oct 15 2026, 09:34 HST
 
 ![v1.12](screenshots/v1.12.png)

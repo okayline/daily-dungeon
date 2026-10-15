@@ -1061,6 +1061,10 @@
     if (st.talkLine) delete st.talkLine;     // (v1.06.1: a party member's line stays up until something else takes line 1, so it never goes blank)
     if (st.altar) st.altar = null;           // walking off closes the terminal
     bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
+    if (key && key.startsWith("search:") && st.box && st.box.state === "hidden") {      // (v1.12.1) searching the room turns up the gift box
+      st.box.n = (st.box.n || 0) + 1;
+      if (st.box.n >= BOX_SEARCHES) st.box.state = "ask"; else if (st.box.n === BOX_SEARCHES - 1) st.tell = "> Something small is tucked against the end wall.";
+    }
     if (key && key.startsWith("search:")) { st.stats = st.stats || {}; st.stats.maxWall = Math.max(st.stats.maxWall || 0, st.loop.n); }   // the longest run at one wall
     if (st.dungeon) {
       const rs = RS(st.dungeon);
@@ -1438,6 +1442,7 @@
     enterKind(st, i, locked || isNew);
     st.extra = atmosphere(st);
     partyEnter(st);
+    delete st.box;                                      // (a box left over from the last room is gone)
     boxArrive(st);
     return show(st);
   }
@@ -2817,6 +2822,7 @@
     let x = Math.random() * friends.reduce((n, p) => n + weight(p), 0), p = friends[0];
     for (const q of friends) if ((x -= weight(q)) < 0) { p = q; break; }
     p.words = (p.words || 0) + 1;
+    p.talks = (p.talks || 0) + 1;                       // (v1.12.1) every talk ever with this member: questions only come after long conversations
     const y = WORD_YIELD[p.words - 1] || 0;
     pockets(st, p);
     st.log = pick(TALK_OPENERS)(p.name);
@@ -2848,7 +2854,7 @@
       st.extra = st.talkLine = "> " + overhear(p.name, q.name, held.length ? String(pick(held)).replace(/^(a|an|the)\s+/i, "") : null);
       return show(st);
     }
-    if (y >= 1 && !st.encounter && Math.random() < 0.17) { ask(st, p); tally(st, "asked"); return show(st); }
+    if (y >= 1 && p.talks >= 10 && p.words >= 2 && !st.encounter && Math.random() < 0.15) { ask(st, p); tally(st, "asked"); return show(st); }
     // Now and then, an offer: only once they've already had a chat with KURA today (the 2nd WORD on), and rarely.
     const r = Math.random();
     const offerOdds = p.words >= 2 ? 0.12 * y : 0;
@@ -2883,10 +2889,13 @@
   const BOX_OK = it => TIER[it] === "COMMON" || TIER[it] === "UNCOMMON";
   const BOX_SEEN = ["A small box sits against the end wall.", "Someone left a small box in the corner.", "A little box waits by the wall, lid worn smooth."];
   const BOX_AFTER = ["The lid settles. Somebody will be glad of it.", "KURA closes the box. A small kindness, passed along.", "The box is quiet again. It never forgets a gift."];
+  const BOX_SEARCHES = 3;
   function boxArrive(st) {
     const d = st.dungeon, rm = d && d.floor.rooms[d.at];
     if (!rm || st.encounter || st.offer || st.dead || !rm.dead || rm.kind) return;
-    st.box = { k: `${effectiveOmenDay(st)}:${floorNum(st)}:${rm.wing}`, state: "ask", done: !!RS(d, d.at).boxed };
+    // (v1.12.1) The box is tucked away: it takes a few searches in the room to turn up (a settled one only shows its scratches at once).
+    const done = !!RS(d, d.at).boxed;
+    st.box = { k: `${effectiveOmenDay(st)}:${floorNum(st)}:${rm.wing}`, state: done ? "ask" : "hidden", n: 0, done };
   }
   // The tallies, scratched on the wall: how many took each of the wing's two doors, the bigger count first, never saying which door is which.
   function scratches(marks) {
@@ -3212,6 +3221,16 @@
       ['{n}: "Do you fear the moon?"', ['{n}: "Wise."', 1, "pay"], ['{n}: "Good. Neither do I."', 1, "offer"], null, ["Wary", "Bold"]],
     ],
   };
+  // (v1.12.1) What the log says KURA did for each answer, in the order of ASK: [answer 1, answer 2].
+  const ASK_DID = {
+    ELF: [["KURA meets ELF's eyes and nods.", "KURA rests a hand on ELF's shoulder."], ["KURA nods and lets ELF take it.", "KURA offers ELF a fair trade."], ["KURA sits down beside ELF.", "KURA takes the first step ahead."]],
+    PIXIE: [["KURA gives PIXIE a thumbs up.", "KURA lets PIXIE settle on her shoulder."], ["KURA crosses her heart for PIXIE.", "KURA holds out both hands to share."], ["KURA nods at the ceiling, fondly.", "KURA waves at the moon."]],
+    "CU SITH": [["KURA throws the bone.", "KURA pets CU SITH."], ["KURA looks into the dark.", "KURA waits with CU SITH."]],
+    data: [["KURA points {n} toward the door.", "KURA opens a page for {n} to read."], ["KURA nods, and {n} starts logging.", "KURA covers her notes, smiling."]],
+    hardware: [["KURA pats {n} gently.", "KURA tucks {n} safe in her pocket."], ["KURA lets {n} hum.", "KURA hums along."]],
+    hybrid: [["KURA tilts her head and grins.", "KURA shakes her head, smiling, and pats {n}."], ["KURA asks {n} to listen.", "KURA listens with {n}."]],
+    folklore: [["KURA lifts her chin at {n}.", "KURA clasps {n}'s hand."], ["KURA taps her temple.", "KURA starts humming a tune for {n}."], ["KURA glances at the moon, wary.", "KURA grins up at the moon."]],
+  };
   // CONFIDING: a member at ease, now and then, tells KURA something about themselves (each told once, in order).
   const CONFIDE = {
     ELF: ['ELF: "I left a garden once. I still count its trees."', 'ELF: "I spent a hundred years in a tower. The quiet was easier."', 'ELF: "You remind me of someone. I will not say who."'],
@@ -3281,7 +3300,8 @@
     p.patience = Math.max(0, Math.min(PATIENCE + 2, (p.patience ?? PATIENCE) + dp));
     if (why) lean(st, why);
     tally(st, "answers");
-    st.log = `> KURA answers ${p.name}: ${yes ? "yes" : "no"}.`;
+    const did = ASK_DID[q.pool] && ASK_DID[q.pool][q.k] && ASK_DID[q.pool][q.k][yes ? 0 : 1];
+    st.log = did ? "> " + did.replace(/\{n\}/g, p.name) : `> KURA answers ${p.name}: ${q.lab ? String(q.lab[yes ? 0 : 1]).toLowerCase() : yes ? "yes" : "no"}.`;
     st.extra = st.talkLine = "> " + line.replace(/\{n\}/g, p.name);
     return show(st);
   }
@@ -3513,7 +3533,7 @@
     const e = st.encounter;
     if (!e || e.stage !== "join") return show(st);
     const lines = [];
-    if (yes !== true) { lines.push(`KURA declines. ${say2(e, "leave")}`); leaves(st, e); }
+    if (yes !== true) { lines.push(`KURA shakes her head. ${say2(e, "leave")}`); leaves(st, e); }
     else if (st.party.length < 4) recruit(st, e, lines);
     else { e.stage = "swap"; lines.push("The party is full. Send someone away?"); }
     st.round = lines;

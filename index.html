@@ -195,7 +195,10 @@
         const ov = (save && save.mapHeat && save.mapHeat[i - 15]) || "", fade = save && save.heatFade != null ? save.heatFade : 1;
         const tint = (ch, k) => {
           const heat = ov[k] && ov[k] !== " " ? ov.charCodeAt(k) - 48 : 0;
-          return heat >= 2 ? `<span style="color:hsl(${Math.round(62 - 62 * Math.min(1, (heat - 1) / 19))},95%,58%);opacity:${(0.35 + 0.65 * fade).toFixed(2)}">${ch}</span>` : ch;
+          if (heat < 2) return ch;
+          // A gradient: pastel yellow at the lowest, deepening through peach and orange, full red only at the hottest.
+          const t = Math.min(1, (heat - 1) / 19), hue = Math.round(55 - 55 * t), sat = Math.round(45 + 50 * t), lit = Math.round(88 - 30 * t);
+          return `<span style="color:hsl(${hue},${sat}%,${lit}%);opacity:${(0.35 + 0.65 * fade).toFixed(2)}">${ch}</span>`;
         };
         const map = right.replace(/[\[)][\^v][\](]|[@^v<>&$?□=‖#+\-|\[\]]/g, (m, at) => {
           if (m === "[" || m === "]") return tint(m, at);
