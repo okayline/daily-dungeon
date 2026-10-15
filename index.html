@@ -248,9 +248,10 @@
         // The bottom line is the ticker: the status report, this run's news and word of everyone else, typed out a line at a time.
         if (i === lines.length - 4) return `|<span class="logline"> <span id="ticker">${tickerHtml()}</span> </span>|`;
         if (i === lines.length - 6) inner = inner
+          .replace(/\[1\]([A-Za-z' ]+?)(?= \[2\])/, m => `<span class="btn ask" data-act="qyes">${m}</span>`)
+          .replace(/\[2\]([A-Za-z']+)/, m => `<span class="btn ask" data-act="qno">${m}</span>`)
           .replace("[Y]ES", '<span class="btn ask" data-act="qyes">[Y]ES</span>')
-          .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>')
-          .replace("[S]ILENT", '<span class="btn ask" data-act="qsilent">[S]ILENT</span>');
+          .replace(/\[N\]O(?![A-Z])/, '<span class="btn ask" data-act="qno">[N]O</span>');
         // The middle line, after a search: "KURA searches the WEST wall..." stays as it is, and what came of it follows
         // in its quality's color (grey for nothing or a common or uncommon thing, silver for SILVER, blue for a rare
         // thing, gold for a mythic one or the deep find, lavender for a moon thing).
@@ -364,6 +365,40 @@
     document.getElementById("ver").textContent = SMT.VERSION;
     bagBox();
     offerBox();
+    boxTick();
+    tallyTick();
+  }
+  // The door she just opened, for the signal rooms' scratches (fire and forget: a mark that doesn't land costs nothing).
+  function tallyTick() {
+    if (!save || !save.tally) return;
+    const t = save.tally; delete save.tally; persist();
+    try { fetch(LEADERBOARD_URL + "/tally", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify(t) }).catch(() => {}); } catch (e) {}
+  }
+  // THE GIFT BOX (v1.10): the rules say a box is here (save.box) or a swap is waiting on the server (save.boxPending);
+  // the page does the asking, and tells the rules what came back. A box it cannot reach just isn't there this time.
+  let boxBusy = false;
+  async function boxTick() {
+    if (boxBusy || !save || save.dead || atTitle) return;
+    const look = save.box && save.box.state === "ask" && !save.offer && !save.encounter, swap = save.boxPending;
+    if (!look && !swap) return;
+    boxBusy = true;
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 5000);
+    try {
+      if (swap) {
+        const r = await fetch(LEADERBOARD_URL + "/gift", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ k: swap.k, give: swap.give }), signal: ctl.signal });
+        const j = r.ok ? await r.json() : null;
+        save = RULES.boxDone(save, !!(j && j.ok), j ? j.got : null);
+      } else {
+        const r = await fetch(LEADERBOARD_URL + "/gift?k=" + encodeURIComponent(save.box.k), { signal: ctl.signal });
+        const j = r.ok ? await r.json() : null;
+        if (j) save = RULES.boxFound(save, j.item, j.marks); else delete save.box;
+      }
+    } catch (err) {
+      if (swap) save = RULES.boxDone(save, false); else delete save.box;
+    }
+    clearTimeout(timer);
+    boxBusy = false;
+    persist(); draw();
   }
   // A PARTY MEMBER'S OFFER (v1.06): one of two things from their pockets, or one of two from KURA's bag for them.
   // [1] or [2] takes it; [ESC] leaves it (they keep their things). With a full bag, taking one opens the bag to
@@ -393,15 +428,16 @@
       d.append(y, "   ", n); pre.appendChild(d);
       return;
     }
+    if (v.box && v.wait) { add("..."); return; }
     if (v.trade) {
-      add(`Give what for ${v.items[v.picked]}?`.slice(0, 41));
-      v.bag.forEach((it, i) => opt(`[${i + 1}] ${it}`, "otrade-" + i));
+      add((v.box && v.empty ? "Leave what in the box?" : v.box ? `Leave what for ${v.items[v.picked]}?` : `Give what for ${v.items[v.picked]}?`).toUpperCase().slice(0, 41));
+      v.bag.forEach((it, i) => opt(`[${i + 1}] ${it.toUpperCase()}`, "otrade-" + i));
       opt("[ESC] BACK", "otrade-none");
       return;
     }
-    v.items.forEach((it, i) => opt(`[${i + 1}] ${it}`, "opick-" + i));
+    v.items.forEach((it, i) => opt(`[${i + 1}] ${it.toUpperCase()}`, "opick-" + i));
     add(" ");
-    opt("[ESC] LEAVE IT", "opick-none");
+    opt(v.box ? "[ESC] CLOSE IT" : "[ESC] LEAVE IT", "opick-none");
   }
   // THE BAG IS FULL (v1.05.1): a thing that came to a full bag waits (save.overflow) until KURA picks what to leave
   // behind: 1-9 leaves that thing, N leaves the new one where it lay. It waits for every other box to close first.
@@ -419,7 +455,7 @@
     add(`KURA found ${it}.`.slice(0, 41), "gold");
     add("THE BAG IS FULL. Leave something behind?");
     add(" ");
-    (save.items || []).forEach((n, i) => opt(`[${i + 1}] ${n}`.slice(0, 41), i));
+    (save.items || []).forEach((n, i) => opt(`[${i + 1}] ${n.toUpperCase()}`.slice(0, 41), i));
     opt("[N]O THANKS", "none");
   }
   function bagPick(i) {
@@ -768,7 +804,6 @@
       if (n("broken")) cards.push(`Items broken: ${num(n("broken"))}`);
       if (n("trips")) cards.push(`TRIPs reported: ${num(n("trips"))}`);
       if (n("wall")) cards.push(`Longest wall search: ${num(n("wall"))}x`);
-      if (n("silent")) cards.push(`Answered [S]ILENT: ${num(n("silent"))}x`);
     }
     cards.push(RULES.omen(SMT.utcDay(SMT.now())).text.replace(/^> /, ""));
     // THE MOON, which needs no network: her quarter and the next one, the full moon, the level the dark is taking.
@@ -1479,12 +1514,12 @@
         ["[M]OON", "look up and ask the moon (a breath); again to look level"],
         ["[F]IGHT  [W]ORD", "deal with a demon; with none, a WORD with the party"],
         ["[A]URA in a fight", "size up a demon (free, once a round)"],
-        ["[A]URA otherwise", "read the room, or a door (half a breath)"],
+        ["[A]URA otherwise", "read the room, or a door (half the breath bar)"],
         ["[G]IVE", "at a wall terminal: make an offering"],
         ["[I]NVOKE", "the bag: 1-9 or arrows choose, Enter uses"],
         ["[R]UN in a fight", "run through a door (it may block you)"],
         ["[S]EARCH", "search what KURA faces (each takes a breath)"],
-        ["[Y]ES  [N]O  [S]ILENT", "answer a question from the party"],
+        ["[1] [2]", "answer a question from the party"],
         ["[1]  [2]  [ESC]", "take one of two things offered, or leave it"],
         ["[C]ODEX", "every demon and item found, over all runs"],
         ["[L]OG", "the adventure log"],
@@ -1874,7 +1909,7 @@
     const end = () => { if (stopped) return; stopped = true; if (speaking === finish) speaking = null; done(); };
     const finish = () => { if (stopped) return; clearTimeout(t); show(full); if (voice.kind === "hit" || voice.kind === "dhit") flash(); end(); };
     speaking = finish;
-    const isStop = k => full[k] === "." && full[k + 1] !== "." && k < full.length - 1;
+    const isStop = k => full[k] === "." && full[k + 1] !== "." && full[k + 1] !== '"' && k < full.length - 1;   // (v1.10) no stop between a period and its closing quote
     const typeFrom = (from, ms, then) => { let i = from; const step = () => { if (stopped) return; i++; show(full.slice(0, i));
       if (i < full.length) t = setTimeout(step, isStop(i - 1) ? PERIOD_STOP : ms); else then(); }; step(); };
     const decode = (from, rate, then) => { let lock = from, held = -1; const step = () => { if (stopped) return;
@@ -2061,12 +2096,12 @@
           return;
         }
         if (e.stage === "trade") {
-          add(fit(`Give what for ${v.items[v.picked]}?`));
-          v.bag.forEach((it, i) => { const d = document.createElement("div"); d.append(opt(fit(`[${i + 1}] ${it}`), "otrade-" + i)); pre.appendChild(d); });
+          add(fit(`Give what for ${v.items[v.picked]}?`.toUpperCase()));
+          v.bag.forEach((it, i) => { const d = document.createElement("div"); d.append(opt(fit(`[${i + 1}] ${it.toUpperCase()}`), "otrade-" + i)); pre.appendChild(d); });
           const row = document.createElement("div"); row.append(opt("[ESC] BACK", "otrade-none")); pre.appendChild(row);
           return;
         }
-        v.items.forEach((it, i) => { const d = document.createElement("div"); d.append(opt(fit(`[${i + 1}] ${it}`), "opick-" + i)); pre.appendChild(d); });
+        v.items.forEach((it, i) => { const d = document.createElement("div"); d.append(opt(fit(`[${i + 1}] ${it.toUpperCase()}`), "opick-" + i)); pre.appendChild(d); });
         add(" ");
         const row = document.createElement("div"); row.append(opt("[ESC] LEAVE IT", "opick-none")); pre.appendChild(row);
         return;
@@ -2226,13 +2261,13 @@
   // the _ blinking; the next one is typed. The run's
   // own status report goes next whenever a new one is waiting. Only the line's own span is rewritten.
   // (var and a function declaration, not let/const: the first frame is drawn before this point in the script is reached.)
-  var TYPE_W = 72, typeLine = "", typeN = 0, typeMode = "gap", typeNext = 0, typeStatus = null;
+  var TYPE_W = 72, TYPE_CAP = 260, typeLine = "", typeN = 0, typeMode = "gap", typeNext = 0, typeStatus = null;
   // (v1.01.1) While a search plays out, this line goes quiet (typeQuiet): a bare > and the cursor. After a good find
   // it says one thing about it whole, not typed (typeSay), holds it, and then goes back to its usual round.
   var typeQuiet = false, typeHoldUntil = 0;
   // LINE 3 (v1.04.1): something to say next, ahead of the usual round: the dungeon noticing KURA's aura change, or the
   // moon reacting to a fight just ended. It waits for the line's next gap, so a search beat can't swallow it.
-  var line3Next = null, line3Calm = 0;
+  var line3Next = null, line3Calm = 0, line3Since = 0;
   // In a fight the line goes quiet, and only says something when she gets hit.
   function line3After(name, hadFight, kuraHp) {
     if (!save || !save.dungeon || save.dead) return;
@@ -2250,25 +2285,26 @@
   }
   // (v1.04.3) A search no longer wipes the line: whatever is up finishes as usual; only a new line waits.
   function typeHush() { typeQuiet = true; }
-  function typeSay(line) { typeLine = String(line || "").slice(0, TYPE_W); typeN = typeLine.length; typeMode = "hold"; typeHoldUntil = Date.now() + 6000; typeQuiet = false; const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml(); }
-  function tickerHtml() { return "&gt; " + esc((typeLine || "").slice(0, typeN || 0)) + (typeMode === "hold" || typeMode === "gap" ? '<span class="wait">_</span>' : "_"); }   // the > is always there
+  function typeSay(line) { typeLine = String(line || "").slice(0, TYPE_CAP); typeN = typeLine.length; typeMode = "hold"; typeHoldUntil = Date.now() + 6000; typeQuiet = false; const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml(); }
+  function tickerHtml() { const shown = (typeLine || "").slice(0, typeN || 0); return "&gt; " + esc(shown.length > TYPE_W ? shown.slice(-TYPE_W) : shown) + (typeMode === "hold" || typeMode === "gap" ? '<span class="wait">_</span>' : "_"); }   // the > is always there
   function typeStep() {
     let wait = 300;
     try {
       if (atTitle || !save || !save.dungeon) { wait = 500; }
       else if (typeMode === "gap" && (typeQuiet || searchBeat)) { wait = 300; line3Calm = Date.now(); }   // still searching: the 3 seconds count from when it's done
       else if (typeMode === "gap" && (() => { const f = document.getElementById("found"); return !f.hidden && f.dataset.mode === "done"; })()) { wait = 300; line3Calm = Date.now(); }   // a fight's end screen is up: nothing until its [ OK ]
-      else if (typeMode === "gap" && Date.now() - line3Calm < 3000) { wait = 300; }   // (v1.04.2) patient: 3 seconds after the last action
+      else if (typeMode === "gap" && Date.now() - line3Calm < 3000 && Date.now() - (line3Since || (line3Since = Date.now())) < 10000) { wait = 300; }   // (v1.04.2) patient: 3 seconds after the last action; (v1.10) but not for more than ten, however much she clicks
       else if (typeMode === "gap") {
+        line3Since = 0;
         // (This line never says KURA: that name belongs to the line above, where she acts.)
         const status = String(save.status || "").replace(/^> /, "").replace(/KURA is/g, "She is").replace(/\bKURA\b/g, "she").trim(), feed = tickerFeed();
         const said3 = line3Next; line3Next = null;
-        typeLine = (said3 || save.encounter ? said3 || "" : (status && status !== typeStatus ? (typeStatus = status) : feed.length ? feed[typeNext++ % feed.length] : status || "")).slice(0, TYPE_W);
+        typeLine = (said3 || save.encounter ? said3 || "" : (status && status !== typeStatus ? (typeStatus = status) : feed.length ? feed[typeNext++ % feed.length] : status || "")).slice(0, TYPE_CAP);
         typeN = 0; typeMode = typeLine ? "type" : "gap"; wait = 350;
       } else if (typeMode === "type") {
         typeN++;
         const ch = typeLine[typeN - 1];
-        wait = ch === "." && typeLine[typeN] !== "." ? PERIOD_STOP : /[.,:;!?]/.test(ch) ? 420 : ch === " " ? 120 : 80 + Math.random() * 70;     // an unhurried hand: about eight letters a second, a breath at punctuation, a full second at a period (v1.08.1)
+        wait = ch === "." && typeLine[typeN] !== "." && typeLine[typeN] !== '"' ? PERIOD_STOP : /[.,:;!?]/.test(ch) ? 420 : ch === " " ? 120 : 80 + Math.random() * 70;     // an unhurried hand: about eight letters a second, a breath at punctuation, a full second at a period (v1.08.1)
         if (typeN >= typeLine.length) { typeMode = "hold"; wait = 4000; }   // a finished line stays four seconds
       } else if (typeMode === "hold") { if (Date.now() < typeHoldUntil) wait = 300; else { typeMode = "delete"; wait = 30; } }
       else if (typeMode === "delete") { typeN = Math.max(0, typeN - 1); wait = 45; if (typeN === 0) { typeMode = "gap"; wait = 2200; } }   // one letter at a time, about twenty a second
@@ -2340,7 +2376,7 @@
       const step = () => {
         if (dots < 3) { dots++; save.log = head + ".".repeat(dots); draw(); searchBeat = setTimeout(step, dots === 3 ? PERIOD_STOP : 200); return; }   // (v1.08.1) a full stop after the dots, and at every period
         typed = Math.min(rest.length, typed + 1); save.log = head + "... " + rest.slice(0, typed); draw();
-        if (typed < rest.length) { searchBeat = setTimeout(step, rest[typed - 1] === "." && rest[typed] !== "." ? PERIOD_STOP : 30); return; }
+        if (typed < rest.length) { searchBeat = setTimeout(step, rest[typed - 1] === "." && rest[typed] !== "." && rest[typed] !== '"' ? PERIOD_STOP : 30); return; }
         searchBeat = null; save.log = full; typeQuiet = false; draw();
       };
       save.log = head; draw();
@@ -2406,9 +2442,9 @@
       return;
     }
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
-    if ((name === "qyes" || name === "qno" || name === "qsilent") && save) {
+    if ((name === "qyes" || name === "qno") && save) {
       const log = save.log, partyBefore = (save.party || []).map(p => p.name);
-      save = RULES.reply(save, name === "qsilent" ? "silent" : name === "qyes");
+      save = RULES.reply(save, name === "qyes");
       heldExtra = null;                    // the answer's line goes up at once, not behind the old question
       remember(log); persist(); draw();
       const gone = partyBefore.filter(n => !(save.party || []).some(p => p.name === n));
@@ -2695,7 +2731,7 @@
       return;
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
-    if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
+    if (save && save.question && (key === "y" || key === "n" || (save.question.lab && (key === "1" || key === "2")))) { e.preventDefault(); return act(key === "y" || key === "1" ? "qyes" : "qno"); }
     const k = { "?": "about", c: "codex", f: "fight", w: "word", a: "aura", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
       s: "search", g: "altar", m: "look", arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") {   // testing cheats, behind the admin key: X toggles infinite steps, Shift+X jumps a day

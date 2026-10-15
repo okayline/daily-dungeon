@@ -2,6 +2,21 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.10 - A Box in the Corner - Oct 15 2026, 07:10 HST
+
+![v1.10](screenshots/v1.10.png)
+
+- **The end of a wing has a small box.** Take what the last visitor left, and leave something small of your own for the next one. Scratch marks on the wall hint at which way others went.
+- **The altar works again, and it gives something back.** (Offerings had stopped doing anything.) It's a shorter conversation now, the symbols show which way you were moved, and the terminal answers with something that helps.
+- **TALK has more to it.** It opens in different ways, your party sometimes talks among themselves, and now and then a member asks you something with two good answers. No more YES or NO, and no more [S]ILENT with the party.
+- **Nagging is sarcastic, not a question.** When you keep at the same thing, the party makes dry remarks and expects no answer.
+- **AURA takes a lot more breath:** half the bar.
+- **Line 3 is more patient and less stuck.** It never waits more than a few seconds however much you click, and a line too long for the screen scrolls so you can read to the end.
+- **No pause between a period and its closing quote** while text types out.
+- **Item buttons on offers, trades and the bag are in capitals.**
+- **A new line on the second day of an omen run:** "The pattern is repeating."
+- **The title feed lost the "Answered SILENT" card**, since it can't happen anymore.
+
 ## v1.09 - A Light Left On - Oct 15 2026, 06:15 HST
 
 ![v1.09](screenshots/v1.09.png)

@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.09";
+  const VERSION = "v1.10";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -410,7 +410,7 @@
     // THE THREE LOG LINES, top to bottom: the flavor line (what the place and the party say, and a question with its
     // [Y]ES [N]O at the right end); what KURA just did; and the status report, which the page turns into a ticker
     // that scrolls right to left along the bottom.
-    const answers = "[Y]ES  [N]O  [S]ILENT";
+    const lab = st.question && st.question.lab, answers = lab ? `[1]${lab[0].toUpperCase()} [2]${lab[1].toUpperCase()}` : "[Y]ES  [N]O";   // (v1.10) good vs. good: two named answers
     const line3 = st.question ? ljust(" " + extra.slice(0, 77 - answers.length - 1), 77 - answers.length) + answers + " " : " " + extra;
     for (const m of [line3, " " + (st.log || ""), " " + moonLine]) S.push(r(m));
     S.push("+" + "-".repeat(78) + "+");

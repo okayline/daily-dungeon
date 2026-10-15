@@ -410,6 +410,90 @@ async function marketFeed(db, botsLive) {
   return { open, traded, count };
 }
 
+// THE GIFT BOX (v1.10): one small box per wing, level and day, holding one thing. GET /gift?k= looks inside;
+// POST /gift {k, give} swaps (give what you leave, get what was there; give null just takes). k is "day:level:wing".
+// The table makes itself the first time it is used, so there is nothing to run for it. Items are only names; the page
+// accepts nothing but small (COMMON / UNCOMMON) things it knows, so a made-up name does nothing.
+// The same key also holds the signal room's TALLIES: how many players opened each of the wing's two locked doors that day
+// (POST /tally {k, door}); GET /gift sends them as marks, and the page shows the two counts without saying which door is which.
+let giftReady = false;
+const giftKeyOk = k => {
+  const m = /^(\d{4,6}):(\d{1,2}):(\d{1,2})$/.exec(String(k || "")), today = Math.floor(Date.now() / 86400000);
+  return !!m && Math.abs(Number(m[1]) - today) <= 2 && Number(m[2]) >= 1 && Number(m[2]) <= 60;
+};
+async function giftTable(db) {
+  if (giftReady) return;
+  await db.prepare(`CREATE TABLE IF NOT EXISTS gifts (k TEXT PRIMARY KEY, item TEXT NOT NULL, made INTEGER NOT NULL, who TEXT)`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS tallies (k TEXT NOT NULL, door INTEGER NOT NULL, n INTEGER NOT NULL DEFAULT 0, made INTEGER NOT NULL, PRIMARY KEY (k, door))`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS tally_seen (k TEXT NOT NULL, who TEXT NOT NULL, PRIMARY KEY (k, who))`).run();
+  giftReady = true;
+}
+async function tallyDoor(req, env, pageOk, from, allow) {
+  if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
+  if (req.method !== "POST") return json({ error: "not found" }, 404, allow);
+  let b;
+  try { b = await req.json(); } catch (e) { return json({ error: "json" }, 400, allow); }
+  const k = String(b.k || ""), door = Number(b.door);
+  if (!giftKeyOk(k) || (door !== 0 && door !== 1)) return json({ error: "invalid" }, 400, allow);
+  try {
+    const db = env.DB, now = Math.floor(Date.now() / 1000);
+    await giftTable(db);
+    const who = await hash((req.headers.get("cf-connecting-ip") || "?") + "daily-dungeon");
+    const seen = await db.prepare(`INSERT OR IGNORE INTO tally_seen (k, who) VALUES (?1, ?2)`).bind(k, who).run();   // one mark per player (by address) per wing and day
+    if (!(seen.meta && seen.meta.changes)) return json({ ok: true, counted: false }, 200, allow);
+    await db.prepare(`INSERT INTO tallies (k, door, n, made) VALUES (?1, ?2, 1, ?3) ON CONFLICT (k, door) DO UPDATE SET n = n + 1, made = ?3`).bind(k, door, now).run();
+    if (Math.random() < 0.02) {
+      await db.prepare(`DELETE FROM tallies WHERE made < ?1`).bind(now - 3 * 86400).run();
+      await db.prepare(`DELETE FROM tally_seen WHERE k NOT IN (SELECT k FROM tallies)`).run();
+    }
+    return json({ ok: true, counted: true }, 200, allow);
+  } catch (e) {
+    return json({ error: "tally" }, 500, allow);
+  }
+}
+async function giftBox(req, env, pageOk, from, allow) {
+  if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
+  const db = env.DB, now = Math.floor(Date.now() / 1000), okKey = giftKeyOk;
+  try {
+    await giftTable(db);
+    if (req.method === "GET") {
+      const k = new URL(req.url).searchParams.get("k");
+      if (!okKey(k)) return json({ error: "invalid" }, 400, allow);
+      const row = await db.prepare(`SELECT item FROM gifts WHERE k = ?1`).bind(k).first();
+      const marks = [0, 0];
+      for (const r of (await db.prepare(`SELECT door, n FROM tallies WHERE k = ?1`).bind(k).all()).results) if (r.door === 0 || r.door === 1) marks[r.door] = r.n;
+      return json({ item: row ? row.item : null, marks }, 200, allow);
+    }
+    if (req.method !== "POST") return json({ error: "not found" }, 404, allow);
+    let b;
+    try { b = await req.json(); } catch (e) { return json({ error: "json" }, 400, allow); }
+    const k = String(b.k || ""), give = b.give === null || b.give === undefined ? null : String(b.give).trim();
+    if (!okKey(k) || (give !== null && !/^[A-Za-z0-9 '.,\-]{3,40}$/.test(give))) return json({ error: "invalid" }, 400, allow);
+    const who = await hash((req.headers.get("cf-connecting-ip") || "?") + "daily-dungeon");
+    const recent = await db.prepare(`SELECT COUNT(*) AS n FROM gifts WHERE who = ?1 AND made > ?2`).bind(who, now - 3600).first();
+    if (recent.n >= 12) return json({ error: "slow down" }, 429, allow);
+    for (let tries = 0; tries < 4; tries++) {
+      const row = await db.prepare(`SELECT item FROM gifts WHERE k = ?1`).bind(k).first();
+      if (!row) {
+        if (give === null) return json({ ok: true, got: null }, 200, allow);
+        const ins = await db.prepare(`INSERT OR IGNORE INTO gifts (k, item, made, who) VALUES (?1, ?2, ?3, ?4)`).bind(k, give, now, who).run();
+        if (ins.meta && ins.meta.changes) return json({ ok: true, got: null }, 200, allow);
+        continue;
+      }
+      const moved = give === null
+        ? await db.prepare(`DELETE FROM gifts WHERE k = ?1 AND item = ?2`).bind(k, row.item).run()
+        : await db.prepare(`UPDATE gifts SET item = ?3, made = ?4, who = ?5 WHERE k = ?1 AND item = ?2`).bind(k, row.item, give, now, who).run();
+      if (moved.meta && moved.meta.changes) {
+        if (Math.random() < 0.02) await db.prepare(`DELETE FROM gifts WHERE made < ?1`).bind(now - 3 * 86400).run();
+        return json({ ok: true, got: row.item }, 200, allow);
+      }
+    }
+    return json({ error: "busy" }, 503, allow);
+  } catch (e) {
+    return json({ error: "box" }, 500, allow);
+  }
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url), allow = "*";
@@ -566,6 +650,9 @@ export default {
       const row = await env.DB.prepare(`SELECT name, floor, days, demons, turns, made FROM scores WHERE run = ?1`).bind(run).first();
       return json({ ok: true, rank: await rankOf(env.DB, row) }, 200, allow);
     }
+    // THE GIFT BOX (v1.10): /gift (see giftBox() above).
+    if (url.pathname === "/gift") return giftBox(req, env, pageOk, from, allow);
+    if (url.pathname === "/tally") return tallyDoor(req, env, pageOk, from, allow);
     // THE EXCHANGE: everything under /eco/ (see economy() above).
     if (url.pathname.startsWith("/eco/")) return economy(req, env, url, pageOk, from);
     return json({ error: "not found" }, 404, allow);
