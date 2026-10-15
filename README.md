@@ -4,7 +4,7 @@
 
 **Play it:** [okayline.itch.io/4dungeon](https://okayline.itch.io/4dungeon)
 
-<img width="60%" alt="Daily Digital Demon Dungeon, build v1.05.3" src="screenshots/v1.05.3.png" />
+<img width="60%" alt="Daily Digital Demon Dungeon, build v1.06" src="screenshots/v1.06.png" />
 
 An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played on the real lunar calendar. Open one door a day. The real moon changes how the game plays.
 
@@ -19,10 +19,10 @@ An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Te
 ## Good To Know
 
 - **One key a day.** Spend it on a door, or go on STANDBY and rest deeper tonight.
-- **Breath.** Searching and walking tire KURA out. Turning and looking around are free. If she's out of breath, wait a few seconds.
-- **AURA.** Read a demon in a fight, get a hunch about what's behind a door (costs a breath), or check how KURA and the party are feeling.
-- **TALK.** Talk to a demon, or to your party, who can tell you how the room feels.
-- **Your party.** Start with three friends. Demons can join when there's room. Everyone has patience, so don't wear it thin.
+- **Breath.** Searching, walking, talking and asking the moon tire KURA out. Turning is free. If she's out of breath, wait a few seconds.
+- **AURA.** Size up a demon in a fight, get a hunch about what's behind a door, or feel out the room.
+- **WORD.** Have a word with a demon, or with your party. Everyone carries things, and sometimes they'll offer you one.
+- **Your party.** Start with three friends. Demons can join when there's room. Everyone has patience, and a WORD helps it.
 - **Alignment.** Your choices pull KURA one way or another, and demons can tell.
 - **The Omen.** Once a day the moon gives everyone the same omen, and it tilts what the day brings.
 - **The Board.** Post a finished run to the leaderboard. Your run starts under a placeholder name; type your own when you post.

@@ -234,7 +234,7 @@
         if (i === lines.length - 5) {
           const m = /^( &gt; KURA (?:searches|scries) the [^.]+\.+) (.+?)(\s*)$/.exec(inner);
           if (m) inner = `${m[1]} <span class="${resultClass(m[2])}">${m[2]}</span>${m[3]}`;
-          const a = !m && /^( &gt; KURA (?:aura-farms|checks everyone|takes a read|vibe-checks|reads)[^.]*\.\.\.) (.+?)(\s*)$/.exec(inner);
+          const a = !m && /^( &gt; KURA (?:feels|tunes into|checks the vibe|takes the room)[^.]*\.\.\.) (.+?)(\s*)$/.exec(inner);
           if (a) inner = `${a[1]} <span class="q-aura" style="color:${auraColor()}">${a[2]}</span>${a[3]}`;
         }
         return `|<span class="logline${gold ? " " + gold : ""}">${inner}</span>|`;
@@ -245,7 +245,7 @@
         const b = (txt, act, ok) => `<span class="btn${ok ? "" : " off"}" data-act="${act}">${txt}</span>`;
         return esc(line)
           .replace("[F]IGHT", '<span class="btn" data-act="fight">[F]IGHT</span>')
-          .replace("[T]ALK", '<span class="btn" data-act="talk">[T]ALK</span>')
+          .replace("[W]ORD", '<span class="btn" data-act="word">[W]ORD</span>')
           .replace("[A]URA", '<span class="btn" data-act="aura">[A]URA</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace(/\[S\]EARCH|\[S\]CRY/, m => b(m, "search", can.search))
@@ -339,6 +339,45 @@
     document.getElementById("cheat").textContent = save.freeSteps ? RULES.debugInfo(save) : "";
     document.getElementById("ver").textContent = SMT.VERSION;
     bagBox();
+    offerBox();
+  }
+  // A PARTY MEMBER'S OFFER (v1.06): one of two things from their pockets, or one of two from KURA's bag for them.
+  // [1] or [2] takes it; [ESC] leaves it (they keep their things). With a full bag, taking one opens the bag to
+  // choose what goes back to them. (A demon's offer is in the fight box instead.)
+  function offerBox() {
+    const box = document.getElementById("found");
+    const v = save && !save.encounter && !save.dead && save.offer ? RULES.offerView(save) : null;
+    if (!v) { if (box.dataset.mode === "offer") { box.hidden = true; box.dataset.mode = ""; box.querySelector("pre").innerHTML = ""; } return; }
+    if (atTitle || replayTimer || (!box.hidden && box.dataset.mode !== "offer")) return;
+    if (["inv", "log", "board", "codex", "about", "exch"].some(id => { const el = document.getElementById(id); return el && !el.hidden; })) return;
+    const pre = box.querySelector("pre");
+    box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
+    placeInView(box, v.moon ? 8 : 15);
+    if (v.moon) { const scr = document.getElementById("screen"), rh = scr.getBoundingClientRect().height / scr.textContent.split("\n").length; box.style.top = scr.offsetTop + 15 * rh + "px"; }   // her offer sits low, under the moon
+    box.dataset.mode = "offer";
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
+    const opt = (label, act) => { const d = document.createElement("div"), b = document.createElement("span"); b.textContent = label.slice(0, 41); b.className = "btn"; b.dataset.off = act; d.appendChild(b); pre.appendChild(d); };
+    const said = (save.extra || "").replace(/^> /, ""), words = said.split(" "), rows = [""];      // (wrapped here: this can run before the page's wrapText exists)
+    for (const w of words) { if ((rows[rows.length - 1] + " " + w).trim().length > 41) rows.push(w); else rows[rows.length - 1] = (rows[rows.length - 1] + " " + w).trim(); }
+    rows.forEach(w => add(w, "gold"));
+    add(" ");
+    if (v.leave) {                                       // the moon's offer is now or never: leaving it asks first
+      add("LEAVE HER OFFER?"); add("SHE WON'T ASK TWICE."); add(" ");
+      const d = document.createElement("div"), y = document.createElement("span"), n = document.createElement("span");
+      y.textContent = "[Y]ES"; y.className = "btn"; y.dataset.off = "oleave-yes"; n.textContent = "[N]O"; n.className = "btn"; n.dataset.off = "oleave-no";
+      d.append(y, "   ", n); pre.appendChild(d);
+      return;
+    }
+    if (v.trade) {
+      add(`Give what for ${v.items[v.picked]}?`.slice(0, 41));
+      v.bag.forEach((it, i) => opt(`[${i + 1}] ${it}`, "otrade-" + i));
+      opt("[ESC] BACK", "otrade-none");
+      return;
+    }
+    v.items.forEach((it, i) => opt(`[${i + 1}] ${it}`, "opick-" + i));
+    add(" ");
+    opt("[ESC] LEAVE IT", "opick-none");
   }
   // THE BAG IS FULL (v1.05.1): a thing that came to a full bag waits (save.overflow) until KURA picks what to leave
   // behind: 1-9 leaves that thing, N leaves the new one where it lay. It waits for every other box to close first.
@@ -1398,18 +1437,16 @@
       "KEYS",
       ...[["[ ^ ] / up arrow", "walk through the door KURA faces"],
         ["[ < ] [ > ] / arrows", "turn (free)"],
-        ["[M]OON", "look up at the moon; again to look level"],
-        ["[S]CRY", "looking up: ask the moon (it takes a breath)"],
-        ["[F]IGHT  [T]ALK", "deal with a demon; with none, TALK to the party"],
-        ["[A]URA in a fight", "read a demon's aura (free, once a round)"],
-        ["[A]URA otherwise", "read the party's aura, or a door (a breath)"],
+        ["[M]OON", "look up and ask the moon (a breath); again to look level"],
+        ["[F]IGHT  [W]ORD", "deal with a demon; with none, a WORD with the party"],
+        ["[A]URA in a fight", "size up a demon (free, once a round)"],
+        ["[A]URA otherwise", "read the room, or a door (half a breath)"],
         ["[G]IVE", "at a wall terminal: make an offering"],
-        ["[B]EHOLD", "hold something up to a demon (it may want it)"],
         ["[I]NVOKE", "the bag: 1-9 or arrows choose, Enter uses"],
         ["[R]UN in a fight", "run through a door (it may block you)"],
         ["[S]EARCH", "search what KURA faces (each takes a breath)"],
-        ["[Y]ES  [N]O  [S]ILENT", "answer a question from the party or a demon"],
-        ["1-8", "pick a gift, or a thing to hold up"],
+        ["[Y]ES  [N]O  [S]ILENT", "answer a question from the party"],
+        ["[1]  [2]  [ESC]", "take one of two things offered, or leave it"],
         ["[C]ODEX", "every demon and item found, over all runs"],
         ["[L]OG", "the adventure log"],
         ["[P]ASSWORD", "keep or move this run, or paste one in"],
@@ -1751,7 +1788,7 @@
     return true;
   }
 
-  let introAt = 0, introTimer = null, introSeen = null, introShown = 0;      // the fight's opening unfolds a beat at a time too, a little quicker than its ending
+  let introAt = 0, introTimer = null, introSeen = null, introShown = 0, introSaid = [];      // the fight's opening unfolds a beat at a time too, a little quicker than its ending
   // A button on the new-demon screen: it counts as [ OK ], then does what it says. Not before the screen has unfolded.
   function introGo(name) {
     if (introTimer || Date.now() - introAt < 400 || !save || !save.encounter) return;
@@ -1791,7 +1828,7 @@
       let mark = beat();
       // The fallen enemy's last words sit on the line right under the art (only when this screen is a win).
       const won = lines.some(l => /falls\.  \+|burns out\.  \+/.test(l));
-      const wl = []; for (const l of lines) { if (won && !/falls\.  \+|burns out\.  \+/.test(l)) continue; for (const w of wrapText(l, COLS)) wl.push([w, lineClass(l)]); }   // a win shows only the fall line
+      const wl = []; for (const l of lines) { if (won && !/falls\.  \+|burns out\.  \+|^It drops /.test(l)) continue; for (const w of wrapText(l, COLS)) wl.push([w, lineClass(l)]); }   // a win shows only the fall line
       const last = won && save.lastLine ? wrapText(save.lastLine, COLS) : [];
       const dArt = Math.min(5, ROWS - 4 - wl.length - 1 - (last.length ? last.length + 1 : 0));      // title, blank, text, blank, [ OK ], and the quote with a blank under it
       if (dArt >= 3) {
@@ -1825,7 +1862,9 @@
       if (introTimer) { clearTimeout(introTimer); introTimer = null; }
       const groups = [], grp = fn => { const at = pre.children.length; fn(); groups.push([...pre.children].slice(at)); };
       const said = [save.extra && save.extra.includes(e.name) ? save.extra : null, ...lines].filter(Boolean).map(l => String(l).replace(/^> /, ""));
-      const iRows = said.reduce((n, l) => n + wrapText(l, COLS).length + 1, 0);   // (the stance row takes [ OK ]'s place: same one row)
+      // (v1.06) Only three lines of text show at a time: a new one rolls in at the bottom and the oldest scrolls off the top.
+      const SHOW = 3, rowsOf = said.map(l => wrapText(l, COLS).length + 1);
+      const iRows = Math.max(0, ...rowsOf.map((_, i) => rowsOf.slice(i, i + SHOW).reduce((a, b) => a + b, 0)));   // the tallest three in a row (the stance row takes [ OK ]'s place: same one row)
       const iArt = Math.min(5, ROWS - 2 - iRows - 1 - 1);      // title, blank, text (+ a blank after each), [ OK ], and the blank under the art
       if (iArt >= 3) grp(() => artSlot(iArt));
       grp(() => { add(`${e.name} APPEARS`, "demon"); add(" "); });
@@ -1834,20 +1873,32 @@
       // v1.04.1: the stance row instead of [ OK ], so a demon can be read (AURA) before anything else. It shows last,
       // once everything above has unfolded, and nothing works before then (see introGo).
       grp(() => { const row = document.createElement("div"); row.className = "brow"; const l = document.createElement("span");
-        l.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", (() => { const a = opt("[A]URA", "aura"); if (RULES.auraUsed(save)) a.className += " off"; return a; })(), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
+        l.append(opt("[F]IGHT", "fight"), "   ", opt("[W]ORD", "word"), "   ", (() => { const a = opt("[A]URA", "aura"); if (RULES.auraUsed(save)) a.className += " off"; return a; })(), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
         row.append(l); pre.appendChild(row); });
       // Only the first showing unfolds; a redraw shows it whole. Nothing skips it: [ OK ] works once it is on screen.
       if (e.introAt === undefined) e.introAt = save.steps || 0;
       const ikey = save.runId + ":" + e.introAt + ":" + e.name;
       // introShown counts the groups above the stance row already on screen. A redraw of the same demon (after an
       // AURA, or mid-unfold) keeps those and unfolds the rest a beat at a time: the new lines, then the stance row.
-      const text = groups.length - 1, shown = introSeen === ikey ? Math.min(introShown, text) : 1;
-      introSeen = ikey; introShown = shown;
+      // (v1.06) Lines that were on screen before and haven't changed stay; from the first new one, it unfolds again.
+      const head = iArt >= 3 ? 2 : 1, same = (() => { let k = 0; while (k < said.length && k < introSaid.length && said[k] === introSaid[k]) k++; return k; })();
+      const text = groups.length - 1, shown = introSeen === ikey ? Math.min(introShown, text, head + same) : 1;
+      introSeen = ikey; introShown = shown; introSaid = said;
       if (introTimer) { clearTimeout(introTimer); introTimer = null; }
+      // Groups up to `upTo` are revealed; of the revealed text lines only the last three are drawn.
+      // (v1.06) The newest line sits at the top, just under the title, and the older ones scroll down.
+      const titleEnd = groups[head - 1][groups[head - 1].length - 1];
+      const paint = upTo => {
+        groups.forEach((g, i) => {
+          const isText = i >= head && i < head + said.length, on = i < upTo && (!isText || i >= Math.min(upTo, head + said.length) - SHOW);
+          g.forEach(n => { n.style.display = on ? "" : "none"; });
+        });
+        for (let i = head; i < head + said.length; i++) titleEnd.after(...groups[i]);      // oldest first, each new one in above it
+      };
+      let upTo = shown;
+      paint(upTo);
       if (groups.length > shown) {
-        const hide = groups.slice(shown); hide.forEach(g => g.forEach(n => { n.style.visibility = "hidden"; }));
-        const step = () => { const g = hide.shift(); if (g) { g.forEach(n => { n.style.visibility = ""; }); if (hide.length) introShown++; }
-          if (hide.length) introTimer = setTimeout(step, 450); else { introTimer = null; introAt = Date.now() - 300; } };
+        const step = () => { upTo++; paint(upTo); if (upTo < groups.length) { introShown++; introTimer = setTimeout(step, 450); } else { introTimer = null; introAt = Date.now() - 300; } };
         introTimer = setTimeout(step, 450);
       }
       return true;
@@ -1862,43 +1913,39 @@
     const frame = (shown, who, final) => {
       pre.innerHTML = "";
       const gl = lines.slice(0, shown);
-      if (e.stage === "offer") {                       // GIVE: just the list
-        RULES.gifts(save).forEach((g, i) => {
-          const line = document.createElement("div"), o = opt(`[${i + 1}] ${g.label}`, "offer-" + i);
-          if (!g.ok) o.classList.add("off");
-          line.append(o); pre.appendChild(line);
-        });
+      // (v1.06) AN OFFER: what was said, then the two things on [1] and [2], and [ESC] to leave it. With a full bag,
+      // taking one opens the bag to choose what goes back (a swap); leaving a demon's own offer asks first.
+      if (e.stage === "offer" || e.stage === "trade" || e.stage === "leave") {
+        const v = RULES.offerView(save);
+        if (!v) return;
+        const fit = t => (t.length > COLS - 4 ? t.slice(0, COLS - 6) + ".." : t);
+        for (const l of e.stage === "leave" ? lines : tail(lines, 3).reverse()) for (const w of wrapText(l, COLS)) add(w, lineClass(l));   // newest on top (the leave question reads in order)
         add(" ");
-        const row = document.createElement("div"); row.append(opt("[B]ACK", "offer-none")); pre.appendChild(row);
+        if (e.stage === "leave") {
+          const row = document.createElement("div"); row.className = "brow"; const l = document.createElement("span");
+          l.append(opt("[Y]ES", "oleave-yes"), "   ", opt("[N]O", "oleave-no")); row.append(l); pre.appendChild(row);
+          return;
+        }
+        if (e.stage === "trade") {
+          add(fit(`Give what for ${v.items[v.picked]}?`));
+          v.bag.forEach((it, i) => { const d = document.createElement("div"); d.append(opt(fit(`[${i + 1}] ${it}`), "otrade-" + i)); pre.appendChild(d); });
+          const row = document.createElement("div"); row.append(opt("[ESC] BACK", "otrade-none")); pre.appendChild(row);
+          return;
+        }
+        v.items.forEach((it, i) => { const d = document.createElement("div"); d.append(opt(fit(`[${i + 1}] ${it}`), "opick-" + i)); pre.appendChild(d); });
+        add(" ");
+        const row = document.createElement("div"); row.append(opt("[ESC] LEAVE IT", "opick-none")); pre.appendChild(row);
         return;
       }
-      if (e.stage === "pick") {                        // BEHOLD / PEACE: what KURA carries, each with how loud it is
-        add("BEHOLD what?");
-        add(" ");
-        RULES.moveItems(save).forEach((g, i) => {
-          const right = ` ${".".repeat(g.loud)}`, room = COLS - 4 - right.length;      // (v1.05.1: the alignment tag is gone; the dots stay)
-          const nm = g.label.length > room ? g.label.slice(0, room - 2) + ".." : g.label.padEnd(room);
-          const line = document.createElement("div"); line.append(opt(`[${i + 1}] ${nm}${right}`, "pick-" + i)); pre.appendChild(line);
-        });
-        add(" ");
-        const row = document.createElement("div"); row.append(opt("[B]ACK", "pick-none")); pre.appendChild(row);
-        return;
+      const maxLines = 3;                              // three lines of text (v1.04.1: room for what KURA did, the reply, and the blow)
+      // (v1.06) The newest line is at the top and the older ones scroll down; past three rows the oldest drops off the bottom.
+      const perLine = gl.map(l => wrapText(l, COLS).map(w => [w, lineClass(l)]));
+      const body = []; let cursorAt = -1;
+      for (let i = perLine.length - 1; i >= 0 && body.length < maxLines; i--) {
+        const rows = perLine[i].slice(0, maxLines - body.length);
+        if (i === perLine.length - 1) cursorAt = rows.length - 1;
+        body.push(...rows);
       }
-      if (e.stage === "gift") {                        // the demon asks for a gift: what it said, then the list
-        for (const l of lines) for (const w of wrapText(l, COLS)) add(w, lineClass(l));
-        add(" ");
-        RULES.gifts(save).forEach((g, i) => {
-          const line = document.createElement("div"), o = opt(`[${i + 1}] ${g.label}`, "give-" + i);
-          if (!g.ok) o.classList.add("off");
-          line.append(o); pre.appendChild(line);
-        });
-        const row = document.createElement("div"); row.append(e.fromChat ? opt("[B]ACK", "give-none") : opt("[N]OTHING", "give-none")); pre.appendChild(row);
-        return;
-      }
-      const wrapped = [];
-      for (const l of gl) for (const w of wrapText(l, COLS)) wrapped.push([w, lineClass(l)]);
-      const maxLines = 3;                              // three lines of text (v1.04.1: room for what KURA did, the reply, and the blow); new ones roll the old up
-      const body = tail(wrapped, maxLines);
       let art = Math.min(5, ROWS - 5 - body.length - 1);
       if (art < 3) art = 0;
       if (art) {                                       // the art slot: a faint empty frame for now
@@ -1921,25 +1968,22 @@
       add(" ");                                        // a blank line between the names and what happened
       body.forEach(([w, c], bi) => {
         const d = add(w, c);
-        if ((replayWait || final) && bi === body.length - 1) { const s = document.createElement("span"); s.className = "wait"; s.textContent = " _"; d.append(s); }   // waiting: for a click between lines, and for your choice after the last one
+        if ((replayWait || final) && bi === cursorAt) { const s = document.createElement("span"); s.className = "wait"; s.textContent = " _"; d.append(s); }   // waiting: for a click between lines, and for your choice after the last one
       });
       const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1;
       for (let i = 0; i < rest; i++) add(" ");
       const row = document.createElement("div"); row.className = "brow";
       const left = document.createElement("span");
       if (final) {
-        if (e.stage === "chat") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"), "   ", opt("[S]ILENT", "silent"), "   ", opt("[B]EHOLD", "behold"));   // say nothing, or show it something
-        else if (e.stage === "want") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));   // it wants what KURA held up: hand it over?
-        else if (e.stage === "ask" || e.stage === "join") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
+        if (e.stage === "join") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
         else if (e.stage === "swap") {
           save.party.forEach((p, i) => { if (i > 0) left.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
           left.append(opt("[N]O", "swap-none"));
         } else {
-          // An angry demon won't hear words: TALK gives way to BEHOLD, at the end of the row. AURA dims once used this round.
+          // (v1.06) One row, angry or not: WORD to an angry demon shows it what KURA carries. AURA dims once used this round.
           const au = opt("[A]URA", "aura"); if (RULES.auraUsed(save)) au.className += " off";
           const r = opt("[R]UN", "run"); if (save.encounter.ranTried || !["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off";
-          if (e.angered) left.append(opt("[F]IGHT", "fight"), "   ", au, "   ", r, "   ", opt("[B]EHOLD", "behold"));
-          else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", au, "   ", r);
+          left.append(opt("[F]IGHT", "fight"), "   ", opt("[W]ORD", "word"), "   ", au, "   ", r);
         }
       }
       row.append(left);
@@ -1965,7 +2009,15 @@
 
   // The countdown beside the breath bar: seconds until she may act again, to a tenth, shown only while she is out
   // of breath. Five cells, blank otherwise.
-  const breathTimer = () => { const ms = save && save.dungeon && !save.dead && RULES.breathNext ? RULES.breathNext(save) : null; return (ms === null ? "" : (ms / 1000).toFixed(1) + "s").padStart(5); };
+  // (v1.06) Once she runs out it counts down to each of her next three breaths in turn, then gets out of the way.
+  let breathCount = 0;
+  const breathTimer = () => {
+    if (!save || !save.dungeon || save.dead || !RULES.breathNext) return "".padStart(5);
+    if (RULES.breath(save) < 1) breathCount = 3;
+    const ms = breathCount ? RULES.breathNext(save, breathCount) : null;
+    if (ms === null) breathCount = 0;
+    return (ms === null ? "" : (ms / 1000).toFixed(1) + "s").padStart(5);
+  };
   setInterval(() => { const el = document.getElementById("breathT"); if (el && !atTitle) { const t = breathTimer(); if (el.textContent !== t) el.textContent = t; } }, 100);   // only its own five cells change: the screen is not redrawn
   // THE TICKER along the bottom log line: one long tape of news, moved a character at a time, right to left.
   // It carries the run's own status report (each new one joins the tape as it comes) and the title feed's lines
@@ -2152,8 +2204,7 @@
     if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.question) {
       if (RULES.breath(save) < 1) { searchGo = true; try { act("search"); } finally { searchGo = false; } return; }
       const was = save.log, can = RULES.available(save), WALL = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
-      const lead = save.look ? `> KURA scries the ${SMT.moonIndex(SMT.now()) === 0 ? "sky" : "moon"}`
-        : save.view && save.view.end === "exchange" ? "> KURA reaches for the screen"
+      const lead = save.view && save.view.end === "exchange" ? "> KURA reaches for the screen"
         : can.door[save.facing] ? "> KURA listens at the door" : `> KURA searches the ${WALL[save.facing] || ""} wall`;
       // v1.01.1: THE RESULT HAS WEIGHT. The dots run longer the better the find (a RARE thing or the stairs three more,
       // a MYTHIC or MOON thing five), then the result is typed out a letter at a time, a sentence at a time with a
@@ -2220,16 +2271,16 @@
     }
     // A party member's question waits for [Y]ES or [N]O: nothing else moves the game on until it's answered
     // (the bag, codex, log, help and password still open, so the player can think it over).
-    if (save && save.question && /^(search|hold|left|right|look|forward|run|fight|talk|altar|go-)/.test(name)) {
+    if (save && save.question && /^(search|hold|left|right|look|forward|run|fight|word|altar|go-)/.test(name)) {
       document.querySelectorAll(".btn.ask").forEach(el => { el.classList.remove("nudge"); void el.offsetWidth; el.classList.add("nudge"); });
       return;
     }
-    if (name === "run" && save && save.encounter && save.encounter.ranTried) { save.log = "> KURA already tried to run. FIGHT or TALK."; persist(); draw(); encounterBox(); return; }
+    if (name === "run" && save && save.encounter && save.encounter.ranTried) { save.log = "> KURA already tried to run. FIGHT or WORD."; persist(); draw(); encounterBox(); return; }
     if (name === "run" && save && save.encounter) {
       // Running takes any way out, whichever way KURA faces: an open door first, a locked one (it takes the key) if that's all there is.
       const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]), free = out.filter(d => !can.locked[d]);
       const pool = free.length ? free : out;
-      if (!pool.length) { save.log = "> There is no way out today. FIGHT or TALK."; persist(); draw(); encounterBox(); return; }
+      if (!pool.length) { save.log = "> There is no way out today. FIGHT or WORD."; persist(); draw(); encounterBox(); return; }
       name = "go-" + pool[Math.floor(Math.random() * pool.length)];
     }
     if (name !== "invoke" && name !== "codex") logGlow = false;
@@ -2265,11 +2316,11 @@
     if (name === "hold") { if (!okHold) { holdBox(); return; } }
     const log = save.log, steps = save.steps, exBefore = save.extra, ranBefore = !!(save.encounter && save.encounter.ranTried), partyBefore = (save.party || []).map(p => p.name);
     const before = { items: (save.items || []).slice(), silver: save.silver }, hadFight = !!save.encounter, kuraHp = save.party && save.party[0] ? save.party[0].hp : 0;
-    save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false) : name === "silent" ? RULES.answer(save, "silent")
-      : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
-      : name.startsWith("offer-") ? RULES.offerGive(save, name === "offer-none" ? null : Number(name.slice(6)))
-      : name.startsWith("pick-") ? RULES.movePick(save, name === "pick-none" ? null : Number(name.slice(5)))
-      : name === "aura" ? RULES.readAura(save) : name === "behold" ? RULES.itemMove(save)
+    save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
+      : name.startsWith("opick-") ? RULES.offerPick(save, name === "opick-none" ? null : Number(name.slice(6)))
+      : name.startsWith("otrade-") ? RULES.offerTrade(save, name === "otrade-none" ? null : Number(name.slice(7)))
+      : name.startsWith("oleave-") ? RULES.offerLeaveConfirm(save, name === "oleave-yes")
+      : name === "aura" ? RULES.readAura(save)
       : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
       : name === "altar" ? RULES.altarOpen(save)
       : name === "altar-next" ? RULES.altarNext(save)
@@ -2340,6 +2391,7 @@
   document.getElementById("board").addEventListener("click", () => toggleBoard(false));   // no other interactive bits in here: any click closes
   document.getElementById("found").addEventListener("click", e => {
     if (document.getElementById("found").dataset.mode === "bag") { const b = e.target.closest("[data-bag]"); if (b) bagPick(b.dataset.bag); return; }
+    if (document.getElementById("found").dataset.mode === "offer") { const b = e.target.closest("[data-off]"); if (b) act(b.dataset.off); return; }
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
     if (e.target.closest("[data-intro]")) return introOK();
     const mode = document.getElementById("found").dataset.mode;
@@ -2392,8 +2444,18 @@
     const key = e.key.toLowerCase();
     if (e.target && e.target.tagName === "INPUT") return;    // a field's own keys (see nameField)
     const fbox = document.getElementById("found");
-    if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (e.repeat) return; if (key === "enter") introOK(); else { const k = { f: "fight", t: "talk", a: "aura", r: "run" }[key]; if (k) introGo(k); } return; }
+    if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (e.repeat) return; if (key === "enter") introOK(); else { const k = { f: "fight", w: "word", a: "aura", r: "run" }[key]; if (k) introGo(k); } return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
+    if (!fbox.hidden && fbox.dataset.mode === "offer") {       // a member's offer: 1 or 2 takes one, Esc leaves it (while swapping: 1-9 gives, Esc goes back)
+      e.preventDefault(); if (e.repeat) return;
+      const v = save && RULES.offerView(save);
+      if (!v) return;
+      if (v.leave) { act(key === "y" || key === "enter" ? "oleave-yes" : "oleave-no"); return; }      // only Enter or Y leaves it
+      if (v.trade) { if (/^[1-9]$/.test(key) && Number(key) <= v.bag.length) act("otrade-" + (Number(key) - 1)); else if (key === "escape" || key === "b") act("otrade-none"); }
+      else if (key === "1" || key === "2") act("opick-" + (Number(key) - 1));
+      else if (key === "escape") act("opick-none");
+      return;
+    }
     if (!fbox.hidden && fbox.dataset.mode === "bag") {         // the full bag's question: a number leaves that thing, N leaves the new one
       e.preventDefault(); if (e.repeat) return;
       if (/^[1-9]$/.test(key) && Number(key) <= (save.items || []).length) bagPick(Number(key) - 1);
@@ -2421,14 +2483,12 @@
       if (fbox.dataset.mode === "encounter") {
         const st2 = save.encounter && save.encounter.stage;
         let k;
-        if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", b: save.encounter.fromChat ? "give-none" : null, escape: "give-none" }[key];
-        else if (st2 === "offer") k = /^[1-8]$/.test(key) ? "offer-" + (Number(key) - 1) : { b: "offer-none", n: "offer-none", escape: "offer-none" }[key];
-        else if (st2 === "chat") k = { y: "yes", enter: "yes", n: "no", s: "silent", escape: "no", b: "behold" }[key];
-        else if (st2 === "want") k = { y: "yes", n: "no", escape: "no" }[key];
-        else if (st2 === "pick") k = /^[1-8]$/.test(key) ? "pick-" + (Number(key) - 1) : { b: "pick-none", escape: "pick-none" }[key];
-        else if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
+        if (st2 === "offer") k = key === "1" || key === "2" ? "opick-" + (Number(key) - 1) : { escape: "opick-none" }[key];
+        else if (st2 === "trade") k = /^[1-9]$/.test(key) && Number(key) <= (save.items || []).length ? "otrade-" + (Number(key) - 1) : { escape: "otrade-none", b: "otrade-none" }[key];
+        else if (st2 === "leave") k = key === "y" || key === "enter" ? "oleave-yes" : "oleave-no";          // only Enter or Y leaves it: anything else is NO
+        else if (st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", a: "aura", i: "invoke", r: "run", b: save.encounter.angered ? "behold" : null }[key];
+        else k = { f: "fight", w: "word", a: "aura", i: "invoke", r: "run" }[key];
         if (k) act(k);
       } else if (fbox.dataset.mode === "found" || fbox.dataset.mode === "done") { if (key === "enter") closeFound(); }   // a find only closes on its [ OK ] (Enter or a click), never by a stray key
       else if (key === "enter" || key === " " || key === "escape") closeFound();
@@ -2490,7 +2550,7 @@
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || key === "s")) { e.preventDefault(); return act(key === "y" ? "qyes" : key === "n" ? "qno" : "qsilent"); }
-    const k = { "?": "about", c: "codex", f: "fight", t: "talk", a: "aura", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
+    const k = { "?": "about", c: "codex", f: "fight", w: "word", a: "aura", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
       s: "search", g: "altar", m: "look", arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") {   // testing cheats, behind the admin key: X toggles infinite steps, Shift+X jumps a day
       e.preventDefault(); if (gating) return;

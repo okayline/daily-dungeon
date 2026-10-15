@@ -2,6 +2,21 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.06 - A Word With the Moon - Oct 14 2026, 23:35 HST
+
+![v1.06](screenshots/v1.06.png)
+
+- **`[W]ORD` takes the place of TALK and BEHOLD.** With the party it's a little scene: someone checks in, two who don't get along make peace, someone has something to say, and now and then someone holds out two things and you take one, or asks for one of two things from your bag. A WORD can only help, never hurt. It takes a breath, and the same member has less to say the more you ask in a day. They're fresh again in the morning.
+- **Talking no longer wears on anyone's patience.** WORD is how you bring it back up.
+- **WORD with a demon** can end with it going its way, sometimes leaving something behind, offering to join, or offering you one of two things. An angry demon won't hear words, but KURA can show it what she carries, and if it sees something it wants, the fight can end there.
+- **Offers:** press `[1]` or `[2]`, or `[ESC] LEAVE IT`. With a full bag, taking one becomes a swap: you pick what to give back. A demon won't wait, so leaving its offer asks first.
+- **Everyone carries things now.** Every demon and every party member has a few things of their own, and that's what they offer and what they take. Party members go out at night and sometimes come back with something.
+- **A beaten demon drops what it was carrying.** No more SILVER from demons, and no moon things from them either.
+- **`[A]URA` only reads the world.** Facing a wall, KURA reads the room: how loud she is in it, and how much it's stirring. Facing a door, she gets her hunch. Either costs half a breath now. In a fight, AURA also hints at what a demon is carrying.
+- **`[M]OON` is one press.** KURA looks up and asks her in one go, for a breath. SCRY is gone. Some nights she offers you one of two things no one else has, more often the fuller she is. She doesn't ask twice. Ask too many times in one night and she goes quiet.
+- **More breath.** KURA has more of it, gets it back sooner, and the wait for pressing on while out is shorter. After she runs out, the countdown follows her next few breaths back.
+- **The APPEARS screen and the fight box show three lines at a time,** newest on top, with older lines scrolling down.
+
 ## v1.05.3 - True Colors - Oct 14 2026, 20:33 HST
 
 ![v1.05.3](screenshots/v1.05.3.png)

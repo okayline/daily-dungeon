@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.05.3";
+  const VERSION = "v1.06";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -373,11 +373,11 @@
     // sides shrink evenly: a column and a half a side for each breath spent, and nothing left at 0.
     // v1.00.2: the bar is one white run (█) with a single dark square (▓) at each end, across columns 3 to 22; it closes
     // in from both ends (up to 10 columns a side) and what is left keeps a dark square at each end.
-    const shut = Math.max(0, Math.min(10, Math.round((6 - (st.breathNow === undefined ? 6 : st.breathNow)) / 6 * 10))), lo = 3 + shut, hi = 23 - shut;
+    const bmax = st.breathMax || 6, bn = (st.breathNow === undefined ? bmax : st.breathNow) * 6 / bmax;   // (v1.06: on a six-breath scale, however many she has)
+    const shut = Math.max(0, Math.min(10, Math.round((6 - bn) / 6 * 10))), lo = 3 + shut, hi = 23 - shut;
     const n = Math.max(0, hi - lo), body = n === 0 ? "" : n === 1 ? "▓" : "▓" + "█".repeat(n - 2) + "▓";
     // The marker over today's phase counts the breath the other way: one dot when she is rested, two as she tires, three
     // (". . .") when she is out. The first dot stays where the single dot always sat; the others follow it to the right.
-    const bn = st.breathNow === undefined ? 6 : st.breathNow;
     // v1.01.1: the row over the bar counts the other way from it: one dot when she is rested (the bar full), one more
     // for each breath spent, seven when she is out (the bar gone). Three columns apart and centered over the bar, so
     // they grow out from the middle as the bar closes in. The bar's middle is column 13.5; with an odd count the middle
@@ -411,7 +411,7 @@
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step is the [^] button in
     // the 3D view, and HOLD/RELEASE now live in INVOKE with everything else that isn't always available.
-    const free = ` [T]ALK [A]URA [I]NVOKE ${st.look ? "[S]CRY  " : "[S]EARCH"} [M]OON`;   // (SCRY is padded to SEARCH's width, so [M]OON never moves)   // [M]OON looks up at her, and level again; looking up, SEARCH becomes SCRY (asking her)
+    const free = ` [W]ORD [A]URA [I]NVOKE [S]EARCH [M]OON`;   // [M]OON looks up at her and asks, in one press (v1.06: SCRY is gone); again to look level
     S.push("|" + free + " ".repeat(78 - free.length) + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.

@@ -142,6 +142,54 @@
     const rare = 0.08 * loot;                            // a generous day makes rares three times as likely
     return pick(names(r < rare ? "RARE" : r < rare + 0.32 ? "UNCOMMON" : "COMMON"));
   }
+  // POCKETS (v1.06). Every demon and every party member carries a few things of its own (who.items): 3 to 5,
+  // drawn by its family's taste and its alignment. Offers come out of these pockets and trades go into them, so
+  // every thing in the game is somewhere: KURA's bag, someone's pockets, or a wall. A demon spawns with its pockets
+  // filled the first time anyone looks (pockets() fills them on demand, which also covers older saves). Never a
+  // moon thing: those stay with the moon and the walls. Members find a thing or two in the night, up to a soft cap.
+  const POCKET_MIN = 3, POCKET_MAX = 5, POCKET_CAP = 7;
+  const POCKET_NATURE = { data: { tech: 4, both: 1, spirit: 0.2 }, hardware: { tech: 3, both: 1, spirit: 1 },
+    hybrid: { both: 3, tech: 1, spirit: 1 }, folklore: { spirit: 4, both: 1, tech: 0.2 } };
+  function pocketRoll(st, who) {
+    const name = who.base || who.name, fam = isProgram(name) ? "data" : who.family || familyOf(name);
+    const depth = Math.min(floorNum(st), 5), r = Math.random();
+    const tier = r < 0.005 * depth ? "MYTHIC" : r < 0.04 + 0.015 * depth ? "RARE" : r < 0.4 ? "UNCOMMON" : "COMMON";
+    const nat = POCKET_NATURE[fam] || POCKET_NATURE.folklore, al = who.align || alignOf(name), have = who.items || [];
+    const w = names(tier).map(it => {
+      const g = alignGap(itemAlign(it) || "NEUTRAL", al);
+      return (nat[ITEM_NATURE[it]] ?? 0.5) * [3, 1.5, 0.5][g] * (have.includes(it) ? 0.2 : 1);
+    });
+    let x = Math.random() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < w.length; i++) if ((x -= w[i]) < 0) return names(tier)[i];
+    return pick(names(tier));
+  }
+  function pockets(st, who) {
+    if (!who) return [];
+    if (!Array.isArray(who.items)) { who.items = []; for (let i = R(POCKET_MIN, POCKET_MAX); i > 0; i--) who.items.push(pocketRoll(st, who)); }
+    return who.items;
+  }
+  // What a member says when they come back in the morning with something new (line 1, flavor).
+  const NIGHT_FIND = {
+    ELF: ["ELF slipped out in the night and came back with something.", 'ELF: "The halls were generous while you slept."'],
+    PIXIE: ['PIXIE: "I went out last night. I found STUFF."', "PIXIE comes back at dawn, pockets clinking."],
+    "CU SITH": ["CU SITH trots back at dawn with something in its mouth.", "CU SITH has been digging. It looks very pleased."],
+    data: ['{n}: "NIGHT SWEEP COMPLETE. ITEMS ACQUIRED."', '{n}: "OVERNIGHT SCAN FOUND OBJECTS. STORED."'],
+    hardware: ['{n}: "went for a walk. found things. normal night"', '{n}: "I found stuff while you were off. it\'s mine now"'],
+    hybrid: ["{n} came back from the wires with something new.", '{n}: "The night left things lying about. I took them."'],
+    folklore: ['{n}: "The dark gives to those who walk it."', "{n} came back before dawn, carrying something old."],
+  };
+  function nightFinds(st) {
+    const got = [];
+    for (const p of (st.party || []).slice(1)) {
+      if (p.hp <= 0) continue;
+      const have = pockets(st, p);
+      let n = Math.random() < 0.6 ? 1 : 2;
+      while (n-- > 0 && have.length < POCKET_CAP) { have.push(pocketRoll(st, p)); if (!got.includes(p)) got.push(p); }
+    }
+    if (!got.length) return null;
+    const p = pick(got), pool = NIGHT_FIND[p.name] || NIGHT_FIND[isProgram(p.name) ? "data" : p.family || "folklore"];
+    return "> " + pick(pool).replace(/\{n\}/g, p.name);
+  }
 
   // DEMONS by family. The deeper the floor, the more data becomes flesh: pure data near the top,
   // haunted hardware, then hybrids, then old folklore. ATOM SLASHER is the rare named horror.
@@ -386,11 +434,9 @@
     return pick(SEE[v] || SEE.wall);
   }
   // THE MOON. There is no ceiling: looking up ("U") is the open sky, with the real moon in it at her real phase.
-  // SEARCHing the moon asks her. Once a night she may answer with what one of the still-locked doors hides (never
-  // which door): the fuller she is, the likelier, and a new moon never answers. Asking costs a breath, and no heat.
+  // Looking up asks her (see LOOKING UP below). Her hunches say what one of the still-locked doors hides (never which door).
   const MOON_SEEN = ["No moon tonight.", "A thin moon, just begun.", "Half a moon, waxing.", "A swelling moon, nearly full.", "The full moon, wide open.",
     "A heavy moon, just past full.", "Half a moon, waning.", "A thin moon, almost gone."];
-  const MOON_ANSWER = [0, 0.15, 0.5, 0.85, 1, 0.85, 0.5, 0.15];
   const MOON_SAYS = {
     den: "Moonlight shows a warm room, heaped with things left behind.", bay: "Moonlight shows a still room, and somewhere to lie down.",
     relay: "Moonlight shows a dish, turning, listening for something.", vault: "Moonlight shows cold drawers, heavy with coin.",
@@ -406,7 +452,6 @@
   const MOON_AGAIN_SASS = ["The moon already answered. She doesn't do encores.", "Once a night, KURA. She has other people.",
     "The moon left you on read.", "The moon has been here four billion years. You got your one question."];
   const moonMood = m => (m <= 1 || m === 7 ? 0 : m >= 3 && m <= 5 ? 2 : Math.random() < 0.5 ? 0 : 2);     // 0 solemn, 2 sassy
-  const moonLine = (solemn, sass) => pick(moonMood(moon()) ? sass : solemn);
   // LINE 3 (v1.04.1): the dungeon noticing KURA's aura, and the moon talking to herself. Flavor only, never KURA's name.
   const NOTICE_LINE = {
     up1: ["Something down here turns its head.", "The dark takes an interest.", "Somewhere, something sniffs the air."],
@@ -440,24 +485,65 @@
   }
   // Now and then she reacts to what just happened (kind: fight, search, find, run). Never on a moonless night.
   function moonReact(st, kind) { return moonSky() === "none" || !MOON_REACT[kind] ? null : pick(MOON_REACT[kind]); }
-  function askMoon(st) {
-    const d = st.dungeon, m = moon();
-    act(st, "moon");
-    if (m === 0) { st.log = "> " + pick(["KURA scries the sky... No moon tonight. No one to ask.", "KURA scries the sky... Only the dark, a long way up."]); return show(st); }
-    if (st.moonDay === st.day) { st.log = "> " + moonLine(MOON_AGAIN, MOON_AGAIN_SASS); return show(st); }
-    st.moonDay = st.day;
-    spendBreath(st);
-    tally(st, "moonAsked");
-    st.log = "> KURA scries the moon...";
-    // The doors still locked in this room; failing that, any still locked on the level she has seen.
-    const fl = d.floor, shut = j => !fl.rooms[j] && !(fl.sealed && fl.sealed[j]) && MOON_SAYS[fl.kinds[j]];
+  // LOOKING UP (v1.06). One press of [M]OON: KURA looks up at the sky and asks, for a breath (SCRY is gone). The first
+  // look of the night may bring her offer: two things on [1] and [2], likelier the fuller she is, never at the new
+  // moon, and now or never (she doesn't wait). Her offers are things no one else deals in: a hunch about a locked
+  // door, a breath back, a pull toward LAW or toward CHAOS, a quiet aura for the day, and near full a moon thing.
+  // After that she talks a little, and then goes quiet until the next night. Every look costs a breath.
+  const MOON_OFFER = [0, 0.25, 0.45, 0.65, 0.85, 0.65, 0.45, 0.25];
+  const MOON_TALKS = 3;                                  // looks a night she answers; after that, only light
+  const MOON_DONE = ["The moon is only light now.", "She's said what she'll say tonight.", "The moon has gone quiet. It's late, even for her."];
+  const MOON_OFFERS = { bright: ['A luminous voice from above: "Two things. Pick one. Quickly."', 'A luminous voice from above: "One of these. I don\'t ask twice."'],
+    dim: ['A thin voice from above: "Choose."', 'Something faint, far up: "One. Only one."'] };
+  const MOON_GIFT = {
+    hunch: k => ({ kind: "hunch", label: "a hunch about a door", say: MOON_SAYS[k] }),
+    breath: () => ({ kind: "breath", label: "her light, for breath" }),
+    law: () => ({ kind: "law", label: "a pull toward LAW" }), chaos: () => ({ kind: "chaos", label: "a pull toward CHAOS" }),
+    hush: () => ({ kind: "hush", label: "a quiet aura, for today" }),
+    item: it => ({ kind: "item", label: it, item: it }),
+  };
+  function moonHunch(st) {
+    const d = st.dungeon, fl = d.floor, shut = j => !fl.rooms[j] && !(fl.sealed && fl.sealed[j]) && MOON_SAYS[fl.kinds[j]];
     let kinds = Object.values(fl.rooms[d.at].doors).filter(shut).map(j => fl.kinds[j]);
     if (!kinds.length) fl.rooms.forEach((r, i) => { if (r && RS(d, i).visited) for (const j of Object.values(r.doors)) if (shut(j)) kinds.push(fl.kinds[j]); });
-    const told = kinds.length && Math.random() < Math.min(0.95, MOON_ANSWER[m] * (aura(st).band === 2 ? 1.3 : 1));   // she notices a loud aura
-    if (told) tally(st, "moonAnswered");
-    st.extra = "> " + (told ? MOON_SAYS[pick(kinds)] : moonLine(MOON_QUIET, MOON_QUIET_SASS));
-    delete st.tell;
-    return show(st);
+    return kinds.length ? pick(kinds) : null;
+  }
+  function moonPair(st, m) {
+    const k = moonHunch(st), G = MOON_GIFT, near = m >= 3 && m <= 5, pairs = [];
+    if (k) pairs.push([G.hunch(k), G.breath()]);
+    pairs.push([G.law(), G.chaos()]);
+    pairs.push([G.hush(), G.breath()]);
+    if (near) { const it = pick(MOON_DROPS); pairs.push([G.item(it), G.hush()], [G.item(it), G.breath()]); if (m === 4) pairs.push([G.item(it), G.item(pick(MOON_DROPS.filter(x => x !== it)))]); }
+    const pr = near && Math.random() < (m === 4 ? 0.6 : 0.35) ? pick(pairs.filter(p => p.some(g => g.kind === "item"))) : pick(pairs);
+    return pr.sort(() => Math.random() - 0.5);
+  }
+  function moonLook(st) {
+    const m = moon(), sky = moonSky();
+    const night = st.moonNight && st.moonNight.day === st.day ? st.moonNight : (st.moonNight = { day: st.day, n: 0 });
+    night.n++;
+    tally(st, "moonAsked");
+    if (night.n > MOON_TALKS) { st.extra = "> " + pick(MOON_DONE); return; }
+    if (night.n === 1 && m !== 0 && Math.random() < Math.min(0.95, MOON_OFFER[m] * (aura(st).band === 2 ? 1.2 : 1))) {     // she notices a loud aura
+      st.offer = { who: "MOON", moon: true, dir: "give", choices: moonPair(st, m) };
+      st.extra = "> " + pick(MOON_OFFERS[sky === "bright" ? "bright" : "dim"]);
+      tally(st, "moonAnswered");
+      return;
+    }
+    // No offer: the first look gets her chatter; the next couple, a word about being asked again.
+    st.extra = "> " + pick(night.n === 1 || sky === "none" ? MOON_CHAT[sky] : sky === "bright" ? MOON_AGAIN_SASS.concat(MOON_QUIET_SASS) : MOON_AGAIN.concat(MOON_QUIET));
+  }
+  // Taking one of her two things.
+  function moonTake(st, g) {
+    const lines = [];
+    switch (g.kind) {
+      case "hunch": st.extra = "> " + g.say; break;
+      case "breath": delete st.breath; st.extra = "> Pale light fills KURA's lungs. She breathes easy."; break;
+      case "law": lean(st, "LAW", lines); st.extra = "> The light comes down cold and straight. KURA stands a little stiller."; break;
+      case "chaos": lean(st, "CHAOS", lines); st.extra = "> The light comes down crooked and warm. KURA grins, and doesn't know why."; break;
+      case "hush": st.hushDay = st.day; st.extra = "> Her light settles over KURA like a sheet. Nothing down here can hear her pockets today."; break;
+      case "item": gain(st, g.item, lines); st.extra = `> A piece of the moon drops into KURA's hands: ${g.item}.`; break;
+    }
+    st.log = `> KURA takes ${g.label}.`.slice(0, 77);
   }
   // DOOR HINTS and DEAD-END CLUES. Each locked door hides a room of one kind. SEARCHing a locked door sometimes gives a
   // faint hint of what is behind it (the senses overlap on purpose: warm for the Den and the Forge, a hum for the Bay and
@@ -623,6 +709,9 @@
     if (!st.dungeon) return st;
     if (st.dreadCheck) dread(st);
     const d = st.dungeon, room = d.floor.rooms[d.at];
+    // (v1.06) A fight saved mid-question under the old TALK and BEHOLD just carries on from the stance row.
+    const e0 = st.encounter;
+    if (e0 && (["chat", "want", "gift", "pick", "ask"].includes(e0.stage) || (e0.stage === "offer" && !e0.offer))) e0.stage = null;
     if (st.round) st.round = st.round.map(l => translate(st, l));
     if (st.extra) st.extra = translate(st, st.extra);
     st.omenText = omen(effectiveOmenDay(st)).text;                 // the omen, framed under the 3D view
@@ -631,7 +720,7 @@
     if (st.tell && !st.question) { st.extra = st.tell; delete st.tell; st.extraUrgent = true; } // a heat tell takes line 3 right away (not over a question)
     RS(d);                                              // (converts an old save's room arrays)
     st.roomName = roomName(d, d.at);
-    st.breathNow = breathNow(st, true);                  // for the moon strip under the map, which closes as she tires
+    st.breathNow = breathNow(st, true); st.breathMax = BREATH_MAX;                  // for the moon strip under the map, which closes as she tires
     if (st.look && !st.dead) st.roomName = moon() === 0 ? "THE SKY" : "THE MOON";   // looking up, the slot under the map names what she sees
     st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.facing, visited: allRooms(d).map(s => s.visited), found: allRooms(d).map(s => s.found) });
     const door = dir => doorWall(room, dir);
@@ -730,15 +819,15 @@
   }
   const STANDBY_LINES = ["> KURA kept still all day. The party sleeps deeper tonight.", "> A quiet day. Everyone wakes lighter.",
     "> Nothing moved, and nothing was lost. The room feels kinder.", "> The long stillness did its work."];
-  // BREATH. KURA's own tiredness: six breaths, one spent by every search (and by asking the moon). Out of breath,
+  // BREATH. KURA's own tiredness: eight breaths (six before v1.06), one spent by every search (and by asking the moon). Out of breath,
   // she can't search. It comes back by itself in real time, starting 2 seconds after the last one spent, and the
   // lower it has run the slower it returns: BREATH_BACK[n] is the seconds to climb from n to n + 1, so a small dip
   // is back in a couple of seconds and an empty bar takes about half a minute. It follows her from room to room.
   // st.breath = { n, at }: n breaths as of the instant `at` (ms), which is when the next one starts coming back.
-  const BREATH_MAX = 6, BREATH_BACK = [10, 8, 6, 4, 3, 2], BREATH_WAIT = 2000;
+  const BREATH_MAX = 8, BREATH_BACK = [7, 6, 5, 4, 3, 2, 2, 2], BREATH_WAIT = 1500;     // (v1.06: eight breaths, back sooner)
   // Pressing on while out of breath makes her wait longer: every refused try pushes the return of the next breath
   // back half a second, to at most ten seconds past the usual wait. A key held down counts as one try (heldKey).
-  const BREATH_NUDGE = 500, BREATH_NUDGE_MAX = 10000;
+  const BREATH_NUDGE = 500, BREATH_NUDGE_MAX = 7000;           // (v1.06: about 8.5 seconds at worst, from 12)
   let heldKey = false;
   // (n can sit on a half: a step costs half a breath. A breath comes back up to the next whole number, taking that
   // share of BREATH_BACK for the whole number it is climbing from.)
@@ -751,14 +840,14 @@
     if (write) { if (n >= BREATH_MAX) delete st.breath; else st.breath = { n, at }; }
     return n;
   }
-  // How long until she may act again, in milliseconds: the time until she has a whole breath, counted only while
-  // she has less than one (null otherwise).
-  function breathNext(st) {
+  // How long until her next whole breath, in milliseconds, counted only while she has fewer than `below` (null
+  // otherwise). With the default, that is how long until she may act again.
+  function breathNext(st, below = 1) {
     const b = st.breath, now = TIME.now().getTime();
     if (!b || !(b.n < BREATH_MAX)) return null;
     let n = Math.max(0, b.n), at = Math.min(b.at, now + BREATH_WAIT + BREATH_NUDGE_MAX);
     while (n < BREATH_MAX && now - at >= breathStep(n).ms) { const s = breathStep(n); at += s.ms; n = s.to; }
-    return n >= 1 ? null : Math.max(0, at + breathStep(n).ms - now);
+    return n >= below ? null : Math.max(0, at + breathStep(n).ms - now);
   }
   const STEP_BREATH = 0.5;                                // a step into another room: half of what a search takes
   function nudgeBreath(st) {
@@ -836,7 +925,10 @@
     if (tripping(st)) comeDown(st);
     if (st.taint) st.taint = Math.max(0, st.taint - 1);
     // A night's rest gives back some patience.
-    st.party = (st.party || []).map(p => p.patience === undefined ? { ...p, chats: 0 } : { ...p, chats: 0, patience: Math.min(PATIENCE, p.patience + 3) });
+    // (v1.06: and WORD is fresh again: every member has things to say tomorrow.)
+    st.party = (st.party || []).map(p => p.patience === undefined ? { ...p, chats: 0, words: 0 } : { ...p, chats: 0, words: 0, patience: Math.min(PATIENCE, p.patience + 3) });
+    // Members go out in the night and come back with something (v1.06).
+    const found = st.dungeon && !st.dead ? nightFinds(st) : null;
     for (const p of st.party) delete p.buzz;   // an ichor buzz wears off overnight
     // A night's rest heals a fifth of everyone's HP (fallen allies too, slowly).
     if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
@@ -859,7 +951,7 @@
     st.log = `> KURA wakes on ${st.floor}.` + (st.campNote ? " " + st.campNote : "");
     delete st.campNote;
     st.extra = d && t === d.deadline ? "> The air grows heavy. The way up closes tonight."
-      : held ? (st.restedDay = t, `> In the dark, a voice: "${omen(st.omenDay + 1).text.replace(/^> "|"$/g, "")}"`) : settled ? "> The room settles." : atmosphere(st);
+      : held ? (st.restedDay = t, `> In the dark, a voice: "${omen(st.omenDay + 1).text.replace(/^> "|"$/g, "")}"`) : found || (settled ? "> The room settles." : atmosphere(st));
     return st;
   }
 
@@ -1073,7 +1165,7 @@
       return show(st);
     }
     if (breathNow(st, true) < 1) { if (!/breath|needs a moment/.test(st.log || "")) tally(st, "breathOut"); nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
-    if (st.look === "U") return askMoon(st);              // looking up, SEARCH asks the moon
+    delete st.look;                                       // (v1.06) looking up, SEARCH just looks back down at the wall
     spendBreath(st);
     const d = st.dungeon, room = d.floor.rooms[d.at], found = RS(d).found, dir = st.facing;
     // A door can't be searched, but a locked one can be listened at (see KIND_HINT); a false one gives itself away.
@@ -1556,11 +1648,20 @@
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     if (!st.dungeon) return st;
-    if (how === "U") {                                   // tip her head up to the sky, or level again
-      if (st.look) delete st.look; else st.look = "U";
+    if (how === "U") {                                   // tip her head up to the sky (and ask her, for a breath), or level again
+      if (st.look) {
+        delete st.look; act(st, "look");
+        st.log = `> KURA looks ahead, ${NAME[st.facing]}. ${sight(st)}`;
+        if (!nag(st)) drift(st);
+        return show(st);
+      }
+      if (breathNow(st, true) < 1) { if (!/breath|needs a moment/.test(st.log || "")) tally(st, "breathOut"); nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
+      spendBreath(st);
+      st.look = "U";
       act(st, "look");
-      st.log = `> KURA looks ${st.look ? "up" : "ahead, " + NAME[st.facing]}. ${sight(st)}`;
-      if (!nag(st)) drift(st);
+      st.log = `> KURA looks up. ${sight(st)}`.slice(0, 77);
+      moonLook(st);
+      delete st.tell;
       return show(st);
     }
     delete st.look;
@@ -1692,7 +1793,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "hollow", "overflow", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
+      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "moonNight", "hushDay", "offer", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
@@ -1913,22 +2014,10 @@
     tally(st, "beaten"); tally(st, "ichorWon", n);
     lines.push(`${THE(e.name)} falls.  +${n} ICHOR`);
     st.lastLine = lastWords(e, st);                         // shown on the end-of-fight screen, right under the art
-    // What a fallen demon leaves: coin often, a thing now and then.
-    if (Math.random() < 0.5) {
-      const c = R(8, 40) * floorNum(st); st.silver = (st.silver ?? 0) + c; tally(st, "silverFound", c);
-      lines.push(`It drops ${c} SILVER.`);
-    }
-    if (Math.random() < 0.25) {
-      const it = rollItem(st);
-      lines.push(`It leaves ${it}.`);
-      gain(st, it, lines);
-    }
-    const dropOdds = [0, 0, 0, 0.1, 0.25, 0.1, 0, 0][moon()];
-    if (Math.random() < dropOdds) {
-      const it = pick(MOON_DROPS);
-      lines.push(`It leaves ${it}.`);
-      gain(st, it, lines);
-    }
+    // What a fallen demon leaves (v1.06): one to three things out of its own pockets. Never SILVER, never a moon thing.
+    const had = pockets(st, e).slice().sort(() => Math.random() - 0.5);
+    for (const it of had.slice(0, Math.min(had.length, R(1, 3)))) { lines.push(`It drops ${it}.`); gain(st, it, lines); }
+    e.items = [];
     if (has(st, "PATCH")) {                            // PATCH mends the party after a fight
       st.party = st.party.map(p => p.hp > 0 ? { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 8)) } : p);
       lines.push("PATCH mends the party a little.");
@@ -2124,7 +2213,7 @@
     const winners = Object.keys(piles).filter(k => piles[k] === top);
     let dom = winners.length === 1 ? winners[0] : "NEUTRAL";                  // a tie reads HUM
     if (disguised(st)) dom = st.disguise.align;
-    const band = bandOf(total);
+    const band = st.hushDay !== undefined && st.hushDay === st.day ? 0 : bandOf(total);     // (v1.06) the moon's quiet: nothing hears her today
     return { piles, dom, total, band, loud: BANDS[band], name: `${NAT[self] || "STRAY"} ${MACH[dom]}`, tag: tagOf(self) };
   }
   // How loud a demon reads: deeper is louder; a damaged one or a named horror is loud anywhere; programs are quiet.
@@ -2134,7 +2223,7 @@
   const pickMix = (fun, plain) => (Math.random() < 0.2 ? pick(plain) : pick(fun));
   const AURA_DO = {
     fun: ["KURA vibe-checks {n}.", "KURA checks {n} out.", "KURA cold-reads {n}.", "KURA side-eyes {n}. Thoroughly.", "KURA clocks {n}.",
-      "KURA reads {n} like a group chat.", "KURA scans {n} head to toe. Judging.", "KURA gives {n} a once-over.", "KURA lowkey stares at {n}."],
+      "KURA sizes {n} up like a group chat.", "KURA scans {n} head to toe. Judging.", "KURA gives {n} a once-over.", "KURA lowkey stares at {n}."],
     plain: ["KURA looks at {n} for a long moment.", "KURA goes quiet and takes {n} in."],
   };
   const AURA_LOUD = [
@@ -2154,33 +2243,55 @@
     DREAMY: { fun: ["{n} is not in this dungeon mentally.", "{n} is head empty, only vibes.", "{n} is on a different timeline.", "{n} is thinking about something shiny. Probably."],
       plain: ["{n} is watching a spot on the wall."] },
   };
+  // (v1.06) WHAT IT CARRIES: a read now hints at a demon's pockets, by what most of it is, or by its best thing.
+  // Half slang, half dungeon.
+  const AURA_CARRY = {
+    none: { fun: ["{n}'s pockets are empty. Real.", "{n} is carrying nothing. Broke era."], plain: ["{n} carries nothing at all."] },
+    tech: { fun: ["{n}'s pockets are humming.", "{n} is packing hardware. Lowkey."], plain: ["Something on {n} ticks, very softly.", "{n} carries small machines. They click."] },
+    spirit: { fun: ["{n} smells like candle wax and old coins.", "{n} is carrying something vintage."], plain: ["{n} carries old things. They rattle.", "Something on {n} smells of salt and smoke."] },
+    both: { fun: ["{n} has something half-alive on it.", "{n}'s stuff is giving cyborg."], plain: ["Something on {n} hums and breathes at once."] },
+    good: { fun: ["{n} is holding onto something good. Like, GOOD.", "{n} has a whole flex in its pockets."], plain: ["{n} carries something heavy with age."] },
+  };
+  function carryHint(st, e) {
+    const it = pockets(st, e), n = e.name;
+    if (!it.length) return fill(pickMix(AURA_CARRY.none.fun, AURA_CARRY.none.plain), n);
+    if (it.some(x => ["RARE", "MYTHIC"].includes(TIER[x])) && Math.random() < 0.5) return fill(pickMix(AURA_CARRY.good.fun, AURA_CARRY.good.plain), n);
+    const count = { tech: 0, spirit: 0, both: 0 };
+    for (const x of it) count[ITEM_NATURE[x] || "spirit"]++;
+    const k = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+    return fill(pickMix(AURA_CARRY[k].fun, AURA_CARRY[k].plain), n);
+  }
   const fill = (s, n) => s.split("{n}").join(n);
-  // [A]URA in a fight: free, and it doesn't spend the round. It reads the demon: its alignment, how loud, and a hint of its nature.
+  const AURA_ON = ["sizes up", "clocks", "feels out", "tunes into"];
+  // [A]URA in a fight: free, and it doesn't spend the round. It reads the demon: its alignment, how loud, a hint of
+  // its nature, and (v1.06) a hint of what it carries.
   function readAura(st) {
     st = copy(st);
     const e = st.encounter;
     if (st.dead) return show(st);
     if (!e) return auraOut(st);
-    if (e.auraRound === e.round) { st.round = [`KURA already read ${e.name}.`]; st.roundOver = false; return show(st); }   // once a round
+    if (e.auraRound === e.round) { st.round = [`KURA already sized up ${e.name}.`]; st.roundOver = false; return show(st); }   // once a round
     e.auraRound = e.round;
     act(st, "aura:demon");
     const n = e.name, b = demonBand(st, e), lines = [];
     lines.push(fill(pickMix(AURA_DO.fun, AURA_DO.plain), n));
-    lines.push(`${n} reads as ${demonAlignName(e)}. ${pickMix(AURA_LOUD[b].fun, AURA_LOUD[b].plain)}`);
+    lines.push(`${n} comes off as ${demonAlignName(e)}. ${pickMix(AURA_LOUD[b].fun, AURA_LOUD[b].plain)}`);
     if (beast(e)) lines.push(pick(["CU SITH stares back. Fair.", "CU SITH has good dog energy. Still a hound.", "CU SITH would like you to throw something."]));
     else if (UNIQUE[n]) lines.push(fill("{n}? Nope. Nope nope nope.", n));
     else { const h = AURA_HINT[personaOf(e)] || AURA_HINT.PRIM; lines.push(fill(pickMix(h.fun, h.plain), n)); }
+    if (!UNIQUE[n]) lines.push(carryHint(st, e));
     note(st, "demons", e.base || n, "read");
     tally(st, "auraReads");
-    st.log = `> KURA reads ${the(n)}'s aura.`;
+    st.log = `> KURA ${pick(AURA_ON)} ${the(n)}.`;
     st.round = lines; st.roundOver = false;
     return show(st);
   }
-  // [A]URA OUT OF A FIGHT (v1.05). AURA is the party's and KURA's temperament (the dungeon's own temper is its VIBES:
-  // the heat, which the party's TALK lines carry). Facing a door, KURA reads it: a hunch about what is behind it, in
-  // her voice, vaguer than a scrap or SCAN (the warm ones, the soft ones and the cold ones sound alike on purpose). It
-  // costs a breath, once per door; reading it again repeats the hunch for free. Facing anything else she aura-farms:
-  // line 1 is someone reacting (a party member, the dungeon when she is loud, or KURA herself), line 3 is her own read.
+  // [A]URA OUT OF A FIGHT (v1.06). AURA is observation only: it reads the world, never the party (the party is
+  // WORD's). Facing a door, KURA gets a hunch about what is behind it, in her voice, vaguer than a scrap or SCAN (the
+  // warm ones, the soft ones and the cold ones sound alike on purpose); asking the same door again repeats the hunch
+  // for free. Facing anything else she reads the room: how loud she is in it, and how hard it pulls (its heat). A new
+  // read costs half a breath, less than a search.
+  const AURA_BREATH = 0.5;
   const DIR_WORD = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
   const AURA_DOOR = {
     den: ["Whatever's back there is giving cozy.", "Warm vibes. Like, actually warm."],
@@ -2195,16 +2306,28 @@
     dead: ["Dead end. I can feel it. Spiritually.", "Small vibes. Nowhere-to-go small."],
     plain: ["Mid. Just mid.", "Nothing special back there. No offense to it."],
   };
-  const AURA_FARM = ["KURA aura-farms", "KURA checks everyone's aura", "KURA takes a read on the party", "KURA vibe-checks the party"];
-  // (v1.05.2) A read is one line 2, like a search: what she does, three dots, what came of it (the page types it out).
-  // Too long for the 77 columns, the lead shortens to "KURA reads" (every result fits after that).
-  const auraLine = (lead, result) => { const l = `> ${lead}... ${result}`; return l.length <= 77 ? l : `> KURA reads... ${result}`.slice(0, 77); };
-  const AURA_SELF_TALK = {
-    fun: ['"Okay but why am I like this."', '"Not me projecting onto a hallway."', '"I\'m carrying so much. Emotionally? Also literally."',
-      '"Growth is realizing the door was never the problem."', '"I think I\'m the main character. That\'s concerning."'],
-    plain: ["She wonders, briefly, what she's doing down here."],
+  // THE ROOM READ: [how loud KURA is][how hard the room pulls: calm, stirring, restless]. Her own voice, half slang
+  // and half dungeon.
+  const ROOM_READ = [
+    [{ fun: ["Nobody's looking at me. Love that.", "Zero eyes on me. Peak."], plain: ["The room hasn't noticed me.", "Still air. Nothing's watching."] },
+      { fun: ["I'm quiet, but the room's kinda awake.", "Low-key me, but something's stirring."], plain: ["I'm quiet. The room isn't.", "Something in the walls is turning over."] },
+      { fun: ["I'm chill. The room is NOT.", "Quiet me, loud room. Weird combo."], plain: ["The room is restless, and it's not me.", "Something here is awake. Not my doing."] }],
+    [{ fun: ["I'm giving a little. The room doesn't care yet.", "Some aura, no audience."], plain: ["My glow is showing. The room hasn't looked up.", "A little noticed. Nothing answers."] },
+      { fun: ["I'm on the room's radar now.", "The room is starting to clock me."], plain: ["The room has started leaning my way.", "Something has noticed me, a little."] },
+      { fun: ["The room is side-eyeing me. Hard.", "I'm noticed and the room is pressed."], plain: ["The room is restless, and it's turning to me.", "I'm noticed. The walls feel close."] }],
+    [{ fun: ["I'm LOUD. The room's still asleep, somehow.", "Main character, empty theater."], plain: ["I'm blazing. The room hasn't woken to it yet.", "Loud me, in a room that isn't listening. Yet."] },
+      { fun: ["Way too loud. The room is waking up for me.", "I'm broadcasting and the room is tuning in."], plain: ["The room is waking, and it's waking toward me.", "My aura fills the room. Something stirs at it."] },
+      { fun: ["Everything in here is staring at me.", "Loud me, loud room. Not a vibe."], plain: ["The room leans in. Something down here wants me.", "I'm loud and the room is hungry."] }],
+  ];
+  const ROOM_LEAD = ["KURA feels out the room", "KURA tunes into the room", "KURA feels the room", "KURA checks the vibe in here", "KURA takes the room's temperature"];
+  // A read is one line 2, like a search: what she does, three dots, what came of it (the page types it out). The
+  // lead is picked from the ones that fit the 77 columns with the result (every result fits after "KURA feels").
+  const auraLine = (leads, result, also = []) => {
+    for (const lead of [...[].concat(leads).sort(() => Math.random() - 0.5), ...also]) { const l = `> ${lead}... ${result}`; if (l.length <= 77) return l; }
+    return `> KURA feels... ${result}`.slice(0, 77);
   };
-  const AURA_PARTY = {      // what each one says about KURA's aura: [quiet or noticed, loud]
+  // What each one says about KURA's aura when she talks to them (v1.06: these were AURA's, and are WORD's now): [quiet or noticed, loud]
+  const AURA_PARTY = {
     ELF: [['ELF: "Steady, today. Good. Stay that way."', 'ELF: "You are hard to read. I like that."'], ['ELF: "You burn bright, little lantern. Too bright."', 'ELF: "Your aura is showing. Tuck it in."']],
     PIXIE: [['PIXIE: "You\'re so quiet! Are you mad at me?"', 'PIXIE: "You smell like a library."'], ['PIXIE: "You\'re glowing again. It\'s embarrassing."', 'PIXIE: "Everyone can SEE you. Like, everyone."']],
     "CU SITH": [["CU SITH leans on KURA's leg, content.", "CU SITH sniffs KURA's bag, then yawns."], ["CU SITH sniffs KURA's bag and sneezes.", "CU SITH's ears go flat at KURA's bag."]],
@@ -2224,35 +2347,28 @@
     if (!ensureFloor(st)) return show(st);
     const d = st.dungeon, room = d.floor.rooms[d.at], dir = st.facing;
     if (st.look !== "U" && dir && dir in room.doors) return auraDoor(st, d, room, dir);
+    if (breathNow(st, true) < AURA_BREATH) { nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
+    spendBreath(st, AURA_BREATH);
     act(st, "aura:room");
     tally(st, "auraReads");
-    const au = aura(st), loud = au.band === 2 ? 1 : 0, r = Math.random();
-    const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
-    let line;
-    if (r < 0.2 || (!friends.length && au.band === 0)) line = pickMix(AURA_SELF_TALK.fun, AURA_SELF_TALK.plain);
-    else if (au.band > 0 && (r < 0.4 || !friends.length)) line = pick(NOTICE_LINE[au.band === 2 ? "up2" : "up1"]);    // the dungeon notices, drily
-    else {
-      const p = pick(friends), own = AURA_PARTY[p.name];
-      line = own ? pick(own[loud]) : fill(pick((AURA_FAMILY[isProgram(p.name) ? "data" : familyOf(p.name)] || AURA_FAMILY.folklore)[loud]), p.name);
-    }
-    st.log = auraLine(pick(AURA_FARM), line);
-    st.line3 = `She reads as ${au.name}. ${["Quiet.", "Noticed.", "Loud."][au.band]}`;
+    const band = aura(st).band, pull = Math.min(2, heatTier(RS(d).heat)), r = ROOM_READ[band][pull];
+    st.log = auraLine(ROOM_LEAD, `"${pickMix(r.fun, r.plain)}"`);
     return show(st);
   }
   function auraDoor(st, d, room, dir) {
     const rs = RS(d); rs.auraDoors = rs.auraDoors || {};
-    const where = `the ${DIR_WORD[dir]} door`;
+    const where = `the ${DIR_WORD[dir]} door`, leads = [`KURA feels out ${where}`, `KURA tunes into ${where}`, `KURA feels ${where}`];
     const said = q => `"${String(q).replace(/^> KURA: "/, "").replace(/"$/, "")}"`;    // (a v1.05 save kept the whole line-1 text)
-    if (rs.auraDoors[dir]) { act(st, "aura:door"); st.log = auraLine(`KURA reads ${where} again`, said(rs.auraDoors[dir])); return show(st); }
-    if (isSealed(d, dir)) { act(st, "aura:door"); st.log = auraLine(`KURA reads ${where}`, said("That door is done. Like, done done.")); return show(st); }
-    if (breathNow(st, true) < 1) { nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
-    spendBreath(st);
+    if (rs.auraDoors[dir]) { act(st, "aura:door"); st.log = auraLine(leads.map(l => l + " again"), said(rs.auraDoors[dir]), leads); return show(st); }
+    if (isSealed(d, dir)) { act(st, "aura:door"); st.log = auraLine(leads, said("That door is done. Like, done done.")); return show(st); }
+    if (breathNow(st, true) < AURA_BREATH) { nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
+    spendBreath(st, AURA_BREATH);
     act(st, "aura:door");
     tally(st, "auraReads");
     const to = d.floor.rooms[room.doors[dir]];
     const k = (to && to.kind) || (to && to.hall ? "hall" : to && to.dead ? "dead" : to ? "plain" : FLOOR.kindBehind(d.floor, d.at, dir));
     rs.auraDoors[dir] = pick(AURA_DOOR[k] || AURA_DOOR.plain);
-    st.log = auraLine(`KURA reads ${where}`, said(rs.auraDoors[dir]));
+    st.log = auraLine(leads, said(rs.auraDoors[dir]));
     return show(st);
   }
   // Demons remark on KURA's aura when she walks in loud, each family its own way.
@@ -2274,10 +2390,8 @@
     return beast(e) ? w : `${e.name}: "${w}"`;
   }
 
-  // BEHOLD (v1.04.1): the one item move. KURA holds something up and keeps it; the demon reacts. If it wants the
-  // thing, it asks for it (a YES / NO), and handing it over is how a gift or a peace offering happens now.
-  // With a talking demon BEHOLD is a fourth answer to its question; with an angry one it sits beside FIGHT, AURA and RUN.
-  // What reaches a demon: a match with its alignment, its family's taste, and its personality.
+  // AFFINITY: how much someone likes a thing (v1.06: used by WORD, to choose what a demon or a member asks KURA for,
+  // and whether an angry demon is moved by what she shows it). What reaches a demon: a match with its alignment, its family's taste, and its personality.
   //   GRUFF likes plain things; HAUGHTY wants rarity; SLY likes odd things; PRIM likes a matched set and hates a
   //   clash; DREAMY likes strange things and is hard to predict.
   function affinity(e, it) {
@@ -2297,96 +2411,6 @@
     return s;
   }
   const verdict = (e, s) => (s >= (e.angered && personaOf(e) === "GRUFF" ? 3 : 2) ? "good" : s <= -1 ? "bad" : "meh");
-  // The demon wants what it sees: each family asks in its own way.
-  const WANT_ASK = {
-    data: ["THAT OBJECT. TRANSFER IT?", "REQUEST: THAT. YES / NO?", "ASSET DETECTED. HAND OVER?"],
-    hardware: ["can I have that? please?", "oh. is that for me?", "give it here? I'll be careful"],
-    hybrid: ["That has a pulse. Give it to me?", "I'll take that, traveler. Yes?", "Hand it over, and we're square."],
-    folklore: ["Give it here, child.", "That. I want that. Well?", "A fair thing. Is it mine?"],
-    beast: ["CU SITH stares at it, then at KURA. Give it?"],
-  };
-  const WANT_GRAB = { SLY: 0.4, GRUFF: 0.2 };         // turned down, a sly one may just take it; a gruff one may take it out on her
-  function itemMove(st) {
-    st = copy(st);
-    const e = st.encounter;
-    if (!e || st.dead) return show(st);
-    const from = e.stage === "chat" ? "chat" : !e.stage && e.angered ? "hostile" : null;
-    if (!from) return show(st);
-    if (!inventory(st).length) { st.round = ["KURA's bag is empty."]; st.roundOver = false; return show(st); }
-    e.pickFrom = from; e.stage = "pick";
-    st.round = ["KURA looks for something to hold up."];
-    st.roundOver = false;
-    return show(st);
-  }
-  // The list for BEHOLD: each thing KURA carries, with how it reads and how loud.
-  function moveItems(st) {
-    return inventory(st).slice(0, 8).map(it => ({ item: it.name, label: it.name, tag: itemAlignName(it.name), loud: AURA_STR[it.tier] || 1 }));
-  }
-  const backTo = from => (from === "chat" ? "chat" : null);
-  function movePick(st, i) {
-    st = copy(st);
-    const e = st.encounter;
-    if (!e || e.stage !== "pick") return show(st);
-    const from = e.pickFrom;
-    if (i === null) { e.stage = backTo(from); st.round = ["KURA lowers her hand."]; st.roundOver = false; return show(st); }
-    const g = moveItems(st)[i];
-    if (!g) return show(st);
-    const it = g.item, lines = [], v = verdict(e, affinity(e, it)), who = `${e.name}: `;
-    lines.push(`KURA holds up ${it}.`);
-    tally(st, "beheld");
-    if (from === "hostile") {
-      act(st, "behold"); e.round++;
-      st.log = `> KURA holds something up to ${the(e.name)}.`;
-      if (v === "good") {
-        // It stops mid-swing: it wants it.
-        e.stage = "want"; e.wantItem = it; e.pickFrom = from;
-        lines.push(`${THE(e.name)} stops mid-swing.`, beast(e) ? WANT_ASK.beast[0] : who + `"${pick(WANT_ASK[e.family || "folklore"])}"`);
-      } else { e.stage = null; lines.push(said(e, v === "bad" ? "insult" : "ignore", who)); demonTurn(st, lines); }
-      st.round = lines; st.roundOver = !st.encounter || st.dead;
-      return show(st);
-    }
-    act(st, "talk:demon");
-    if (v === "good") {
-      e.stage = "want"; e.wantItem = it; e.pickFrom = from;
-      lines.push(beast(e) ? WANT_ASK.beast[0] : who + `"${pick(WANT_ASK[e.family || "folklore"])}"`);
-    } else {
-      e.stage = "chat";
-      lines.push(v === "bad" ? said(e, "insult", who) : `${THE(e.name)} shrugs.`);
-      e.mood += v === "bad" ? -1 : 0;
-      afterAnswer(st, e, lines);
-    }
-    st.round = lines; st.roundOver = !st.encounter || st.dead;
-    return show(st);
-  }
-  // KURA's answer when a demon asks for what she held up.
-  function wantAnswer(st, yes) {
-    const e = st.encounter, it = e.wantItem, from = e.pickFrom, lines = [], who = `${e.name}: `;
-    delete e.wantItem;
-    const hand = () => { st.items.splice(st.items.indexOf(it), 1); tally(st, "gifts"); const ga = relicAlign(it); lean(st, ga === "LAW" ? "offerLAW" : ga === "NEUTRAL" ? null : "offer", lines); };
-    if (yes) {
-      lines.push(`KURA hands over ${it}.`);
-      hand();
-      if (from === "hostile") {
-        lines.push(said(e, "accept", who), `${THE(e.name)} calms down. It will talk now.`);
-        e.angered = false; e.stage = null; e.mood = Math.max(0, e.mood || 0);
-      } else {
-        lines.push(said(e, "love", who));
-        e.mood += 2; e.stage = "chat";
-        afterAnswer(st, e, lines);
-      }
-    } else {
-      lines.push("KURA keeps it.");
-      const grab = Math.random() < (WANT_GRAB[personaOf(e)] || 0);
-      if (grab && personaOf(e) === "SLY") { hand(); lines.push(`${THE(e.name)} snatches it anyway.`); }
-      if (from === "hostile") { e.stage = null; lines.push(said(e, "ignore", who)); demonTurn(st, lines); }
-      else {
-        if (grab && personaOf(e) === "GRUFF") { lines.push(`${THE(e.name)} doesn't like that.`); demonTurn(st, lines); }
-        if (st.encounter && !st.dead) { e.stage = "chat"; e.mood -= 1; afterAnswer(st, e, lines); }
-      }
-    }
-    st.round = lines; st.roundOver = !st.encounter || st.dead;
-    return show(st);
-  }
   const VOICE = {
     // (Data demons sometimes slip into binary. It's real ASCII: 01001000 01001001 is "HI".)
     data: { open: ["PROCESS DETECTED", "SIGNAL FOUND", "AWAITING INPUT", "01001000 01001001", "01001000 01001001 00111111"], ask: "REQUEST: RESOURCES. INPUT ANY.",
@@ -2441,43 +2465,401 @@
   const say2 = (e, k) => { const v = VOICE[famOf(e)][k]; return Array.isArray(v) ? pick(v) : v; };
   const said = (e, k, who) => beast(e) ? say2(e, k) : (who === undefined ? `${e.name}: ` : who) + `"${say2(e, k)}"`;
 
-  // TALK, step by step. 1) The demon decides whether to listen (moon and omen). 2) It names its price.
-  // 3) KURA answers YES or NO. 4) Paid, it may offer to join. Talking rounds are peaceful unless it's scorned.
-  function talk(st) {
+  // [W]ORD (v1.06). It takes the place of TALK and BEHOLD. AURA observes; WORD is a relationship: someone speaks
+  // back, and something changes. With the party it is a scene, never a menu. It is positive only (a chat can't make
+  // anything worse), it costs a breath (the same as a search, for now), and the moment shapes it: a member wearing
+  // thin gets a check-in, a LAW member and a CHAOS one get a truce, a calm party gets banter, and now and then
+  // someone offers KURA one of two things from their pockets, or asks for one of two things from her bag. Each WORD
+  // with the same member in a day gives a little less than the last (fatigue, never a grudge), and a night's rest
+  // resets it. With a demon, WORD ends in it leaving, joining, or an offer. An angry demon won't hear words, but
+  // KURA can still show it what she carries; if it sees something it wants, the fight can end there.
+  const WORD_BREATH = 1;
+  const WORD_YIELD = [1, 1, 0.5, 0.25];                 // the 1st, 2nd, 3rd, 4th WORD with one member today; past that, they're talked out
+  const famKey = p => (isProgram(p.base || p.name) ? "data" : p.family || "folklore");
+  const lineFor = (table, p) => pick(table[p.name] || table[famKey(p)] || table.folklore).replace(/\{n\}/g, p.name);
+  // Talked out for today: gentle, never annoyed.
+  const WORD_SPENT = {
+    ELF: ["ELF nods.", 'ELF: "I have said all I have today, little lantern."'],
+    PIXIE: ['PIXIE: "I\'m all talked out. Tomorrow!"', "PIXIE yawns and waves."],
+    "CU SITH": ["CU SITH just looks at you.", "CU SITH thumps its tail, once."],
+    WATCHDOG: ['WATCHDOG: "NOTHING NEW TO REPORT."'], PATCH: ['PATCH: "ALL CHECKS DONE FOR TODAY."'], CACHE: ['CACHE: "NOTHING NEW CACHED."'],
+    SCAN: ['SCAN: "SWEEP COMPLETE. NOTHING ELSE."'], COMPILER: ['COMPILER: "NO NEW OUTPUT."'],
+    data: ['{n}: "NO FURTHER DATA."', '{n}: "THAT IS ALL OF IT. FOR NOW."'], hardware: ['{n}: "that\'s all I got today"', "{n} beeps, content. Nothing more."],
+    hybrid: ["{n} hums. It has nothing more today.", '{n}: "Tomorrow, traveler."'], folklore: ['{n}: "That is all of it, child."', "{n} smiles and says nothing more."],
+  };
+  // A member wearing thin: KURA checks in, and it helps.
+  const WORD_CHECKIN = {
+    ELF: ['ELF: "...Thank you for asking. I am better."', 'ELF lets out a long breath. "Better now."'],
+    PIXIE: ['PIXIE: "Okay. Okay, I needed that."', "PIXIE leans on KURA's shoulder for a second."],
+    "CU SITH": ["CU SITH leans its whole weight on KURA. Better.", "CU SITH's ears come back up."],
+    data: ['{n}: "STATUS RESTORED. THANK YOU, USER."'], hardware: ['{n}: "you checked on me? ok. ok. better now"'],
+    hybrid: ['{n}: "Both halves of me needed that."'], folklore: ['{n}: "You have good manners, for a mortal. I am better."'],
+  };
+  // A LAW member and a CHAOS one, talked into a truce.
+  const WORD_TRUCE = [(a, b) => `${a} and ${b} argue. Then, somehow, agree.`, (a, b) => `KURA gets ${a} and ${b} to call a truce.`,
+    (a, b) => `${a} and ${b} talk it out. Mostly.`, (a, b) => `${a} says something nice about ${b}. ${b} pretends not to hear.`];
+  // Offers: a member holds out two things, or asks for one of two things in KURA's bag.
+  const OFFER_GIVE = {
+    ELF: ['ELF: "Take one. I can spare it."'], PIXIE: ['PIXIE: "I have two things! Pick one!"'], "CU SITH": ["CU SITH drops two things at KURA's feet."],
+    data: ['{n}: "SURPLUS DETECTED. SELECT ONE."'], hardware: ['{n}: "found these. you want one?"'], hybrid: ['{n}: "One for you, traveler. Choose."'],
+    folklore: ['{n}: "A gift, child. One of these."'],
+  };
+  const OFFER_ASK = {
+    ELF: ['ELF eyes KURA\'s bag. "Might I have one of those?"'], PIXIE: ['PIXIE: "Ooh. Can I have one of those?"'], "CU SITH": ["CU SITH noses at KURA's bag, at two things in it."],
+    data: ['{n}: "REQUEST: ONE OF THESE. OPTIONAL."'], hardware: ['{n}: "can I hold one of those? to keep?"'], hybrid: ['{n}: "Either of those would suit me."'],
+    folklore: ['{n}: "One of those, child, if you would."'],
+  };
+  // The bag is full: whoever offered is happy to swap.
+  const OFFER_TRADE = {
+    ELF: ['ELF: "A trade, then. Fair."'], PIXIE: ['PIXIE: "Ooh, you have TRADES?"'], "CU SITH": ["CU SITH waits to see what KURA gives back."],
+    data: ['{n}: "TRADE PROTOCOL OPEN."'], hardware: ['{n}: "ooh, you have trades?"'], hybrid: ['{n}: "A swap. Even better."'],
+    folklore: ['{n}: "An exchange. The old way."'], beast: ["CU SITH waits to see what KURA gives back."],
+  };
+  const OFFER_THANKS = {
+    ELF: ['ELF: "Thank you."', "ELF tucks it away, pleased."], PIXIE: ['PIXIE: "MINE. Thank you!"', "PIXIE hugs it."],
+    "CU SITH": ["CU SITH carries it off proudly.", "CU SITH sets it down between its paws."],
+    data: ['{n}: "RECEIVED. GRATITUDE LOGGED."'], hardware: ['{n}: "ok. I\'ll keep it safe"'], hybrid: ['{n}: "It suits me. Thank you."'],
+    folklore: ['{n}: "Kind. I will remember it."'],
+  };
+  // A demon's offer, and a demon that sees two things in the bag it wants one of.
+  const DEMON_OFFER = {
+    data: "OFFER: ONE OF TWO. SELECT.", hardware: "I have stuff. you want one?", hybrid: "Choose one, traveler. Only one.",
+    folklore: "Pick one, child. Choose well.", beast: "CU SITH lays two things at KURA's feet.",
+  };
+  const DEMON_WANTS = {
+    data: "THOSE OBJECTS. TRANSFER ONE?", hardware: "ooh. can I have one of those?", hybrid: "One of those has a pulse. Give it to me?",
+    folklore: "Give me one of those, child.", beast: "CU SITH stares at KURA's bag. It wants one of those.",
+  };
+  const demonSays = (e, table) => (beast(e) ? table.beast : `${e.name}: "${table[e.family || "folklore"] || table.folklore}"`);
+
+  // Two different things from a list, one from its louder half and one from its quieter half where it can.
+  function twoOf(list) {
+    const u = [...new Set(list)].sort((a, b) => TIERS.indexOf(TIER[b]) - TIERS.indexOf(TIER[a]));
+    if (u.length < 2) return null;
+    const half = Math.ceil(u.length / 2), a = pick(u.slice(0, half)), rest = u.filter(x => x !== a);
+    const low = rest.filter(x => u.indexOf(x) >= half);
+    return [a, pick(low.length ? low : rest)].sort(() => Math.random() - 0.5);
+  }
+  // The two things in KURA's bag that someone would like most (or the one thing, if that's all she has).
+  function bagWants(st, who) {
+    const u = [...new Set(st.items || [])].sort((a, b) => affinity(who, b) - affinity(who, a));
+    return u.slice(0, 2);
+  }
+  // Moving one thing between KURA's bag and someone's pockets.
+  function takeFrom(st, who, it, lines) {
+    const have = pockets(st, who), i = have.indexOf(it);
+    if (i >= 0) have.splice(i, 1);
+    tally(st, "offered");
+    gain(st, it, lines);
+  }
+  function handTo(st, who, it, lines) {
+    const i = (st.items || []).indexOf(it);
+    if (i < 0) return false;
+    st.items.splice(i, 1);
+    if (st.wear && !st.items.includes(it)) delete st.wear[it];
+    pockets(st, who).push(it);
+    tally(st, "gifts");
+    const ga = relicAlign(it); lean(st, ga === "LAW" ? "offerLAW" : ga === "NEUTRAL" ? null : "offer", lines);
+    return true;
+  }
+
+  function word(st) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     const e = st.encounter;
-    if (!e) return chat(st);
-    if (e.stage) return show(st);                        // waiting on a YES/NO already
-    if (e.angered && !UNIQUE[e.name]) { st.round = [`${THE(e.name)} won't hear words.`]; st.roundOver = false; return show(st); }   // TALK isn't offered then; BEHOLD is
-    act(st, "talk:demon");
+    if (!e) return wordParty(st);
+    if (e.stage) return show(st);                        // waiting on a choice already
+    act(st, "word:demon");
+    e.round++;
     const lines = [];
     st.roundOver = false;
-    st.log = `> KURA speaks to ${the(e.name)}.`;
     tally(st, "demonTalks");
-    lean(st, "talk", lines);
-    if (e.angered || (UNIQUE[e.name] && !UNIQUE[e.name].talks)) {
+    const u = UNIQUE[e.base || e.name];
+    if (u && !u.talks) {
+      st.log = `> KURA speaks to ${the(e.name)}.`;
       lines.push(`${THE(e.name)} won't listen.`);
       demonTurn(st, lines);
-    } else if (isProgram(e.name) || Math.random() < Math.min(0.95, LISTEN[moon()] * (e.corrupt ? 0.7 : 1) * omen(effectiveOmenDay(st)).fx.talk * STANCE_TALK[stance(st, e)])) {
-      lines.push(said(e, "open"));
-      // First it sizes KURA up: one or two questions, answered YES or NO (see DEMON TALK below).
-      // Then it asks for a gift: anything. What it gets decides how it reacts (see GIFTS below).
-      e.got = 0; e.asks = 1; e.mood = isProgram(e.name) || (e.corrupt && has(st, "PATCH")) ? 1 : 0;      // programs like KURA; PATCH steadies a corrupted one
-      e.want = 2 + floorNum(st);
-      e.silver = Math.round((20 + 10 * floorNum(st) + R(0, 20)) * { same: 0.7, neutral: 1, opposite: 1.5 }[stance(st, e)]);
-      e.left = R(2, 3); e.asked = [];                    // at least two questions before it ever asks for anything
-      demonAsks(st, e, lines);
-    } else {
-      lines.push(said(e, "scorn"));
-      e.angered = Math.random() < 0.5;
-      demonTurn(st, lines);
+    } else if (e.angered) wordShow(st, e, lines);
+    else {
+      st.log = `> KURA speaks to ${the(e.name)}.`;
+      lean(st, "talk", lines);
+      const listens = e.heard || isProgram(e.name) || Math.random() < Math.min(0.95, LISTEN[moon()] * (e.corrupt ? 0.7 : 1) * omen(effectiveOmenDay(st)).fx.talk * STANCE_TALK[stance(st, e)]);
+      if (!listens) {
+        lines.push(said(e, "scorn"));
+        e.angered = Math.random() < 0.5;
+        demonTurn(st, lines);
+      } else {
+        e.heard = true;
+        lines.push(said(e, "open"));
+        wordEnds(st, e, lines);
+      }
     }
     st.round = lines;
     if (!st.encounter || st.dead) st.roundOver = true;
     return show(st);
   }
+  // An angry demon: KURA shows it what she carries. If it sees something it wants, it stops mid-swing and asks for
+  // one of two things; anything less and the fight goes on.
+  function wordShow(st, e, lines) {
+    st.log = `> KURA shows ${the(e.name)} what she carries.`;
+    const two = bagWants(st, e);
+    if (!two.length) { lines.push("KURA's bag is empty. There is nothing to show."); demonTurn(st, lines); return; }
+    const v = verdict(e, affinity(e, two[0]));
+    if (v === "good") {
+      lines.push(`${THE(e.name)} stops mid-swing.`, demonSays(e, DEMON_WANTS));
+      e.stage = "offer"; e.offer = { dir: "ask", items: two, hostile: true };
+      return;
+    }
+    lines.push(`KURA holds up ${two[0]}.`, said(e, v === "bad" ? "insult" : "ignore"));
+    demonTurn(st, lines);
+  }
+  // How a demon that listened ends the talk: it leaves (sometimes leaving something behind), joins, or offers.
+  function wordEnds(st, e, lines) {
+    pockets(st, e);
+    if (e.corrupt) {                                   // the damage lifts, or it doesn't
+      if (Math.random() < (has(st, "PATCH") ? 0.85 : 0.6)) {
+        e.corrupt = false; e.name = e.base; e.align = alignOf(e.base);
+        tally(st, "restored"); lean(st, "restore"); ev(st, "restored");
+        lines.push(`The noise drains out of ${e.name}. It is whole again.`);
+        if (Math.random() < 0.6) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
+        else departs(st, e, lines, 0.7);
+      } else {
+        lines.push("The noise swallows it again.");
+        e.angered = true; demonTurn(st, lines);
+      }
+      return;
+    }
+    if (isProgram(e.name)) {                           // a program just decides whether to link
+      if (Math.random() < 0.7) { e.stage = "join"; lines.push(`${THE(e.name)} offers to link with the party.`); }
+      else departs(st, e, lines, 0.6);
+      return;
+    }
+    const s = stance(st, e), chaos = e.align === "CHAOS", proud = personaOf(e) === "HAUGHTY";
+    const wants = bagWants(st, e).filter(it => verdict(e, affinity(e, it)) === "good");
+    const w = {
+      offer: pockets(st, e).length >= 2 ? 0.4 : 0,
+      notice: wants.length ? 0.2 : 0,
+      join: chaos || proud ? 0 : 0.15 * (s === "same" ? 1.5 : s === "opposite" ? 0.5 : 1),
+      gift: 0.25,
+    };
+    let r = Math.random() * Math.max(1, w.offer + w.notice + w.join + w.gift);
+    if ((r -= w.offer) < 0) {
+      e.stage = "offer"; e.offer = { dir: "give", items: twoOf(e.items) };
+      lines.push(demonSays(e, DEMON_OFFER));
+    } else if ((r -= w.notice) < 0) {
+      e.stage = "offer"; e.offer = { dir: "ask", items: bagWants(st, e) };
+      lines.push(`${THE(e.name)} notices something in KURA's bag.`, demonSays(e, DEMON_WANTS));
+    } else if ((r -= w.join) < 0) {
+      e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`);
+    } else if ((r -= w.gift) < 0) departs(st, e, lines, 1);
+    else departs(st, e, lines, 0);
+  }
+  // It goes its way: with chance `gift`, it leaves something from its pockets behind for KURA.
+  function departs(st, e, lines, gift) {
+    const have = pockets(st, e);
+    if (have.length && Math.random() < gift && (st.items || []).length < BAG_MAX) {
+      const it = pick(have); lines.push(`${THE(e.name)} leaves ${it} behind.`); takeFrom(st, e, it, lines);
+      lines.push(`${THE(e.name)} is content. ${say2(e, "leave")}`);
+    } else lines.push(`${THE(e.name)} goes its way. ${say2(e, "leave")}`);
+    leaves(st, e);
+  }
 
+  // WORD WITH THE PARTY.
+  function wordParty(st) {
+    if (!ensureFloor(st)) return show(st);
+    if (breathNow(st, true) < WORD_BREATH) { nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
+    spendBreath(st, WORD_BREATH);
+    act(st, "word:party");
+    tally(st, "partyTalks");
+    const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
+    if (!friends.length || Math.random() < (moon() === 4 ? 0.12 : 0.05)) {
+      st.log = `> KURA speaks into the dark.`;
+      st.extra = "> " + pick(friends.length || Math.random() < 0.5 ? VOICE_FROM_DARK : ["Only the walls answer.", "Her voice comes back, thinner."]);
+      return show(st);
+    }
+    // Who answers: someone wearing thin is likelier; someone talked out, less likely.
+    const weight = p => ((p.patience ?? PATIENCE) <= 2 ? 3 : 1) * ((p.words || 0) >= WORD_YIELD.length ? 0.3 : 1);
+    let x = Math.random() * friends.reduce((n, p) => n + weight(p), 0), p = friends[0];
+    for (const q of friends) if ((x -= weight(q)) < 0) { p = q; break; }
+    p.words = (p.words || 0) + 1;
+    const y = WORD_YIELD[p.words - 1] || 0;
+    pockets(st, p);
+    st.log = `> KURA talks to ${p.name}.`;
+    if (!y) { st.extra = st.talkLine = "> " + lineFor(WORD_SPENT, p); return show(st); }
+    const mend = (q, n) => { q.patience = Math.min(PATIENCE + 2, (q.patience ?? PATIENCE) + n); };
+    // Wearing thin: a check-in.
+    if ((p.patience ?? PATIENCE) <= 2) {
+      mend(p, Math.max(1, Math.round(3 * y)));
+      st.log = `> KURA checks in on ${p.name}.`;
+      st.extra = st.talkLine = "> " + lineFor(WORD_CHECKIN, p);
+      return show(st);
+    }
+    // A LAW member and a CHAOS one: friction, then a truce.
+    const rival = friends.find(q => q !== p && alignGap(memberAlign(st, p), memberAlign(st, q)) === 2);
+    if (rival && Math.random() < 0.6) {
+      const n = Math.max(1, Math.round(2 * y)); mend(p, n); mend(rival, n);
+      st.log = `> KURA gets ${p.name} and ${rival.name} talking.`;
+      st.extra = st.talkLine = "> " + pick(WORD_TRUCE)(p.name, rival.name);
+      return show(st);
+    }
+    // Now and then, an offer.
+    const r = Math.random();
+    if (r < 0.3 * y && memberOffer(st, p)) return show(st);
+    if (r < 0.3 * y + 0.12 && confide(st, p)) return show(st);
+    // Otherwise, banter: what's on their mind, or what they make of KURA's aura. Once in a while it helps.
+    const au = aura(st).band, ap = AURA_PARTY[p.name] || AURA_FAMILY[famKey(p)];
+    let line = Math.random() < 0.3 && ap ? pick(ap[au === 2 ? 1 : 0]).replace(/\{n\}/g, p.name) : lineFor({ ...FAMILY_TALK, ...PARTY_TALK }, p);
+    const kura = st.party[0];
+    if (Math.random() < 0.2 * y && kura.hp > 0 && kura.hp < kura.hpmax) {
+      const n = Math.max(1, Math.ceil(kura.hpmax / 10)); kura.hp = Math.min(kura.hpmax, kura.hp + n);
+      line = `${p.name} patches KURA up a little. +${n} HP`;
+    }
+    if (y >= 1) mend(p, 1);
+    st.extra = st.talkLine = "> " + line;
+    return show(st);
+  }
+  // A member offers one of two things from their pockets, or asks for one of two things from KURA's bag.
+  function memberOffer(st, p) {
+    const give = twoOf(pockets(st, p)), ask = bagWants(st, p);
+    const dir = give && (ask.length < 2 || Math.random() < 0.7) ? "give" : ask.length >= 2 ? "ask" : null;
+    if (!dir) return false;
+    st.offer = { who: p.name, dir, items: dir === "give" ? give : ask };
+    st.extra = "> " + lineFor(dir === "give" ? OFFER_GIVE : OFFER_ASK, p);
+    return true;
+  }
+
+  // AN OFFER'S ANSWER: [1] or [2] (i = 0 or 1), or i = null to leave it. A member's offer lives in st.offer; a
+  // demon's in its encounter (stage "offer"). Taking with a full bag opens the bag to choose what to give back.
+  const fit77 = l => (l.length <= 77 ? l : l.slice(0, 74) + "...");
+  function offerOf(st) {
+    const e = st.encounter;
+    if (e) return e.offer && ["offer", "trade", "leave"].includes(e.stage) ? { o: e.offer, who: e, e } : null;
+    if (!st.offer) return null;
+    if (st.offer.moon) return { o: st.offer, who: { name: "MOON" }, e: null, moon: true };
+    const who = (st.party || []).find(p => p.name === st.offer.who);
+    return who ? { o: st.offer, who, e: null } : null;
+  }
+  function offerPick(st, i) {
+    st = copy(st);
+    const h = offerOf(st);
+    if (!h) { delete st.offer; return show(st); }
+    const { o, who, e } = h, lines = [];
+    if (e && e.stage !== "offer") return show(st);
+    if (h.moon) {                                      // the moon's offer: now or never, so leaving asks first
+      if (o.leave) return show(st);
+      if (i === null) { o.leave = true; return show(st); }
+      const g = (o.choices || [])[i];
+      if (!g) return show(st);
+      delete st.offer;
+      act(st, "offer:moon");
+      moonTake(st, g);
+      return show(st);
+    }
+    if (i === null) return offerLeave(st, h);
+    const it = o.items[i];
+    if (!it) return show(st);
+    if (o.dir === "give" && (st.items || []).length >= BAG_MAX) {   // a full bag: it's a swap now
+      o.pick = i;
+      if (e) { e.stage = "trade"; st.round = [`KURA takes ${it}.`, beast(e) ? OFFER_TRADE.beast[0] : lineFor(OFFER_TRADE, e)]; st.roundOver = false; }
+      else { o.trade = true; st.extra = "> " + lineFor(OFFER_TRADE, who); }
+      return show(st);
+    }
+    if (o.dir === "give") { lines.push(`KURA takes ${it}.`); takeFrom(st, who, it, lines); }
+    else { lines.push(`KURA gives ${it}.`); handTo(st, who, it, lines); }
+    return offerDone(st, h, it, lines);
+  }
+  // The full bag's swap: j = which thing in KURA's bag goes back with them, or null to go back to the two things.
+  function offerTrade(st, j) {
+    st = copy(st);
+    const h = offerOf(st);
+    if (!h || h.o.pick === undefined) return show(st);
+    const { o, who, e } = h, lines = [];
+    if (j === null) {
+      delete o.pick;
+      if (e) { e.stage = "offer"; st.round = ["KURA thinks it over."]; st.roundOver = false; } else delete o.trade;
+      return show(st);
+    }
+    const back = (st.items || [])[j], it = o.items[o.pick];
+    if (!back || !it) return show(st);
+    lines.push(`KURA gives ${back}, and takes ${it}.`);
+    handTo(st, who, back, lines); takeFrom(st, who, it, lines);
+    delete o.pick;
+    return offerDone(st, h, it, lines);
+  }
+  function offerDone(st, h, it, lines) {
+    const { o, who, e } = h;
+    if (!e) {                                          // a member: a little closer for it
+      delete st.offer;
+      act(st, "offer:party");
+      who.patience = Math.min(PATIENCE + 2, (who.patience ?? PATIENCE) + 1);
+      st.log = fit77(o.dir === "give" ? `> KURA takes ${it} from ${who.name}.` : `> KURA gives ${it} to ${who.name}.`);
+      st.extra = st.talkLine = "> " + (o.dir === "give" ? `${who.name} keeps the other one.` : lineFor(OFFER_THANKS, who));
+      return show(st);
+    }
+    act(st, "offer:demon");
+    delete e.offer;
+    e.stage = null;
+    if (o.hostile) {                                   // the fight ends here
+      lines.push(said(e, "accept"), `${THE(e.name)} calms down. It will talk now.`);
+      e.angered = false; e.heard = true;
+    } else {
+      lines.push(said(e, o.dir === "give" ? "like" : "love"));
+      // A demon given something sometimes gives something back.
+      if (o.dir === "ask" && Math.random() < 0.4 && pockets(st, e).length && (st.items || []).length < BAG_MAX) {
+        const back = pick(e.items); lines.push(`${THE(e.name)} gives KURA ${back} in return.`); takeFrom(st, e, back, lines);
+      }
+      if (e.align === "CHAOS") { lines.push(`${THE(e.name)} runs off laughing.`); ev(st, "trickster"); leaves(st, e); }
+      else if (Math.random() < (o.dir === "ask" ? 0.35 : 0.2)) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
+      else { lines.push(`${THE(e.name)} is satisfied. ${say2(e, "leave")}`); leaves(st, e); }
+    }
+    st.round = lines;
+    st.roundOver = !st.encounter || st.dead;
+    return show(st);
+  }
+  // Leaving an offer. A member keeps their things, and nothing more is said. A demon's own offer asks first (it
+  // won't be back); turning down a demon that asked costs nothing, and an angry one goes on fighting.
+  function offerLeave(st, h) {
+    const { o, who, e } = h, lines = [];
+    if (!e) {
+      delete st.offer;
+      st.extra = st.talkLine = "> " + (o.dir === "give" ? `${who.name} will keep them.` : `KURA keeps her things. ${who.name} doesn't mind.`);
+      return show(st);
+    }
+    if (o.dir === "give") { e.stage = "leave"; st.round = ["LEAVE THEIR OFFER ON THE TABLE?", "IT WON'T BE BACK."]; st.roundOver = false; return show(st); }
+    delete e.offer; e.stage = null;
+    lines.push("KURA keeps her things.");
+    if (o.hostile) { lines.push(said(e, "ignore")); demonTurn(st, lines); }
+    else { lines.push(`${THE(e.name)} loses interest. ${say2(e, "leave")}`); leaves(st, e); }
+    st.round = lines; st.roundOver = !st.encounter || st.dead;
+    return show(st);
+  }
+  function offerLeaveConfirm(st, yes) {
+    st = copy(st);
+    if (!st.encounter && st.offer && st.offer.moon && st.offer.leave) {
+      if (!yes) { delete st.offer.leave; return show(st); }
+      delete st.offer;
+      st.extra = "> " + pick(["She doesn't ask twice.", "The light pulls back. Her offer is gone.", 'From far up: "Suit yourself."']);
+      return show(st);
+    }
+    const e = st.encounter;
+    if (!e || e.stage !== "leave") return show(st);
+    if (!yes) { e.stage = "offer"; st.round = ["KURA thinks it over."]; st.roundOver = false; return show(st); }
+    act(st, "offer:leave");
+    delete e.offer; e.stage = null;
+    st.round = ["KURA leaves the offer on the table.", `${THE(e.name)} takes its things and goes. ${say2(e, "leave")}`];
+    leaves(st, e);
+    st.roundOver = true;
+    return show(st);
+  }
+  // What the offer box shows: who, which way, the two things, and (while swapping) KURA's bag.
+  function offerView(st) {
+    const h = offerOf(st);
+    if (!h) return null;
+    const { o, who, e } = h;
+    if (h.moon) return { who: "MOON", moon: true, dir: "give", items: o.choices.map(g => g.label), trade: false, leave: !!o.leave, demon: false, hostile: false, bag: [] };
+    return { who: who.name, dir: o.dir, items: o.items.slice(), picked: o.pick, trade: o.pick !== undefined && (e ? e.stage === "trade" : !!o.trade),
+      leave: !!(e && e.stage === "leave"), demon: !!e, hostile: !!o.hostile, bag: (st.items || []).slice() };
+  }
   // TALK with no demon around: KURA talks to her party, and someone answers. Now and then something
   // that isn't the party answers instead (more often under a full moon). Pure flavor; it counts a TURN.
   const PARTY_TALK = {
@@ -2504,34 +2886,8 @@
     folklore: ['{n}: "Mortals and their chatter."', '{n}: "Mind the old marks on the stone."',
       '{n}: "Speak softly. Old things sleep here."', "{n} sniffs the air and says nothing."],
   };
-  // The room's heat colors the answer: calm (tier 0) gets the lines above; as heat climbs, whoever
-  // answers grows uneasy, then nervous, then alarmed. Talking is how KURA can read the room.
-  const PARTY_HEAT = {
-    ELF: [, ['ELF: "Something has noticed us. Not much yet."', 'ELF: "Lower your voice. The room is waking."'],
-      ['ELF: "I can feel it watching. It has been for a while."', 'ELF: "Enough noise. Something is coming closer."'],
-      ["ELF says nothing. Her hand stays on her blade.", 'ELF: "...Listen."']],
-    PIXIE: [, ['PIXIE: "Did you hear that? ...No? Okay. Okay."', 'PIXIE: "It\'s getting a little crowded in here."'],
-      ['PIXIE: "I don\'t like this room anymore. It doesn\'t like us either."', 'PIXIE: "Something keeps breathing. It isn\'t us."'],
-      ["PIXIE hides in KURA's hood and won't come out.", "PIXIE tries to answer. Her voice won't come."]],
-    "CU SITH": [, ["CU SITH's ears flick toward the walls.", "CU SITH answers, but keeps watching the corners."],
-      ["CU SITH growls low at nothing KURA can see.", "CU SITH won't sit. Its hackles are up."],
-      ["CU SITH stands between KURA and the dark, snarling.", "CU SITH's growl doesn't stop, even to breathe."]],
-  };
-  const FAMILY_HEAT = {
-    data: [, ['{n}: "BACKGROUND ACTIVITY DETECTED."', '{n}: "MINOR SIGNAL NEARBY. MONITORING."'],
-      ['{n}: "MULTIPLE SIGNALS. ORIGIN: EVERYWHERE."', '{n}: "WARNING: TRACE DETECTED."'],
-      ['{n}: "0101 0101 0101 0101"', "{n}'s cursor blinks faster and faster."]],
-    hardware: [, ['{n}: "fan\'s spinning up. probably nothing"', '{n}: "do you hear humming? not me. other humming"'],
-      ['{n}: "something keeps pinging me. I don\'t like it"', '{n}: "temperature rising. not mine. the room\'s"'],
-      ['{n}: "it\'s so loud in here. is it loud? it\'s loud"', "{n} sparks and refuses to answer."]],
-    hybrid: [, ['{n}: "The wires here are starting to hum."', '{n}: "Static in the air. Someone\'s awake."'],
-      ['{n}: "Both halves of me are cold."', '{n}: "The walls are listening harder now."'],
-      ["{n} answers in a voice that isn't its own.", "{n} goes rigid, half its shape crackling."]],
-    folklore: [, ['{n}: "The old things are stirring."', '{n}: "Mind your voice. We are being noticed."'],
-      ['{n}: "This hall is hungry. We should not feed it."', '{n}: "I smell something old coming closer."'],
-      ['{n}: "Hush. It knows our names now."', "{n} bares its teeth at the dark."]],
-  };
-  // PATIENCE. Each party member has a little (5); every time KURA talks to them it drops by one.
+  // PATIENCE. Each party member has a little (5). Since v1.06 talking never wears it down: only things from outside
+  // do (a tense party, KURA pestering a wall or fiddling with junk, a stray blow), and WORD helps it back up.
   // At 2 and below they get short with her, and at 0 they ignore her. A night's rest gives back 3.
   // (A hidden value with a tell: only the replies show it. Dissonance, above, folds straight into
   // this same number rather than a second one -- PARTY_TENSE/FAMILY_TENSE below is its own tell,
@@ -2587,45 +2943,6 @@
   const VOICE_FROM_DARK = ['A voice answers from the stone: "Not yet."', 'Something that is not the party says: "...yes..."',
     "The dark answers in KURA's own voice.", 'A voice, very close: "Keep going."', "Something laughs, then apologizes.",
     "A voice below counts to seven, then stops.", 'A whisper: "We heard you the first time."'];
-  function chat(st) {
-    if (!ensureFloor(st)) return show(st);
-    act(st, "talk:party");
-    tally(st, "partyTalks");
-    const friends = (st.party || []).slice(1).filter(p => p.hp > 0);
-    const odd = moon() === 4 ? 0.25 : 0.12;
-    if (!friends.length || Math.random() < odd) {
-      st.log = `> KURA speaks into the dark.`;
-      st.extra = "> " + pick(friends.length || Math.random() < 0.5 ? VOICE_FROM_DARK : ["Only the walls answer.", "Her voice comes back, thinner."]);
-      return show(st);
-    }
-    const p = pick(friends);
-    st.log = `> KURA talks to ${p.name}.`;
-    const tier = heatTier(RS(st.dungeon).heat), fam = p.family || "folklore";
-    // Out of patience and still being talked to: half the time they snap. CHAOS members lash out at
-    // KURA (it never kills her); LAW and NEUTRAL ones leave the party for good.
-    if (snap(st, p)) return show(st);
-    // In a calm room, a member with patience to spare sometimes asks KURA something instead (1 in 4).
-    if (tier < 2 && (p.patience ?? PATIENCE) >= 3 && Math.random() < 0.25) { ask(st, p); return show(st); }
-    // A member wearing thin (but not gone) sometimes asks whether things are all right: a chance to mend it.
-    if (tier < 2 && (p.patience ?? PATIENCE) <= 2 && p.patience > 0 && Math.random() < 0.4) { ask(st, p, true); return show(st); }
-    // One at ease sometimes opens up instead.
-    if (tier < 2 && (p.patience ?? PATIENCE) >= 4 && Math.random() < ({ HAUGHTY: 0.08, DREAMY: 0.25 }[personaOf(p)] || 0.15) && confide(st, p)) return show(st);
-    // Plain chatter is easy on them: only after about 7 talks each in a day (around 30 for the party)
-    // does talking start to wear their patience down.
-    p.chats = (p.chats || 0) + 1;
-    if (p.chats > ({ HAUGHTY: 5, DREAMY: 8 }[personaOf(p)] || 6)) p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
-    // A dangerous room (nervous or worse) outranks being annoyed; otherwise a tired member says so --
-    // unless they're actually at zero over unresolved tension with someone else standing, which gets
-    // its own tell instead of the ordinary "tired of talking" line.
-    const lines = tier >= 2 ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier]
-      : p.patience === 0 && tensionOf(st, p) > 0 ? (PARTY_TENSE[p.name] || FAMILY_TENSE[fam])
-      : p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[fam])[p.patience]
-      : tier ? (PARTY_HEAT[p.name] || FAMILY_HEAT[fam])[tier] : (PARTY_TALK[p.name] || FAMILY_TALK[fam]);
-    const pool = lines.map(l => "> " + l.replace(/\{n\}/g, p.name));
-    st.extra = pick(pool.filter(l => l !== st.extra));        // never the same line twice in a row
-    return show(st);
-  }
-
   // QUESTIONS. Now and then, talking to a party member, they ask KURA something instead, and [Y]ES / [N]O
   // appear in the bottom right. Answers shift their patience, can lean KURA's alignment, and get a reply.
   // Doing anything else lets the question lapse. Each: [question, [yes reply, patience, lean], [no reply, patience, lean]].
@@ -2954,44 +3271,6 @@
     "Every shadow here is a door, if she asks nicely.", "KURA can hear the moon. It's humming.",
     "Her hands leave trails of light.", "The stone remembers the sea. It tells her about it."];
 
-  // DEMON TALK. Before it wants anything, a demon that listens asks KURA one or two things, each family
-  // its own way. Each answer it likes lifts its mood (a happier demon is easier to please and likelier
-  // to join); each it dislikes sours it, and a demon in a foul mood loses its temper and strikes.
-  // Each entry: [question, which answer it likes (true = YES, or "LAW"/"CHAOS" = what its alignment likes), reply if liked, reply if not].
-  const DEMON_ASK = {
-    data: [
-      ["QUERY: ARE YOU HUMAN? Y / N", true, "CONFIRMED. LOGGING ANOMALY.", "LIE DETECTED."],
-      ["QUERY: DO YOU FOLLOW RULES? Y / N", "LAW", "COMPATIBLE.", "INCOMPATIBLE."],
-      ["QUERY: ARE YOU LOST? Y / N", true, "ROUTE UNKNOWN. RELATABLE.", "DISAGREE. YOU ARE LOST."],
-      ["01000110 01010010 01001001 01000101 01001110 01000100 00111111 Y / N", true, "01011001 01000101 01010011", "01001110 01001111"],
-    ],
-    hardware: [
-      ["do you remember being plugged in?", true, "me too. it hummed.", "...ok. I'll remember for both of us."],
-      ["are you here to fix me?", true, "finally. finally.", "oh. ok. sure."],
-      ["is it still raining up there?", true, "I liked the rain. on my casing.", "oh. that's worse somehow"],
-    ],
-    hybrid: [
-      ["Do you hear the wires sing too?", true, "Then you're half like me.", "Pity. They sing of you."],
-      ["Do you keep secrets?", "CHAOS", "Good. So do I.", "Clever. Or dull."],
-      ["Is the flesh worth keeping?", "LAW", "Sentimental. I like that.", "Then we agree."],
-    ],
-    folklore: [
-      ["Do you fear me?", true, "Good. Manners, at last.", "Bold. Or foolish."],
-      ["Have you come to stay?", true, "Then we may yet be friends.", "Then why speak to me at all?"],
-      ["Do you know my name?", "CHAOS", "Liar. But a pleasing one.", "Good. Keep it that way."],
-    ],
-  };
-  DEMON_ASK.beast = [
-    ["CU SITH drops a bone at KURA's feet. Throw it? Y / N", true, "CU SITH bounds after it, tail high.", "CU SITH lowers its head, ears flat."],
-    ["CU SITH circles KURA once and sits. Pet it? Y / N", true, "CU SITH leans into the hand.", "CU SITH watches the hand draw back."],
-    ["CU SITH bares its teeth, not quite a snarl. Stand your ground? Y / N", true, "CU SITH huffs. Respect, of a kind.", "CU SITH steps back, ears low."],
-  ];
-  function demonAsks(st, e, lines) {
-    const pool = DEMON_ASK[famOf(e)], free = pool.map((_, i) => i).filter(i => !e.asked.includes(i));
-    const k = pick(free);
-    e.asked.push(k); e.q = k; e.stage = "chat"; if (e.asked.length === 1) ev(st, "asked");
-    lines.push(beast(e) ? pool[k][0] : `${e.name}: "${pool[k][0]}"`);
-  }
   // PERSONALITY. Every demon has one, fixed by its name (each family leans toward a few). It decides how a
   // silent answer lands, how readily it asks for something, and whether it will ever join without being won over.
   const PERSONA_OF = { data: ["PRIM", "SLY"], hardware: ["GRUFF", "DREAMY"], hybrid: ["SLY", "HAUGHTY", "GRUFF"], folklore: ["HAUGHTY", "GRUFF", "SLY"] };
@@ -3001,109 +3280,7 @@
     const list = PERSONA_OF[e.family || "folklore"] || PERSONA_OF.folklore;
     return list[[...String(e.name)].reduce((n, c) => n + c.charCodeAt(0), 0) % list.length];
   }
-  const ASK_MOD = { HAUGHTY: 1.4, PRIM: 0.6, DREAMY: 0.5 };
-  // How a silent answer lands: the line, and the mood it moves (+1 pleased, -1 offended).
-  const SILENCE = {
-    GRUFF: [n => `${THE(n)} grunts. It seems to approve.`, () => 1],
-    HAUGHTY: [n => `${THE(n)} sniffs. Being ignored is not what it wanted.`, () => -1],
-    SLY: [n => `${THE(n)} smiles. It reads silence its own way.`, () => Math.random() < 0.5 ? 1 : 0],
-    PRIM: [n => `${THE(n)} waits, then quietly takes note.`, () => 0],
-    DREAMY: [n => `${THE(n)} drifts closer. It likes the quiet.`, () => 1],
-  };
-  function demonHears(st, e, yes, lines) {
-    const [, likes, good, bad] = DEMON_ASK[famOf(e)][e.q];
-    const quiet = yes === "silent";
-    if (quiet) { tally(st, "silent"); ev(st, "silent"); }
-    if (quiet) {                                      // a third answer: say nothing, and let its nature decide
-      const [say, feel] = SILENCE[personaOf(e)] || SILENCE.PRIM, first = !e.quiet;
-      let d = feel();
-      if (first) d = Math.max(d, 0);                  // the first silence is forgiven, and the talk goes on a little longer
-      lines.push("KURA says nothing.", say(e.name));
-      e.mood += d; e.quiet = (e.quiet || 0) + 1;
-      if (first && e.left <= 1) e.left += 1;
-    } else {
-      if (tripping(st) && Math.random() < 0.3) { yes = !yes; lines.push("KURA meant to say the other thing."); }
-      const wanted = likes === true ? true : likes === "LAW" ? e.align === "LAW" || e.align === "NEUTRAL" && Math.random() < 0.5
-        : e.align === "CHAOS" || e.align === "NEUTRAL" && Math.random() < 0.5;
-      const liked = likes === true ? yes : yes === wanted;
-      lines.push(`KURA: ${yes ? "\"Yes.\"" : "\"No.\""}`, beast(e) ? (liked ? good : bad) : `${e.name}: "${liked ? good : bad}"`);
-      e.mood += liked ? 1 : -1;
-      // Answers to a question about order or mischief pull KURA that way.
-      if (likes === "LAW" || likes === "CHAOS") lean(st, yes ? (likes === "LAW" ? "talkLAW" : "talkCHAOS") : (likes === "LAW" ? "talkCHAOS" : "talkLAW"));
-    }
-    afterAnswer(st, e, lines);
-  }
-  // After any answer (words, silence, or an item held up): too sour and it fights; otherwise the next question, or the end of the talk.
-  function afterAnswer(st, e, lines) {
-    tally(st, "demonAnswers");
-    if (e.mood <= -2) {                               // two sour answers: it loses its temper
-      lines.push(`${THE(e.name)} has heard enough.`);
-      e.stage = null; e.angered = true; demonTurn(st, lines);
-      return;
-    }
-    if (--e.left > 0 && DEMON_ASK[famOf(e)].some((_, i) => !e.asked.includes(i))) return demonAsks(st, e, lines);
-    sizeUp(st, e, lines);
-  }
-  // The questions are over. Only some demons then ask for something (programs hardly ever); the rest
-  // simply end the talk: a pleased LAW-leaning one may offer to join, the others go their way.
-  const ASK_ODDS = { data: 0.1, hardware: 0.3, hybrid: 0.4, folklore: 0.45 };
-  function sizeUp(st, e, lines) {
-    if (e.corrupt) {                                   // the damage lifts, or it doesn't
-      if (e.mood >= 1) {
-        e.corrupt = false; e.name = e.base; e.align = alignOf(e.base);
-        tally(st, "restored"); lean(st, "restore"); ev(st, "restored");
-        lines.push(`The noise drains out of ${e.name}. It is whole again.`);
-        if (Math.random() < 0.6) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
-        else { lines.push(said(e, "leave")); leaves(st, e); }
-      } else {
-        lines.push("The noise swallows it again.");
-        e.stage = null; e.angered = true; demonTurn(st, lines);
-      }
-      return;
-    }
-    if (isProgram(e.name)) {                           // a program never asks for anything: it just decides whether to link
-      if (Math.random() < (e.mood >= 1 ? 0.9 : e.mood === 0 ? 0.4 : 0)) { e.stage = "join"; lines.push(`${THE(e.name)} offers to link with the party.`); }
-      else { lines.push(said(e, "leave")); leaves(st, e); }
-      return;
-    }
-    if (Math.random() < Math.min(0.9, (ASK_ODDS[e.family || "folklore"] ?? 0.4) * (ASK_MOD[personaOf(e)] || 1))) {
-      e.stage = "gift";                                // sized up: now it wants something
-      lines.push(said(e, "ask"));
-      return;
-    }
-    const proud = personaOf(e) === "HAUGHTY" && e.mood < 2;          // a haughty one has to be won over twice
-    const joins = e.mood >= 1 && e.align !== "CHAOS" && !proud ? Math.min(0.5, 0.2 + 0.1 * (e.mood - 1)) : 0;
-    if (Math.random() < joins) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); return; }
-    lines.push(e.mood >= 1 ? `${THE(e.name)} is content. ${say2(e, "leave")}` : `${THE(e.name)} loses interest. ${say2(e, "leave")}`);
-    leaves(st, e);
-  }
-
-  // KURA's answer to a demon's price or offer.
-  function answer(st, yes) {
-    st = copy(st);
-    const e = st.encounter;
-    if (!e || !e.stage) return show(st);
-    const lines = [];
-    if (yes === "silent" && e.stage !== "chat") yes = false;      // silence only means something to a demon's question
-    if (e.stage === "gift") return give(st, yes ? 0 : null);
-    if (e.stage === "want") return wantAnswer(st, yes === true);
-    if (e.stage === "chat") { demonHears(st, e, yes, lines); st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st); }
-    if (e.stage === "join") {
-      if (!yes) { lines.push(`KURA declines. ${say2(e, "leave")}`); leaves(st, e); }
-      else if (st.party.length < 4) recruit(st, e, lines);
-      else { e.stage = "swap"; lines.push("The party is full. Send someone away?"); }
-    } else return show(st);                            // any other stage has its own buttons; YES/NO means nothing there
-    st.round = lines;
-    st.roundOver = !st.encounter || st.dead;
-    return show(st);
-  }
-  // GIFTS. A talking demon asks for anything. KURA picks: SILVER, any item, or nothing.
-  // Each family has a taste: data and hardware like tech, folklore likes old spirit things and hates tech,
-  // hybrids love things that are both. Rarer things are worth more, and a relic of the demon's own
-  // alignment is worth extra (an opposite one, less). Reactions:
-  //   hate (worth < 0): it throws the gift back and attacks.   meh (not enough yet): it keeps it and asks for more.
-  //   like (enough): it may offer to join.                      love (well over): it almost always does.
-  // CHAOS demons are tricksters: they rarely join. Mostly they demand more, or run off laughing with it.
+  // TASTE: what each family likes, by an item's nature (used by WORD's offers and by the codex).
   function natureOf(it) { return ITEM_NATURE[it] || "plain"; }
   const TASTE = {
     data:     { tech: 1.5, both: 1, spirit: -1, plain: 0.5, silver: 0.6 },
@@ -3112,145 +3289,15 @@
     folklore: { tech: -1, both: 1, spirit: 1.5, plain: 0.5, silver: 0.6 },
   };
   const WORTH = { COMMON: 1, UNCOMMON: 2, RARE: 4, MYTHIC: 6, MOON: 8 };
-  // What KURA can give: SILVER first (if she has enough), then each kind of item she carries, rarest first.
-  function gifts(st) {
-    const e = st.encounter, out = [];
-    if (!e) return out;
-    out.push({ silver: e.silver, ok: (st.silver ?? 0) >= e.silver, label: `${e.silver} SILVER` });
-    for (const it of inventory(st).slice(0, 7)) out.push({ item: it.name, ok: true, label: it.name });
-    return out;
-  }
-  function worth(e, g) {
-    const taste = TASTE[e.family || "folklore"];
-    if (g.silver) return e.want * taste.silver;
-    const a = relicAlign(g.item);
-    const bonus = !a || a === "NEUTRAL" || e.align === "NEUTRAL" ? 0 : a === e.align ? 2 : -2;
-    const t = taste[natureOf(g.item)];
-    return t < 0 ? -1 : WORTH[TIER[g.item] || "COMMON"] * t + bonus;
-  }
-  // KURA gives gift i (from gifts()), or nothing (i = null).
-  // (st is already a copy: giveTo and answer make it.)
-  function give(st, i) {
-    const e = st.encounter;
-    if (!e || e.stage !== "gift") return show(st);
-    const lines = [], who = `${e.name}: `;
-    const g = i === null ? null : gifts(st)[i];
-    if (g && !g.ok) { lines.push(`KURA has only ${st.silver ?? 0} SILVER.`); st.round = lines; return show(st); }
-    if (!g && e.fromChat) { delete e.fromChat; e.stage = "chat"; st.round = ["KURA lowers her hand."]; st.roundOver = false; return show(st); }
-    delete e.fromChat;
-    if (!g) {
-      lines.push(`KURA gives nothing.`, said(e, "no", who));
-      if (e.family === "data") { lines.push(`${THE(e.name)} drifts away.`); leaves(st, e); }
-      else { e.stage = null; e.angered = true; demonTurn(st, lines); }
-      st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st);
-    }
-    const v = worth(e, g);
-    if (v < 0) {
-      // Hated: it throws the gift back (KURA keeps it) and attacks.
-      lines.push(`KURA offers ${g.label}.`, said(e, "hate", who), `${THE(e.name)} throws it back.`);
-      tally(st, "refused"); ev(st, "refused");
-      e.stage = null; e.angered = true; demonTurn(st, lines);
-      st.round = lines; st.roundOver = !st.encounter || st.dead; return show(st);
-    }
-    tally(st, "gifts");
-    if (g.silver) { st.silver -= g.silver; lines.push(`KURA gives ${g.label}.`); lean(st, "pay", lines); }
-    else {
-      st.items.splice(st.items.indexOf(g.item), 1); lines.push(`KURA gives ${g.item}.`);
-      const ga = relicAlign(g.item); lean(st, ga === "LAW" ? "offerLAW" : ga === "NEUTRAL" ? null : "offer", lines);
-    }
-    e.got += v * (1 + 0.2 * (e.mood || 0));           // a demon in a good mood is easier to please
-    const chaos = e.align === "CHAOS";
-    if (e.got < e.want) {
-      // Not enough yet. It keeps what it got. After three asks it loses patience and leaves with it all.
-      if (e.asks >= 3) { lines.push(said(e, "meh", who), `${THE(e.name)} takes it all and goes.`); leaves(st, e); }
-      else { e.asks++; lines.push(said(e, "meh", who)); }
-    } else {
-      const love = v >= e.want * 1.5 || e.got >= e.want * 2;
-      lines.push(said(e, love ? "love" : "like", who));
-      const joins = Math.max(0, Math.min(0.95, (chaos ? (love ? 0.3 : 0.1) : (love ? 0.9 : 0.65)) + 0.05 * (e.mood || 0)));
-      if (Math.random() < joins) { e.stage = "join"; lines.push(`${THE(e.name)} offers to join the party.`); }
-      else if (chaos && e.asks < 3 && Math.random() < 0.5) { e.asks++; lines.push(who + `"More. MORE."`); }
-      else if (chaos) { lines.push(`${THE(e.name)} runs off laughing with it.`); leaves(st, e); ev(st, "trickster"); }
-      else { lines.push(`${THE(e.name)} is satisfied. ${say2(e, "leave")}`); leaves(st, e); }
-    }
-    st.round = lines;
-    st.roundOver = !st.encounter || st.dead;
-    return show(st);
-  }
-  function giveTo(st, i) { return give(copy(st), i); }
-
-  // GIVE in a fight: open the gift list right away (a free action; it costs nothing until KURA picks a gift).
-  // A demon that is already fighting mostly doesn't care (more than half the time it still attacks):
-  //   it stands down  (rare, a little better the more it likes the gift; never 9% or more): it leaves, or sometimes offers to join;
-  //   it hesitates    (a quarter of the time): it takes the gift and holds its blow this round;
-  //   it ignores it   (the rest): it breaks the gift or throws it away, and strikes anyway;
-  //   it is insulted  (a gift it hates, always): the same, and the fight turns ugly (it stops listening).
-  // A gift that doesn't land is lost either way.
-  // Either way KURA's own round is spent, so the party doesn't strike.
-  function offer(st) {
-    st = copy(st);
-    if (st.dead) { st.extra = OVER; return show(st); }
-    const e = st.encounter;
-    if (!e) { st.log = "> Nothing here to give to."; return show(st); }
-    if (e.stage) return show(st);                        // already waiting on an answer
-    if (e.want === undefined) {                          // a demon that was never talked to has no price yet
-      e.want = 2 + floorNum(st);
-      e.silver = Math.round((20 + 10 * floorNum(st) + R(0, 20)) * { same: 0.7, neutral: 1, opposite: 1.5 }[stance(st, e)]);
-      e.got = 0; e.asks = 1; e.mood = e.mood || 0;
-    }
-    e.stage = "offer";
-    st.round = ["KURA reaches into the bag."];
-    st.roundOver = false;
-    return show(st);
-  }
-  // What a demon does with a gift it doesn't want: breaks it or throws it away. The gift is gone either way.
-  function ruinLine(e, g) {
-    if (g.silver) return `${THE(e.name)} scatters the coins into the dark.`;
-    return pick([`${THE(e.name)} snaps it in two.`, `${THE(e.name)} crushes it underfoot.`, `${THE(e.name)} flings it into the dark.`, `${THE(e.name)} tosses it away.`]);
-  }
-  function ruin(st, e, g, lines) {
-    if (g.silver) st.silver -= g.silver; else st.items.splice(st.items.indexOf(g.item), 1);
-    lines.push(ruinLine(e, g));
-  }
-  // KURA picks gift i from gifts(), or backs out (i = null: nothing is spent).
-  function offerGive(st, i) {
+  // KURA's answer to a demon offering to join: YES or NO. (Every other choice has its own buttons now.)
+  function answer(st, yes) {
     st = copy(st);
     const e = st.encounter;
-    if (!e || e.stage !== "offer") return show(st);
-    if (i === null) { e.stage = null; st.round = ["KURA lowers her hand."]; st.roundOver = false; return show(st); }
-    const g = gifts(st)[i];
-    if (!g) return show(st);
-    if (!g.ok) { st.round = [`KURA has only ${st.silver ?? 0} SILVER.`]; return show(st); }
-    act(st, "give");
-    e.round++; e.stage = null;
-    const lines = [], who = `${e.name}: `, v = worth(e, g);
-    st.roundOver = false;
-    st.log = `> KURA offers ${the(e.name)} a gift.`;
-    if (v < 0) {
-      // Hated: it breaks it or throws it away, and the fight gets uglier.
-      lines.push(`KURA offers ${g.label}.`, said(e, "insult", who));
-      ruin(st, e, g, lines);
-      e.angered = true; demonTurn(st, lines);
-    } else {
-      tally(st, "gifts");
-      if (g.silver) { st.silver -= g.silver; lines.push(`KURA gives ${g.label}.`); lean(st, "pay", lines); }
-      else {
-        st.items.splice(st.items.indexOf(g.item), 1); lines.push(`KURA gives ${g.item}.`);
-        const ga = relicAlign(g.item); lean(st, ga === "LAW" ? "offerLAW" : ga === "NEUTRAL" ? null : "offer", lines);
-      }
-      const roll = Math.random(), stand = Math.min(0.09, 0.02 + 0.015 * v);
-      if (roll < stand) {
-        lines.push(said(e, "accept", who));
-        if (e.align !== "CHAOS" && st.party.length < 4 && Math.random() < 0.2) { e.stage = "join"; lines.push(`${THE(e.name)} lowers its guard and offers to join the party.`); }
-        else { lines.push(`${THE(e.name)} is satisfied. ${say2(e, "leave")}`); leaves(st, e); }
-      } else if (roll < stand + 0.25) {
-        lines.push(said(e, "hold", who), `${THE(e.name)} turns the gift over. It holds its blow.`);
-      } else {
-        // It takes the gift only to wreck it: the gift is already spent above, so only the line changes.
-        lines.push(said(e, "ignore", who), ruinLine(e, g));
-        demonTurn(st, lines);
-      }
-    }
+    if (!e || e.stage !== "join") return show(st);
+    const lines = [];
+    if (yes !== true) { lines.push(`KURA declines. ${say2(e, "leave")}`); leaves(st, e); }
+    else if (st.party.length < 4) recruit(st, e, lines);
+    else { e.stage = "swap"; lines.push("The party is full. Send someone away?"); }
     st.round = lines;
     st.roundOver = !st.encounter || st.dead;
     return show(st);
@@ -3276,10 +3323,10 @@
     return out.length ? out.join("; ").replace(/^./, c => c.toUpperCase()) + "." : "No demon cares much for it.";
   }
   const WANTS = {
-    data: "Wants tech. Hates old spirit things. Shrugs at SILVER.",
-    hardware: "Loves SILVER. Likes tech.",
-    hybrid: "Loves things half machine, half spirit (most RARE finds). Takes coin.",
-    folklore: "Wants old spirit things. Hates tech. Shrugs at SILVER.",
+    data: "Wants tech. Hates old spirit things.",
+    hardware: "Likes tech. Takes most things gladly.",
+    hybrid: "Loves things half machine, half spirit (most RARE finds).",
+    folklore: "Wants old spirit things. Hates tech.",
   };
   const PROGRAM_JOB = {
     WATCHDOG: "Guards the party: blows land softer.", PATCH: "Mends the party after a fight. Steadies corrupted data.",
@@ -3337,7 +3384,7 @@
   function recruit(st, e, lines) {
     const lv = Math.max(1, 2 * floorNum(st) + R(-1, 2));
     const hpmax = 12 + lv * 5, mpmax = lv * 2 + R(0, 4);
-    st.party.push({ name: e.base || e.name, lv, hp: hpmax, hpmax, mp: mpmax, mpmax, family: e.family, align: e.align, demon: true });
+    st.party.push({ name: e.base || e.name, lv, hp: hpmax, hpmax, mp: mpmax, mpmax, family: e.family, align: e.align, demon: true, items: pockets(st, e).slice() });   // it keeps what it carries
     lines.push(said(e, "join"), `${e.name} joins the party.`);
     note(st, "demons", e.name, "joined"); tally(st, "recruited"); ev(st, "joined");
     (st.pacts = st.pacts || []).push({ name: e.name, floor: st.floor, day: st.day, on: true });      // the pact is kept on record
@@ -3422,7 +3469,7 @@
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0,
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, itemMove, moveItems, movePick, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);
