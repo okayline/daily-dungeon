@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.05.3 - True Colors - Oct 14 2026, 20:33 HST
+
+![v1.05.3](screenshots/v1.05.3.png)
+
+- **An AURA read's color follows KURA's alignment.** It slides from violet on the LAW side to hot pink on the CHAOS side.
+- **AURA on the "APPEARS" screen unfolds a line at a time,** like the demon's entrance, instead of all at once.
+
 ## v1.05.2 - Reading the Room - Oct 14 2026, 20:26 HST
 
 ![v1.05.2](screenshots/v1.05.2.png)
