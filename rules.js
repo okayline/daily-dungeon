@@ -1027,6 +1027,7 @@
   function act(st, key) {                  // every action counts a STEP and marks the game unsaved
     st.steps = (st.steps || 0) + 1;
     st.unsaved = true;
+    delete st.roundVoice;                    // (v1.08) whose voice the round's lines are in, when it isn't the speakers' own
     if (st.talkLine) delete st.talkLine;     // (v1.06.1: a party member's line stays up until something else takes line 1, so it never goes blank)
     if (st.altar) st.altar = null;           // walking off closes the terminal
     bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
@@ -2075,7 +2076,7 @@
         total += hit + (p === st.party[0] && st.taint ? 2 : 0) + (p.buzz ? 2 : 0);   // a buzz from the ichor: KURA hits a little harder
       }
       e.hp = Math.max(0, e.hp - total);
-      lines.push(`The party strikes. -${total}`);
+      lines.push(`The party strikes. -${total} HP`);
       st.log = `> KURA's party fights ${the(e.name)}.`;
       // A fight fought to the end wears on a tense party: once, when the demon falls, not every round.
       if (e.hp <= 0) { win(st, lines); lean(st, "kill", lines); wearTension(st, DISSONANCE_FIGHT); } else lean(st, "fight", lines);
@@ -2293,6 +2294,7 @@
     tally(st, "auraReads");
     st.log = `> KURA ${pick(AURA_ON)} ${the(n)}.`;
     st.round = lines; st.roundOver = false;
+    st.roundVoice = "KURA";                  // (v1.08) a read is KURA's own voice, even where a line starts with the demon's name
     return show(st);
   }
   // [A]URA OUT OF A FIGHT (v1.06). AURA is observation only: it reads the world, never the party (the party is

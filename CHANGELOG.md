@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.08 - Say It Slowly - Oct 15 2026, 00:45 HST
+
+![v1.08](screenshots/v1.08.png)
+
+- **Every voice in a fight sounds like its own.** A line starts with who it is, then a beat, then the rest. A demon's words come in as scrambled glyphs that settle into place. KURA's lines and her AURA reads type out, and a party member types a little slower. A demon's blow settles in slowly and brightens when it lands. The party's strike shows, a beat, then the damage types in.
+- **Every period is a full stop.** A line holds for a moment at each one, so nothing goes by before you've read it. Click or press Enter to finish a line.
+- **The same on the screen where a demon appears.**
+- **The party's damage reads in HP**, like everyone else's.
+- **The sky fills the whole view,** with no box around it. The way KURA faces shows between the turn buttons.
+- **The named stars are smaller,** and the key under the sky lists every bright star that's up, in neat columns.
+
 ## v1.07.1 - Clear Skies - Oct 15 2026, 00:20 HST
 
 ![v1.07.1](screenshots/v1.07.1.png)

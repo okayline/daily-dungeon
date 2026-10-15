@@ -123,7 +123,8 @@
   .ver { white-space: pre-line; text-align: right; font-size: 12px; line-height: 14px; color: var(--trail); padding: 2px 1ch 0 0; letter-spacing: 0.05em; }
   .cheat { text-align: left; padding: 2px 0 0 1ch; margin-top: -16px; }   /* the X cheat menu: three lines, left-justified; the build number stays at the right */
   .cheat:empty { display: none; }
-  .sky-mid { color: #8a9196; } .sky-far { color: #4d5357; } .sky-moon { color: #ece6cc; text-shadow: 0 0 6px rgba(236, 230, 204, 0.5); }   /* (v1.07) the night sky */
+  .flash { animation: voiceflash .35s ease-out; } @keyframes voiceflash { 0% { color: #ffffff; } }   /* (v1.08) a blow lands: a quick brighten, no glow */
+  .sky-rule { color: #2c3236; } .skystar .g { display: inline-block; transform: scale(0.72); } .sky-mid { color: #8a9196; } .sky-far { color: #4d5357; } .sky-moon { color: #ece6cc; text-shadow: 0 0 6px rgba(236, 230, 204, 0.5); }   /* (v1.07) the night sky */
   .skystamp-at { display: inline-block; position: relative; width: 0; height: 1em; vertical-align: top; }
   .skystamp { position: absolute; right: 0; bottom: -0.55em; font-size: 0.6em; white-space: nowrap; color: #8b9499; text-shadow: none; }
   .pull { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
@@ -169,7 +170,7 @@
     const sky = save && save.look && SMT.lastSky, y = i - 6;
     if (!sky || y < 0 || y >= sky.rows.length) return null;
     let out = esc(line[0]);
-    const guideAt = {}; if (y === 13) for (const g of sky.guide) guideAt[g.x] = g;
+    const guideAt = {}; for (const g of sky.guide) if (g.y === y) guideAt[g.x] = g;
     for (let x = 0; x < 47; x++) {
       const ch = line[1 + x] || " ", g = guideAt[x];
       if (g) { const t = line.slice(1 + x, 1 + x + g.len); out += `<span style="color:${g.color};text-shadow:none"><span class="cell"><span class="g">${esc(t[0])}</span></span>${esc(t.slice(1))}</span>`; x += g.len - 1; continue; }
@@ -230,7 +231,7 @@
       // The breath dots over the bar (row 20): nudged the same .65ch as the bar below them, so they sit centered over it.
       // Drawn half again as big (scaled in place, so the row keeps its 80 columns); an odd count is nudged half a column more (see screen.js).
       if (i === 20) { const odd = ((line.slice(48).match(/\./g) || []).length) % 2 === 1;
-        return esc(line.slice(0, 48)) + esc(line.slice(48)).replace(/\./g, `<span class="cell bdot" style="position:relative;left:${odd ? "1.15ch" : ".65ch"}">.</span>`); }
+        return (skyLeft(line, i) ? skyLeft(line, i).slice(0, -esc(line[48] || "").length || undefined) : esc(line.slice(0, 48))) + esc(line.slice(48)).replace(/\./g, `<span class="cell bdot" style="position:relative;left:${odd ? "1.15ch" : ".65ch"}">.</span>`); }
       // The block moon (rows 1-4): each box or shade glyph boxed to one cell; the lit part glows and breathes.
       const moonBox = t => t.replace(/[╭╮╰╯─│░▒▓█]/g, ch => `<span class="cell ${/[░▒▓█]/.test(ch) ? "lit" : "mframe"}"><span class="g">${ch}</span></span>`);
       if (i === 1) return moonBox(esc(line)).replace(/(\d\d):(\d\d)/, '$1<span class="colon">:</span>$2')
@@ -1826,8 +1827,63 @@
     if (dropped) kept.forEach(n => n.animate([{ transform: `translateY(${dropped * rh}px)` }, { transform: "none" }], { duration: ms, easing: "ease-out" }));
     fresh.forEach(n => n.animate([{ transform: `translateY(${rh}px)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: ms, easing: "ease-out" }));
   }
-  let fightRows = 0;
+  let fightRows = 0, lastFresh = [], replayToken = 0;
+  // (v1.08) VOICES: how a line of the fight box (and the APPEARS screen) comes in, by who is speaking. The name is up
+  // at once, then a beat, then the rest: a demon's words decode out of scrambled glyphs (its blows more slowly, and
+  // the damage brightens when it locks in); KURA's lines and reads type out; a party member types a touch slower;
+  // the party's strike shows whole, a beat, then its damage types in. Every period is a full one-second stop. A
+  // click or Enter finishes the line being spoken. No glow on any of it.
+  const VOICE_GLYPHS = "#%@!&$*?/\\<>=+~", NAME_BEAT = 450, PERIOD_STOP = 1000;
+  let speaking = null;                                   // finishes the line being spoken, while one is
+  function voiceOf(text, e) {
+    const t = String(text), n = e ? e.name : "", members = ((save && save.party) || []).slice(1).map(p => p.name);
+    if (save && save.roundVoice === "KURA" && save.round && save.round.includes(t)) {     // an AURA read: all KURA, names up first
+      const nm = [n && "The " + n, n && n + "'s", n, "KURA"].find(x => x && t.startsWith(x + " "));
+      return { kind: "ku", head: nm ? nm + " " : "" };
+    }
+    const demonHead = !!n && (t.startsWith(n + ":") || t.startsWith(n + " ") || t.startsWith(n + "'s") || t.startsWith("The " + n + " "));
+    let head = "";
+    const colon = /^([A-Z0-9][A-Z0-9 .#@!$'-]*?): /.exec(t);
+    if (colon) head = colon[0];
+    else for (const nm of [n && "The " + n, n && n + "'s", n, "KURA", ...members]) if (nm && t.startsWith(nm + " ")) { head = nm + " "; break; }
+    if (/^The party strikes/.test(t) || (!demonHead && / -\d+( HP)?$/.test(t))) return { kind: "hit", head: "" };
+    if (demonHead) return { kind: / -\d+/.test(t) ? "dhit" : "dm", head };
+    if (colon && members.includes(colon[1])) return { kind: "pt", head };
+    return { kind: "ku", head };
+  }
+  const lineBeat = t => (/\.["']?$/.test(String(t)) ? Math.max(PERIOD_STOP, 600 + String(t).length * 35) : 600 + String(t).length * 35);
+  // Speak one line into its row elements (a wrapped line may take two). Returns the function that finishes it.
+  function speak(nodes, text, voice, done) {
+    const full = nodes.map(n => n.textContent).join("\u0001"), head = voice.head && full.startsWith(voice.head) ? voice.head.length : 0;
+    let stopped = false, t = null;
+    const show = str => { const parts = str.split("\u0001"); nodes.forEach((n, i) => { n.textContent = parts[i] || ""; }); };
+    const flash = () => nodes.forEach(n => { n.classList.remove("flash"); void n.offsetWidth; n.classList.add("flash"); });
+    const end = () => { if (stopped) return; stopped = true; if (speaking === finish) speaking = null; done(); };
+    const finish = () => { if (stopped) return; clearTimeout(t); show(full); if (voice.kind === "hit" || voice.kind === "dhit") flash(); end(); };
+    speaking = finish;
+    const isStop = k => full[k] === "." && full[k + 1] !== "." && k < full.length - 1;
+    const typeFrom = (from, ms, then) => { let i = from; const step = () => { if (stopped) return; i++; show(full.slice(0, i));
+      if (i < full.length) t = setTimeout(step, isStop(i - 1) ? PERIOD_STOP : ms); else then(); }; step(); };
+    const decode = (from, rate, then) => { let lock = from, held = -1; const step = () => { if (stopped) return;
+      const prev = Math.floor(lock); lock += rate; let k0 = -1;
+      for (let k = prev; k < Math.min(Math.floor(lock), full.length); k++) if (isStop(k) && k > held) { k0 = k; break; }
+      if (k0 >= 0) { lock = k0 + 1; held = k0; }
+      let out = ""; for (let k = 0; k < full.length; k++) { const ch = full[k]; out += k < lock || ch === " " || ch === "\u0001" ? ch : VOICE_GLYPHS[Math.floor(Math.random() * VOICE_GLYPHS.length)]; }
+      show(out); if (lock < full.length) t = setTimeout(step, k0 >= 0 ? PERIOD_STOP : 40); else then(); }; step(); };
+    show(full.slice(0, head));
+    const go = () => { if (stopped) return;
+      if (voice.kind === "hit") { const m = /^([\s\S]*?)( -\d+(?: HP)?)$/.exec(full);
+        if (!m) { show(full); flash(); t = setTimeout(end, NAME_BEAT); return; }
+        show(m[1]); t = setTimeout(() => { let i = m[1].length; const step = () => { if (stopped) return; i++; show(full.slice(0, i)); if (i < full.length) t = setTimeout(step, 170); else { flash(); t = setTimeout(end, NAME_BEAT); } }; step(); }, /\.$/.test(m[1]) ? PERIOD_STOP : NAME_BEAT); return; }
+      if (voice.kind === "dhit") return decode(head, 0.35, () => { flash(); t = setTimeout(end, NAME_BEAT); });
+      if (voice.kind === "dm") return decode(head, 0.6, end);
+      typeFrom(head, voice.kind === "pt" ? 42 : 30, end);
+    };
+    t = setTimeout(go, head ? NAME_BEAT : 0);
+    return finish;
+  }
   const INTRO_BEAT = 1100;      // (v1.06.1: slower, so a line can be read before the next rolls in)
+  let introNext = null;     // (v1.08) the APPEARS screen's next step, so a click can bring it in sooner
   let introAt = 0, introTimer = null, introSeen = null, introShown = 0, introSaid = [];      // the fight's opening unfolds a beat at a time too, a little quicker than its ending
   // A button on the new-demon screen: it counts as [ OK ], then does what it says. Not before the screen has unfolded.
   function introGo(name) {
@@ -1837,12 +1893,15 @@
     act(name);
   }
   function introOK() {
+    if (speaking) { speaking(); return; }                // (v1.08) a click or Enter finishes the line being spoken,
+    if (introTimer && introNext) { const f = introNext; clearTimeout(introTimer); introTimer = null; f(); return; }   // or brings the next one in
     if (introTimer || Date.now() - introAt < 400 || !save || !save.encounter) return;      // a quick tap or a held key can't dismiss it
     save.encounter.seen = true; persist();
     encounterBox(false);
   }
   function encounterBox(animate) {
     if (replayTimer) { clearInterval(replayTimer); replayTimer = null; replayAdvance = null; replayWait = false; }
+    replayToken++; if (speaking) { const f = speaking; speaking = null; f(); }      // (v1.08) a redraw ends any line being spoken
     const e = save && save.encounter, lines = (save && save.round) || [];
     if (!e && !(save && save.roundOver)) return false;
     const box = document.getElementById("found"), pre = box.querySelector("pre");
@@ -1943,7 +2002,22 @@
       let upTo = shown;
       paint(upTo);
       if (groups.length > shown) {
-        const step = () => { upTo++; paint(upTo, true); if (upTo < groups.length) { introShown++; introTimer = setTimeout(step, INTRO_BEAT); } else { introTimer = null; introAt = Date.now() - 300; } };
+        // (v1.08) Each new line is spoken in its voice (see speak), then a reading beat, then the next.
+        const token = replayToken;
+        const step = () => {
+          if (token !== replayToken) return;
+          upTo++; paint(upTo, true);
+          const gi = upTo - 1, isText = gi >= head && gi < head + said.length;
+          const next = () => { if (upTo < groups.length) { introShown++; introNext = step; introTimer = setTimeout(step, INTRO_BEAT); } else { introNext = null; introTimer = null; introAt = Date.now() - 300; } };
+          if (!isText) return next();
+          const text = said[gi - head];
+          introTimer = -1; introNext = null;
+          speak(groups[gi].filter(n => n.textContent.trim()), text, voiceOf(text, e), () => {
+            if (token !== replayToken) return;
+            if (upTo < groups.length) { introShown++; introNext = step; introTimer = setTimeout(step, lineBeat(text)); } else { introNext = null; introTimer = null; introAt = Date.now() - 300; }
+          });
+        };
+        introNext = step;
         introTimer = setTimeout(step, INTRO_BEAT);
       }
       return true;
@@ -2010,12 +2084,12 @@
       const bodyNodes = [];
       body.forEach(([w, c], bi) => {
         const d = add(w, c); bodyNodes.push(d);
-        if ((replayWait || final) && bi === cursorAt) { const s = document.createElement("span"); s.className = "wait"; s.textContent = " _"; d.append(s); }   // waiting: for a click between lines, and for your choice after the last one
       });
       // (v1.06.1) While the round plays back, each new line slides up in from below and the others visibly roll up.
       if (replayWait && !final) {
         const newRows = shown ? wrapText(gl[gl.length - 1], COLS).length : 0, keptN = Math.max(0, body.length - newRows);
         rollUp(bodyNodes.slice(0, keptN), bodyNodes.slice(keptN), Math.max(0, fightRows - keptN));
+        lastFresh = bodyNodes.slice(keptN);
       }
       fightRows = final ? 0 : body.length;
       const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1;
@@ -2038,15 +2112,23 @@
       pre.appendChild(row);
     };
 
-    if (animate && lines.length > 1 && !e.stage) {     // play the round back: the > moves to whoever acts
-      // The round plays one line at a time. After each, a blinking _ waits for a click (or Enter / Space) before the next line rolls in.
-      let n = 1;
-      const show = () => { replayWait = true; frame(n, isDemon(lines[n - 1]) ? "demon" : null, false); replayWait = false; };
-      replayAdvance = () => {
+    if (animate && lines.length >= 1 && !e.stage) {    // play the round back: the > moves to whoever acts
+      // (v1.08) The round plays one line at a time, each in its speaker's voice (see speak), then a reading beat, then
+      // the next. A click (or Enter / Space) finishes the line being spoken, or brings the next one in sooner.
+      let n = 1, wait = null;
+      const token = replayToken;
+      const advance = () => {
+        clearTimeout(wait); if (token !== replayToken) return;
         n++;
-        if (n >= lines.length) { replayTimer = null; replayAdvance = null; frame(lines.length, null, true); return; }
+        if (n > lines.length) { replayTimer = null; replayAdvance = null; frame(lines.length, null, true); return; }
         show();
       };
+      const show = () => {
+        replayWait = true; frame(n, isDemon(lines[n - 1]) ? "demon" : null, false); replayWait = false;
+        const text = lines[n - 1];
+        speak(lastFresh, text, voiceOf(text, e), () => { if (token === replayToken) wait = setTimeout(advance, lineBeat(text)); });
+      };
+      replayAdvance = () => { if (speaking) { speaking(); return; } advance(); };
       replayTimer = -1;                       // a stand-in: "a replay is waiting" (clearInterval on it is harmless)
       show();
       return true;
@@ -2444,7 +2526,7 @@
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
     if (e.target.closest("[data-intro]")) return introOK();
     const mode = document.getElementById("found").dataset.mode;
-    if (mode === "intro") { const ia = e.target.closest("[data-fact]"); if (ia) introGo(ia.dataset.fact); return; }
+    if (mode === "intro") { const ia = e.target.closest("[data-fact]"); if (ia) introGo(ia.dataset.fact); else if (speaking || introNext) introOK(); return; }
     const pa = e.target.closest("[data-pact]");
     if (pa && passAct) return passAct(pa.dataset.pact);
     if (mode === "pass") return;                 // clicking a field to paste must not close the box

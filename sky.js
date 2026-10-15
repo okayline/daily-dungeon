@@ -65,16 +65,17 @@
     const p = place(tz, date), m = moonRaDec(date), h = altAz(m.ra, m.dec, date, p.lat, p.lon);
     return { alt: h.alt, az: h.az, up: h.alt > 0, rising: h.az < 180 };
   }
-  // THE BOX: 47 by 15 (rows 0-14), above the turn controls. Rows 1-11 are sky, row 12 a rule, row 13 the guide.
+  // THE SKY (v1.08): 47 by 15, edge to edge with no box, above the turn controls. Rows 0-11 are sky, row 12 a faint dotted
+  // rule, rows 13-14 the key. The way KURA faces is shown in the turn controls, not on the sky.
   // Returns the rows and, for the page, the colored cells, the guide's colored names, and the time stamp.
   function render(date, tz, facing, moonIdx) {
     const VW = 47, ROWS = 15, c = Array.from({ length: ROWS }, () => Array(VW).fill(" ")), rank = Array.from({ length: ROWS }, () => Array(VW).fill(99));
     const color = {}, p = place(tz, date);
     const put = (x, y, ch, m, col) => { if (m < rank[y][x]) { c[y][x] = ch; rank[y][x] = m; if (col) color[y + "," + x] = col; else delete color[y + "," + x]; } };
     // (The horizon circle is drawn a little bigger than the box, so the corners have sky too; the low edges at the sides are cropped.)
-    const cx = 23, cy = 6, rx = 22 * 1.35, ry = 5.6 * 1.35, rot = { N: 0, E: 90, S: 180, W: 270 }[facing] || 0;
+    const cx = 23, cy = 6, rx = 23 * 1.3, ry = 6.5 * 1.3, rot = { N: 0, E: 90, S: 180, W: 270 }[facing] || 0;
     const at = (alt, az) => { if (alt < 5) return null; const r = (90 - alt) / 85, a = rad(az - rot);
-      const x = Math.round(cx - r * rx * Math.sin(a)), y = Math.round(cy - r * ry * Math.cos(a)); return x < 1 || x > 45 || y < 1 || y > 11 ? null : [x, y]; };
+      const x = Math.round(cx - r * rx * Math.sin(a)), y = Math.round(cy - r * ry * Math.cos(a)); return x < 0 || x > 46 || y < 0 || y > 11 ? null : [x, y]; };
     const s = sunRaDec(date), day = altAz(s.ra, s.dec, date, p.lat, p.lon).alt > -6;
     const named = [];
     if (!day) {
@@ -87,18 +88,14 @@
     if (mq && moonIdx !== 0) {
       const DISC = [[-2, 2], [-3, 3], [-2, 2]], k = (1 - Math.cos(moonIdx / 8 * 2 * Math.PI)) / 2, waxing = moonIdx <= 4;
       DISC.forEach(([a, b], j) => { for (let x = a; x <= b; x++) { const t = x / b, lit = waxing ? t >= 1 - 2 * k : t <= -(1 - 2 * k), y = mq[1] - 1 + j, xx = mq[0] + x;
-        if (y > 0 && y < 12 && xx > 0 && xx < 46) { c[y][xx] = lit ? "#" : (x === a ? "(" : x === b ? ")" : " "); rank[y][xx] = -99; if (lit) color[y + "," + xx] = "sky-moon"; else delete color[y + "," + xx]; } } });
+        if (y >= 0 && y < 13 && xx >= 0 && xx < 47) { c[y][xx] = lit ? "#" : (x === a ? "(" : x === b ? ")" : " "); rank[y][xx] = -99; if (lit) color[y + "," + xx] = "sky-moon"; else delete color[y + "," + xx]; } } });
     }
-    for (let x = 0; x < VW; x++) { c[0][x] = "-"; c[12][x] = "-"; c[14][x] = "-"; }
-    for (let y = 0; y < ROWS; y++) { c[y][0] = "|"; c[y][VW - 1] = "|"; }
-    for (const [x, y] of [[0, 0], [VW - 1, 0], [0, 12], [VW - 1, 12], [0, 14], [VW - 1, 14]]) c[y][x] = "+";
-    const dirs = { N: "NSEW", E: "EWSN", S: "SNWE", W: "WENS" }[facing] || "NSEW";
-    c[0][23] = dirs[0]; c[12][23] = dirs[1]; c[6][0] = dirs[2]; c[6][VW - 1] = dirs[3];
-    // The guide: the three brightest named stars that are up (or daylight, or none).
-    const guide = []; let gx = 2;
-    const tops = named.sort((a, b) => a[0] - b[0]).slice(0, 3);
-    if (!tops.length) { const t = day ? "Daylight. No stars." : "No bright stars up."; [...t].forEach((ch, i) => { c[13][gx + i] = ch; }); }
-    for (const [, name, g, col] of tops) { const t = g + " " + name; [...t].forEach((ch, i) => { c[13][gx + i] = ch; }); guide.push({ x: gx, len: t.length, color: col }); gx += t.length + 2; }
+    // The key (v1.08): a faint rule, then the named stars that are up in tidy columns, three to a row.
+    for (let x = 1; x < VW - 1; x += 2) { c[12][x] = "\u00b7"; color["12," + x] = "sky-rule"; }
+    const guide = [], tops = named.sort((a, b) => a[0] - b[0]).slice(0, 6), COLW = 15;
+    if (!tops.length) { const t = day ? "Daylight. No stars." : "No bright stars up."; [...t].forEach((ch, i) => { c[13][2 + i] = ch; }); }
+    tops.forEach(([, name, g, col], i) => { const gx = 2 + (i % 3) * COLW, gy = 13 + Math.floor(i / 3), t = g + " " + name;
+      [...t].forEach((ch, k) => { c[gy][gx + k] = ch; }); guide.push({ x: gx, y: gy, len: t.length, color: col }); });
     const parts = {}; try { new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).formatToParts(date).forEach(q => { parts[q.type] = q.value; }); } catch (e) {}
     const stamp = `${p.city} \u00b7 ${parts.month || ""} ${parts.day || ""} ${parts.year || ""} \u00b7 ${parts.hour || ""}:${parts.minute || ""} ${parts.dayPeriod || ""}`.trim();
     return { rows: c.map(r => r.join("")), color, guide, stamp, day, moonUp: mh.alt > 0 };
