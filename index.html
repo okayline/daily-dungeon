@@ -1746,7 +1746,7 @@
   }
   // Anything significant (a hit, a warning, a party change, a new floor, the week ending) gets its own box that waits
   // for [ OK ], so spamming buttons can't click straight through it.
-  const SIGNIFICANT = /closes tonight|GAME OVER|TRIPPING|comes down|-\d+ HP|blocks the way|KURA falls|calendar|joins the party|leaves the party|has had enough|strikes KURA down|week ended|descends|wakes on|enters /i;
+  const SIGNIFICANT = /closes tonight|GAME OVER|TRIPPING|comes down|-\d+ HP|blocks the way|KURA falls (?!into)|calendar|joins the party|leaves the party|has had enough|strikes KURA down|week ended|descends|wakes on|enters /i;
   function noticeBox(lines) {
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     floatBox(box);

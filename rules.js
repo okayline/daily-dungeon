@@ -832,7 +832,7 @@
   // lower it has run the slower it returns: BREATH_BACK[n] is the seconds to climb from n to n + 1, so a small dip
   // is back in a couple of seconds and an empty bar takes about half a minute. It follows her from room to room.
   // st.breath = { n, at }: n breaths as of the instant `at` (ms), which is when the next one starts coming back.
-  const BREATH_MAX = 8, BREATH_BACK = [7, 6, 5, 4, 3, 2, 2, 2], BREATH_WAIT = 1500;     // (v1.06: eight breaths, back sooner)
+  const BREATH_MAX = 8, BREATH_BACK = [4, 3.5, 3, 2.5, 2, 1.5, 1.5, 1.5], BREATH_WAIT = 1000;     // (v1.06: eight breaths, back sooner)
   // Pressing on while out of breath makes her wait longer: every refused try pushes the return of the next breath
   // back half a second, to at most ten seconds past the usual wait. A key held down counts as one try (heldKey).
   const BREATH_NUDGE = 500, BREATH_NUDGE_MAX = 7000;           // (v1.06: about 8.5 seconds at worst, from 12)
@@ -857,7 +857,7 @@
     while (n < BREATH_MAX && now - at >= breathStep(n).ms) { const s = breathStep(n); at += s.ms; n = s.to; }
     return n >= below ? null : Math.max(0, at + breathStep(n).ms - now);
   }
-  const STEP_BREATH = 0.5;                                // a step into another room: half of what a search takes
+  const STEP_BREATH = 0.25;                               // a step into another room: half of what a search takes
   function nudgeBreath(st) {
     if (heldKey || !st.breath) return;
     st.breath = { n: st.breath.n, at: Math.min(st.breath.at + BREATH_NUDGE, TIME.now().getTime() + BREATH_WAIT + BREATH_NUDGE_MAX) };
@@ -2539,7 +2539,7 @@
     const set = OVERHEAR_PAIR[[a, b].sort().join("|")];
     return set && Math.random() < 0.7 ? pick(set) : pick(OVERHEAR_ANY)(a, b);
   };
-  const WORD_BREATH = 1;
+  const WORD_BREATH = 0.5;
   const WORD_YIELD = [1, 1, 0.5, 0.25];                 // the 1st, 2nd, 3rd, 4th WORD with one member today; past that, they're talked out
   const famKey = p => (isProgram(p.base || p.name) ? "data" : p.family || "folklore");
   const lineFor = (table, p) => pick(table[p.name] || table[famKey(p)] || table.folklore).replace(/\{n\}/g, p.name);

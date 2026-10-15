@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.11 - Room to Breathe - Oct 15 2026, 07:31 HST
+
+- **Breath comes back faster.**
+- **It's harder to run out of breath.** Steps and talking cost less.
+- **"KURA falls into step" is a line in the log, not a popup.**
+
 ## v1.10 - A Box in the Corner - Oct 15 2026, 07:10 HST
 
 ![v1.10](screenshots/v1.10.png)
