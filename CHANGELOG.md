@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.04.4 - Sand and Moonlight - Oct 14 2026, 19:10 HST
+
+![v1.04.4](screenshots/v1.04.4.png)
+
+- **Plain search results are warm sand** instead of grey, so an ordinary find reads easier.
+- **All the flavor is on the top line.** The moon's chatter, her reactions after a fight, the dungeon noticing KURA, and the line after a good find are on line 1 now. The bottom line is status only.
+- **The "Ow..." lines are gone.**
+
 ## v1.04.3 - Don't Mind Me - Oct 14 2026, 19:02 HST
 
 ![v1.04.3](screenshots/v1.04.3.png)

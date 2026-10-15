@@ -357,6 +357,7 @@
     if (r < 0.25 + demonOdds) return pick(DEMON);
     if (r < 0.55) return pick(CHATTER);
     // The moon is the calendar's weather: now and then line 3 mentions it.
+    if (r < 0.64) return "> " + pick(moonChatter(st));          // v1.04.4: the moon talks to herself (flavor, so line 1)
     if (r < 0.72 && (root.SMT || require("./screen.js")).moonLines) return "> " + pick((root.SMT || require("./screen.js")).moonLines[m]);
     return pick(AMBIENT);
   }

@@ -85,7 +85,7 @@
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
   /* A search result's color, by what it turned up. No glow on any of them. */
-  .q-plain { color: var(--trail); }   /* nothing, or a common or uncommon thing: grey */
+  .q-plain { color: #cbbf9f; }        /* nothing, or a common or uncommon thing: warm sand (v1.04.4, was grey) */
   .q-silver { color: #d6e8ff; }       /* SILVER: cooler and brighter than the log's own off-white */
   .q-rare { color: #6aa6e8; }         /* rare: blue */
   .q-mythic { color: #f5c542; }       /* mythic, and the deep find: a bright gold */
@@ -1991,7 +1991,6 @@
     if ((save.items || []).length) own.push(`${n(save.items.length, "thing", "things")} in the bag`);
     const here = ((titleStats && titleStats.here && titleStats.here.levels) || []).find(x => x.level === (save.height || 1));
     const others = rumorCards(save.height || 1);
-    others.push(...RULES.moonChatter(save));          // the moon talks to herself now and then (v1.04.1)
     if (here && here.n > 1) others.unshift(presence("todayMine", here.n - 1, lvl));
     // Right now: from her own last live ping (under 6 minutes old), else the title's. Her own device is in the count.
     const live = liveNow && Date.now() - liveNow.at < 360000 ? liveNow : titleStats && titleStats.here && titleStats.here.now;
@@ -2016,21 +2015,18 @@
   // moon reacting to a fight just ended. It waits for the line's next gap, so a search beat can't swallow it.
   var line3Next = null, line3Calm = 0;
   // In a fight the line goes quiet, and only says something when she gets hit.
-  const OW = ["Ow...", "That hurt.", "Okay. Ow.", "Rude.", "That's going to bruise.", "Not the face.", "Ow ow ow.", "Ugh."];
   function line3After(name, hadFight, kuraHp) {
     if (!save || !save.dungeon || save.dead) return;
     if (save.encounter) {
       if (!hadFight) { typeLine = ""; typeN = 0; typeMode = "gap"; }        // a demon steps in: whatever was being typed stops
-      const k = save.party && save.party[0];
-      if (k && k.hp < kuraHp) line3Next = OW[Math.floor(Math.random() * OW.length)];
       return;
     }
     const b = RULES.aura(save).band;
     if (save.auraBand === undefined) save.auraBand = b;
-    else if (b !== save.auraBand) { const l = RULES.noticeLine(save.auraBand, b); save.auraBand = b; if (l) { line3Next = l; return; } }
+    else if (b !== save.auraBand) { const l = RULES.noticeLine(save.auraBand, b); save.auraBand = b; if (l) { save.extra = "> " + l; return; } }   // line 1: flavor
     if (hadFight && !save.encounter && Math.random() < 0.35) {
       const l = RULES.moonReact(save, name.startsWith("go-") ? "run" : "fight");
-      if (l) line3Next = l;
+      if (l) save.extra = "> " + l;
     }
   }
   // (v1.04.3) A search no longer wipes the line: whatever is up finishes as usual; only a new line waits.
@@ -2127,7 +2123,7 @@
       // no reaction, and line 3 just picks up again.
       typeHush();
       const done = () => {
-        if (good) typeSay(searchEcho(best));
+        if (good) { save.extra = "> " + searchEcho(best); typeQuiet = false; persist(); draw(); }   // flavor: line 1
         else typeQuiet = false;
       };
       const showHeld = () => { if (heldFound) { const b = heldFound; heldFound = null; if (save && document.getElementById("found").hidden) foundBox(b); } };
