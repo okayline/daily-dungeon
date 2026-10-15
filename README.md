@@ -10,23 +10,23 @@ An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Te
 
 ## The Moon Is Real
 
-- **The dark rises with her.** Each quarter of the lunar month, the dark takes a level. Climb out before the quarter ends. Survive all four to finish the cycle.
+- **The dark rises with her.** Each quarter of the lunar month, the dark takes a level. Climb out before the quarter ends. Survive all four to finish the cycle, and the game!
 - **She sets the mood.** Near the new moon demons are easier to talk to; near the full moon they run wild. Most of the game shifts a little with her phase.
 - **Full moons are rarer and stranger.** Some things only turn up under the brightest light.
-- **Look up and ask her.** There's no ceiling, only the sky. Some nights she drops a hint about the rooms.
+- **Look up and ask her.** There's no ceiling, only the sky. Some nights she is more talkative than others.
 - **Everyone's in the same pit.** Everyone playing this quarter is on the same level with the same rooms. Which door is which is yours alone. The game tells you how many others are down there, never who.
 
-## Good To Know
+## Good to Know
 
-- **One key a day.** Spend it on a door, or go on STANDBY and rest deeper tonight.
-- **Breath.** Searching, walking, talking and asking the moon tire KURA out. Turning is free. If she's out of breath, wait a few seconds.
-- **AURA.** Size up a demon in a fight, get a hunch about what's behind a door, or feel out the room.
+- **One key a day.** Spend it on one of two doors every day.  Everyone playing has the same choice, but a different context.
+- **Breath.** Searching, walking, talking, actions all take breath.  If you're of breath, wait a few seconds.
+- **AURA.** Size up a demon before a fight, get a hunch about what's behind a door, or feel out the room.
 - **WORD.** Have a word with a demon, or with your party. Everyone carries things, and sometimes they'll offer you one.
 - **Your party.** Start with three friends. Demons can join when there's room. Everyone has patience, and a WORD helps it.
-- **Alignment.** Your choices pull KURA one way or another, and demons can tell.
-- **The Omen.** Once a day the moon gives everyone the same omen, and it tilts what the day brings.
+- **Alignment.** Your choices pull one way or another; demons, the dungeon, and the moon can tell.
+- **The Omen.** Once a day the moon whispers her Omen, and it tilts what the day brings.
 - **The Board.** Post a finished run to the leaderboard. Your run starts under a placeholder name; type your own when you post.
-- **Saves.** Your run lives in your browser. The `[?]` menu has a password to move it to another device.
+- **Saves.** Your run lives in your browser. The [?] menu has a password to move it to another device.
 
 ## Files
 
