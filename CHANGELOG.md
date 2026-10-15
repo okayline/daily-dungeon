@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.04.3 - Don't Mind Me - Oct 14 2026, 19:02 HST
+
+![v1.04.3](screenshots/v1.04.3.png)
+
+- **Searching no longer wipes the bottom line.** Whatever it's saying finishes as usual; the next line waits until the search is done.
+
 ## v1.04.2 - A Moment's Peace - Oct 14 2026, 18:55 HST
 
 ![v1.04.2](screenshots/v1.04.2.png)

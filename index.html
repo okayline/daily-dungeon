@@ -2033,14 +2033,15 @@
       if (l) line3Next = l;
     }
   }
-  function typeHush() { typeQuiet = true; typeLine = ""; typeN = 0; typeMode = "gap"; const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml(); }
+  // (v1.04.3) A search no longer wipes the line: whatever is up finishes as usual; only a new line waits.
+  function typeHush() { typeQuiet = true; }
   function typeSay(line) { typeLine = String(line || "").slice(0, TYPE_W); typeN = typeLine.length; typeMode = "hold"; typeHoldUntil = Date.now() + 6000; typeQuiet = false; const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml(); }
   function tickerHtml() { return "&gt; " + esc((typeLine || "").slice(0, typeN || 0)) + (typeMode === "hold" || typeMode === "gap" ? '<span class="wait">_</span>' : "_"); }   // the > is always there
   function typeStep() {
     let wait = 300;
     try {
       if (atTitle || !save || !save.dungeon) { wait = 500; }
-      else if (typeQuiet || searchBeat) { wait = 300; line3Calm = Date.now(); }   // still searching: the 3 seconds count from when it's done
+      else if (typeMode === "gap" && (typeQuiet || searchBeat)) { wait = 300; line3Calm = Date.now(); }   // still searching: the 3 seconds count from when it's done
       else if (typeMode === "gap" && Date.now() - line3Calm < 3000) { wait = 300; }   // (v1.04.2) patient: 3 seconds after the last action
       else if (typeMode === "gap") {
         // (This line never says KURA: that name belongs to the line above, where she acts.)

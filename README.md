@@ -4,7 +4,7 @@
 
 **Play it:** [okayline.itch.io/4dungeon](https://okayline.itch.io/4dungeon)
 
-<img width="60%" alt="Daily Digital Demon Dungeon, build v1.04.2" src="screenshots/v1.04.2.png" />
+<img width="60%" alt="Daily Digital Demon Dungeon, build v1.04.3" src="screenshots/v1.04.3.png" />
 
 An 80-column ASCII roguelike in the spirit of 80s CRPGs and Shin Megami Tensei, played on the real calendar. Open one door a day on the real Lunar calendar. The moon phase in real life impacts gameplay in different ways.
 
