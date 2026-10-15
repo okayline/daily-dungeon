@@ -4,7 +4,7 @@
 
 **Play it:** [okayline.itch.io/4dungeon](https://okayline.itch.io/4dungeon)
 
-<img width="60%" alt="Daily Digital Demon Dungeon, build v1.05" src="screenshots/v1.05.png" />
+<img width="60%" alt="Daily Digital Demon Dungeon, build v1.05.1" src="screenshots/v1.05.1.png" />
 
 An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played on the real lunar calendar. Open one door a day. The real moon changes how the game plays.
 
@@ -25,7 +25,7 @@ An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Te
 - **Your party.** Start with three friends. Demons can join when there's room. Everyone has patience, so don't wear it thin.
 - **Alignment.** Your choices pull KURA one way or another, and demons can tell.
 - **The Omen.** Once a day the moon gives everyone the same omen, and it tilts what the day brings.
-- **The Board.** Post a finished run to the leaderboard. Your run starts with a placeholder name. Click it in the party panel to change it, or change it when you post.
+- **The Board.** Post a finished run to the leaderboard. Your run starts under a placeholder name; type your own when you post.
 - **Saves.** Your run lives in your browser. The `[?]` menu has a password to move it to another device.
 
 ## Files

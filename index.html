@@ -82,10 +82,11 @@
   .viewpop pre > div { flex: none; }
   .viewpop pre > div:last-child { margin-top: auto; position: sticky; bottom: 0; background: var(--bg); }   /* the [ENTER] use row sits at the foot, so it never moves when the list or the box changes size */
   .logview .dim { color: var(--trail); }
+  .viewpop .dim { color: var(--trail); }
   .foundbox { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); background: var(--bg);
     border: 1px solid var(--gold); padding: 1em 3ch; cursor: pointer; }   /* a gold border and no glow around it: no box in the game has one */
   /* A search result's color, by what it turned up. No glow on any of them. */
-  .q-plain { color: #b4b4b0; }        /* nothing, or a common or uncommon thing: light grey (was sand in v1.04.4, a darker grey before) */
+  .q-plain { color: #a3a3a3; }        /* nothing, or a common or uncommon thing: a plain light grey (v1.05.1; sand in v1.04.4) */
   .q-silver { color: #d6e8ff; }       /* SILVER: cooler and brighter than the log's own off-white */
   .q-rare { color: #6aa6e8; }         /* rare: blue */
   .q-mythic { color: #f5c542; }       /* mythic, and the deep find: a bright gold */
@@ -95,8 +96,6 @@
   .foundbox .gold { color: var(--gold); }
   .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
   .nameinput.bad { border-color: var(--demon); }
-  .pname { cursor: pointer; }
-  .pnamefield { position: absolute; box-sizing: border-box; padding: 0 2px; z-index: 5; outline: none; }
   #board .auto { color: var(--trail); }
   .passfield { display: block; width: 100%; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; resize: none; margin: 4px 0; }
   /* The fight box sits inside the 3D view (rows 6-20, columns 1-47), like the bag, so the party and map stay in sight. */
@@ -156,8 +155,6 @@
   function colorize(text) {
     const lines = text.split("\n");
     return lines.map((line, i) => {
-      // The player's name (party panel, first row) is clickable: it opens the name box.
-      if (i === 8 && save && !save.dead && save.playerName) return esc(line.slice(0, 50)) + `<span class="pname" title="Rename">${esc(line.slice(50, 59))}</span>` + esc(line.slice(59));
       if (i >= 15 && i <= 19) {
         const left = esc(line.slice(0, 49)), right = line.slice(49);
         // [^] and [v] inside brackets are stairs; a bare ^ v < > next to @ is KURA's facing arrow.
@@ -332,6 +329,33 @@
     // While the infinite-steps cheat is on, the line under the screen shows the room and the counters.
     document.getElementById("cheat").textContent = save.freeSteps ? RULES.debugInfo(save) : "";
     document.getElementById("ver").textContent = SMT.VERSION;
+    bagBox();
+  }
+  // THE BAG IS FULL (v1.05.1): a thing that came to a full bag waits (save.overflow) until KURA picks what to leave
+  // behind: 1-9 leaves that thing, N leaves the new one where it lay. It waits for every other box to close first.
+  function bagBox() {
+    const box = document.getElementById("found");
+    if (atTitle || !save || save.dead || !(save.overflow || []).length || !box.hidden || replayTimer) return;
+    if (["inv", "log", "board", "codex", "about", "exch"].some(id => { const el = document.getElementById(id); return el && !el.hidden; })) return;
+    const pre = box.querySelector("pre"), it = save.overflow[0];
+    box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
+    placeInView(box, 15);
+    box.dataset.mode = "bag";
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
+    const opt = (label, i) => { const d = document.createElement("div"), b = document.createElement("span"); b.textContent = label; b.className = "btn"; b.dataset.bag = i; d.appendChild(b); pre.appendChild(d); };
+    add(`KURA found ${it}.`.slice(0, 41), "gold");
+    add("THE BAG IS FULL. Leave something behind?");
+    add(" ");
+    (save.items || []).forEach((n, i) => opt(`[${i + 1}] ${n}`.slice(0, 41), i));
+    opt("[N]O THANKS", "none");
+  }
+  function bagPick(i) {
+    if (!save || !(save.overflow || []).length) return;
+    const box = document.getElementById("found");
+    save = RULES.keepItem(save, i === "none" ? null : Number(i));
+    box.hidden = true; box.dataset.mode = ""; box.querySelector("pre").innerHTML = "";
+    persist(); draw();
   }
 
   // Every player's run lives in their own browser and saves itself after every action.
@@ -781,9 +805,8 @@
     else done(false);
   }
   // LEADERBOARD: post this run's score once, and read the top of the board. Ranked by floor, then days; TURNS are shown only.
-  // THE NAME: a run starts with a placeholder (RULES.named) and never waits for one. Clicking the name in the party
-  // panel turns that spot into a field, right where the name sits: Enter keeps a good name (a bad one turns the border
-  // red), Escape or clicking away leaves it as it was. The post row at the end of a run can rename too.
+  // THE NAME: a run starts with a placeholder (RULES.named) and never waits for one. It is only the player's handle for
+  // the board (the character is always KURA): it is typed, if at all, in the post row at the end of a run.
   const nameProblem = v => !v ? "TYPE A NAME FIRST." : v.length < 3 ? "TOO SHORT: AT LEAST 3 CHARACTERS." : v.length > 10 ? "TOO LONG: 10 CHARACTERS AT MOST." : "LETTERS, NUMBERS, SPACE _ . - ONLY.";
   // A name field keeps its keys to itself (so typing B or C is a letter, not a command): Enter and Escape do its two jobs.
   function nameField(inp, onEnter, onEscape) {
@@ -791,28 +814,6 @@
     inp.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); onEnter(); } else if (e.key === "Escape") { e.preventDefault(); onEscape(); } });
     inp.addEventListener("input", () => inp.classList.remove("bad"));
     return inp;
-  }
-  let panelName = null;
-  function placePanelName() {                       // over the name and level (row 8, columns 50 to 62 of the screen)
-    if (!panelName) return;
-    const scr = document.getElementById("screen"), r = scr.getBoundingClientRect();
-    const rows = scr.textContent.split("\n").length, rh = r.height / rows, cw = r.width / 80, cs = getComputedStyle(scr);
-    Object.assign(panelName.style, { left: scr.offsetLeft + 50 * cw + "px", top: scr.offsetTop + 8 * rh + "px", width: 13 * cw + "px", height: rh + "px", fontFamily: cs.fontFamily, fontSize: cs.fontSize, letterSpacing: cs.letterSpacing, lineHeight: rh + "px" });
-  }
-  function editName() {
-    if (panelName || !save || save.dead || atTitle) return;
-    const inp = nameField(document.createElement("input"), keepName, dropName);
-    inp.id = "pnamefield"; inp.classList.add("pnamefield");
-    inp.addEventListener("blur", () => setTimeout(dropName, 0));
-    panelName = inp; document.querySelector(".frame").appendChild(inp); placePanelName();
-    inp.focus(); inp.select();
-  }
-  function dropName() { if (panelName) { const p = panelName; panelName = null; p.remove(); } }
-  function keepName() {
-    if (!panelName || !save) return;
-    const next = RULES.setName(save, panelName.value);
-    if (next === save) { panelName.classList.add("bad"); return; }
-    save = next; persist(); dropName(); draw();
   }
   async function submitScore() {
     const msg = document.getElementById("scoremsg");
@@ -1037,14 +1038,13 @@
     const b = document.getElementById("inv"); if (!b.hidden) placeInView(b);
     const x = document.getElementById("exch"); if (!x.hidden) placeInView(x);
     const f = document.getElementById("found"); if (!f.hidden && f.classList.contains("inframe")) placeInView(f, 15);
-    placePanelName();
   });
   function showInv(open) {
     const box = document.getElementById("inv");
     box.hidden = !open;
     if (!open) return;
     placeInView(box);
-    invList = save ? RULES.inventory(save) : [];
+    invList = save ? RULES.inventory(save).flatMap(it => Array.from({ length: it.count }, () => ({ ...it, count: 1 }))) : [];   // one line per thing (v1.05.1)
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
     if (save && (save.ichor || 0) > 0) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
       text: "Demon blood and old light. Heals demons. Not meant for KURA." });
@@ -1078,22 +1078,25 @@
     if (ichorPick >= 0) ichorPick = -1;
     // KURA's aura sits beside the title: her two-word name and how loud she is (v1.04).
     const au = save ? RULES.aura(save) : null;
-    add(au ? "INVOKE".padEnd(41 - (au.name.length + au.loud.length + 2)) + `${au.name}  ${au.loud}` : "INVOKE", "");
-    add(" ");
-    if (!invList.length) add("Nothing yet. Search the walls.");
+    const head = `INVOKE   BAG ${(save && save.items || []).length}/${RULES.BAG_MAX}`;
+    add(au ? head.padEnd(41 - (au.name.length + au.loud.length + 2)) + `${au.name}  ${au.loud}` : head, "");
+    const ich = invList.length && invList[0].ichor ? 1 : 0;      // ICHOR is a count, not a thing: it sits above the bag as 0
     invList.forEach((it, i) => add(
-      `${i === invSel ? ">" : " "} ${i < 9 ? i + 1 : " "}  ${it.ichor ? `ICHOR  (${save.ichor})` : it.name + (it.count > 1 ? " x" + it.count : "")}`.replace(/^(.{42}).{4,}$/, "$1..."),
+      `${i === invSel ? ">" : " "} ${it.ichor ? 0 : i - ich + 1}  ${it.ichor ? `ICHOR  (${save.ichor})` : it.name}`.replace(/^(.{42}).{4,}$/, "$1..."),
       "btn", i));
+    for (let k = invList.length - ich; k < RULES.BAG_MAX; k++) add(`  ${k + 1}  .`, "dim");
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
+    // The chosen thing (v1.05.1, compact so a full bag fits): a rule with its name and tag, then what it is.
     const it = invList[invSel];
     if (it) {
-      add(" ");
       const tag = it.ichor ? `${save.ichor} in hand` : RULES.itemAlignName(it.name);
+      const nm = it.ichor ? "ICHOR" : it.name, room = 41 - 4 - tag.length - 2;
+      const shown = nm.length > room ? nm.slice(0, room - 2) + ".." : nm;
+      add(`-- ${shown} ${"-".repeat(Math.max(1, 41 - 4 - shown.length - tag.length - 1))} ${tag}`, "dim");
       const lines = it.ichor ? [it.text, "Enter: choose who gets it."]
-        : [it.text, it.usable ? "[ENTER] uses it." : "No use here. Something down here might want it."];
-      textBox(it.name, tag, lines, 41).forEach(l => add(l, ""));
+        : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : [])];
+      for (const l of lines) for (const w of wrapText(l, 41)) add(w, "");
     }
-    add(" ");
     // What happened on the last try to use something (cleared when another item is chosen).
     const btn = (t, k, cls) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = cls || "btn"; sp.dataset[k] = "1"; return sp; };
     // The hold/release button gets its own line above the rest -- the box is a fixed 47 columns (it
@@ -1102,7 +1105,7 @@
     // Both lines live in the one foot block, which stays pinned to the bottom of the box however long the list gets.
     const help = add("", "");
     if (holdBtn) { const hl = document.createElement("div"); hl.append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : ""))); help.append(hl); }
-    help.append("[1-9] choose  ", btn("[ENTER] use", "use"), "  ", btn("[C]LOSE", "close"));
+    help.append("[1-9] choose  ", btn("[ENTER] use", "use"), "  ", btn("[C]LOSE", "close"));   // (0 picks ICHOR when there is some)
   }
   // THE EXCHANGE WINDOW (v1.00): opened from the screen in a dead end's wall; one window over the view like INVOKE. Four tabs:
   //   MARKET - public offers (others' only). ENTER takes one; one that asks for something takes a matching thing of yours.
@@ -1739,10 +1742,11 @@
     return true;
   }
 
-  let introAt = 0, introTimer = null, introSeen = null;      // the fight's opening unfolds a beat at a time too, a little quicker than its ending
+  let introAt = 0, introTimer = null, introSeen = null, introShown = 0;      // the fight's opening unfolds a beat at a time too, a little quicker than its ending
   // A button on the new-demon screen: it counts as [ OK ], then does what it says. Not before the screen has unfolded.
   function introGo(name) {
     if (introTimer || Date.now() - introAt < 400 || !save || !save.encounter) return;
+    if (name === "aura") { if (!RULES.auraUsed(save)) act("aura"); return; }   // reading it isn't fighting it: the read shows in this box
     save.encounter.seen = true; persist();
     act(name);
   }
@@ -1821,13 +1825,15 @@
       // v1.04.1: the stance row instead of [ OK ], so a demon can be read (AURA) before anything else. It shows last,
       // once everything above has unfolded, and nothing works before then (see introGo).
       grp(() => { const row = document.createElement("div"); row.className = "brow"; const l = document.createElement("span");
-        l.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[A]URA", "aura"), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
+        l.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", (() => { const a = opt("[A]URA", "aura"); if (RULES.auraUsed(save)) a.className += " off"; return a; })(), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
         row.append(l); pre.appendChild(row); });
       // Only the first showing unfolds; a redraw shows it whole. Nothing skips it: [ OK ] works once it is on screen.
-      const ikey = save.runId + ":" + (save.steps || 0) + ":" + e.name;
-      if (introSeen !== ikey && groups.length > 1) {
-        introSeen = ikey;
-        const hide = groups.slice(1); hide.forEach(g => g.forEach(n => { n.style.visibility = "hidden"; }));
+      if (e.introAt === undefined) e.introAt = save.steps || 0;
+      const ikey = save.runId + ":" + e.introAt + ":" + e.name;
+      const shown = introSeen === ikey ? introShown : 1;       // the same demon again (after an AURA): what was on screen stays
+      introSeen = ikey; introShown = groups.length;
+      if (groups.length > shown) {
+        const hide = groups.slice(Math.max(1, shown - 1)); hide.forEach(g => g.forEach(n => { n.style.visibility = "hidden"; }));
         const step = () => { const g = hide.shift(); if (g) g.forEach(n => { n.style.visibility = ""; }); if (hide.length) introTimer = setTimeout(step, 450); else { introTimer = null; introAt = Date.now() - 300; } };
         introTimer = setTimeout(step, 450);
       }
@@ -1853,11 +1859,11 @@
         const row = document.createElement("div"); row.append(opt("[B]ACK", "offer-none")); pre.appendChild(row);
         return;
       }
-      if (e.stage === "pick") {                        // BEHOLD / PEACE: what KURA carries, each with how it reads and how loud
+      if (e.stage === "pick") {                        // BEHOLD / PEACE: what KURA carries, each with how loud it is
         add("BEHOLD what?");
         add(" ");
         RULES.moveItems(save).forEach((g, i) => {
-          const right = ` ${g.tag} ${".".repeat(g.loud)}`, room = COLS - 4 - right.length;
+          const right = ` ${".".repeat(g.loud)}`, room = COLS - 4 - right.length;      // (v1.05.1: the alignment tag is gone; the dots stay)
           const nm = g.label.length > room ? g.label.slice(0, room - 2) + ".." : g.label.padEnd(room);
           const line = document.createElement("div"); line.append(opt(`[${i + 1}] ${nm}${right}`, "pick-" + i)); pre.appendChild(line);
         });
@@ -2040,6 +2046,7 @@
     try {
       if (atTitle || !save || !save.dungeon) { wait = 500; }
       else if (typeMode === "gap" && (typeQuiet || searchBeat)) { wait = 300; line3Calm = Date.now(); }   // still searching: the 3 seconds count from when it's done
+      else if (typeMode === "gap" && (() => { const f = document.getElementById("found"); return !f.hidden && f.dataset.mode === "done"; })()) { wait = 300; line3Calm = Date.now(); }   // a fight's end screen is up: nothing until its [ OK ]
       else if (typeMode === "gap" && Date.now() - line3Calm < 3000) { wait = 300; }   // (v1.04.2) patient: 3 seconds after the last action
       else if (typeMode === "gap") {
         // (This line never says KURA: that name belongs to the line above, where she acts.)
@@ -2244,7 +2251,11 @@
     }
     remember(name === "reset" || save.steps !== steps ? "" : log);
     if (name !== "reset") line3After(name, hadFight, kuraHp);
+    // AURA out of a fight: line 2 (what KURA does) shows first; whoever answers comes up on line 1 a beat later.
+    let auraBeat = null;
+    if (name === "aura" && !save.encounter && save.extra && save.extra !== exBefore) { auraBeat = save.extra; save.extra = exBefore; }
     persist(); draw();
+    if (auraBeat) { const at = save.steps; setTimeout(() => { if (save && save.steps === at && !atTitle) { save.extra = auraBeat; heldExtra = null; persist(); draw(); } }, 800); }
     // A blocked run says so in a box that waits for [ OK ]; then the fight box plays the demon's reply.
     if (name !== "reset" && save.encounter && save.encounter.ranTried && !ranBefore && !save.dead) {
       blockedRun = true; noticeBox([`${save.encounter.name} blocked your way.`]);
@@ -2277,7 +2288,6 @@
 
   document.getElementById("screen").addEventListener("click", e => {
     const fb = document.getElementById("found");
-    if (!atTitle && e.target.closest(".pname")) { if (fb.hidden || fb.dataset.mode === "encounter") editName(); return; }   // rename in place (not while a box waits for an answer)
     if (!fb.hidden && fb.dataset.mode !== "encounter") return;   // a box waiting for its answer: the buttons behind it do nothing
     if (atTitle) {
       const b = e.target.closest(".btn");
@@ -2300,6 +2310,7 @@
   });
   document.getElementById("board").addEventListener("click", () => toggleBoard(false));   // no other interactive bits in here: any click closes
   document.getElementById("found").addEventListener("click", e => {
+    if (document.getElementById("found").dataset.mode === "bag") { const b = e.target.closest("[data-bag]"); if (b) bagPick(b.dataset.bag); return; }
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
     if (e.target.closest("[data-intro]")) return introOK();
     const mode = document.getElementById("found").dataset.mode;
@@ -2354,6 +2365,12 @@
     const fbox = document.getElementById("found");
     if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (e.repeat) return; if (key === "enter") introOK(); else { const k = { f: "fight", t: "talk", a: "aura", r: "run" }[key]; if (k) introGo(k); } return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
+    if (!fbox.hidden && fbox.dataset.mode === "bag") {         // the full bag's question: a number leaves that thing, N leaves the new one
+      e.preventDefault(); if (e.repeat) return;
+      if (/^[1-9]$/.test(key) && Number(key) <= (save.items || []).length) bagPick(Number(key) - 1);
+      else if (key === "n") bagPick("none");
+      return;
+    }
     if (!fbox.hidden) {
       if (!/^(tab|f\d+)$/.test(key)) e.preventDefault();
       if (e.repeat) return;                        // holding a key can't answer a box
@@ -2416,7 +2433,8 @@
       }
       if (key === "i" || key === "c" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
       else if (key === "h") { e.preventDefault(); holdAction(); }
-      else if (/^[1-9]$/.test(key)) { e.preventDefault(); invSel = Number(key) - 1; showInv(true); }
+      else if (/^[0-9]$/.test(key)) { e.preventDefault(); const ich = invList.length && invList[0].ichor ? 1 : 0, n = Number(key);   // 0 is ICHOR, 1-9 the bag
+        if (n === 0 ? ich : n <= invList.length - ich) { invSel = n === 0 ? 0 : n - 1 + ich; showInv(true); } }
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
       return;

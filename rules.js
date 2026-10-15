@@ -119,7 +119,11 @@
   const itemAlign = name => ITEM_ALIGN[name] || null;
   const relicAlign = name => (["RARE", "MYTHIC", "MOON"].includes(TIER[name]) ? itemAlign(name) : null);
   // KURA picks up an item; an aligned one tugs at her.
+  // THE BAG (v1.05.1) holds 9 things (ICHOR is a count, not a thing). A thing that comes to a full bag waits in
+  // st.overflow; the page asks what to leave behind (keepItem). Nothing counts as found until it is kept.
+  const BAG_MAX = 9;
   function gain(st, it, lines) {
+    if ((st.items || []).length >= BAG_MAX) { st.overflow = (st.overflow || []).concat(it); return; }
     st.items = (st.items || []).concat(it);
     note(st, "items", it, "found");
     tally(st, "items");
@@ -1687,7 +1691,7 @@
     delete st.cheated; if (st.freeSteps) st.cheated = true;
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
-      "fidgetLine", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
+      "fidgetLine", "hollow", "overflow", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
       "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
@@ -1733,8 +1737,22 @@
     for (const it of st.items || []) counts[it] = (counts[it] || 0) + 1;
     return Object.keys(counts).sort((x, y) => TIERS.indexOf(TIER[y]) - TIERS.indexOf(TIER[x])).map(name => {
       const info = ITEM_INFO[name] || { text: "" };
-      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON", align: itemAlign(name) };
+      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON", align: itemAlign(name), hollow: st.hollow && name in st.hollow ? st.hollow[name] : undefined };
     });
+  }
+  // A full bag's answer: drop = which thing in the bag to leave (its index), or null to leave the new one where it lay.
+  function keepItem(st, drop) {
+    st = copy(st);
+    const it = (st.overflow || [])[0];
+    if (!it) return show(st);
+    st.overflow.shift(); if (!st.overflow.length) delete st.overflow;
+    const old = drop === null || drop === undefined ? null : (st.items || [])[drop];
+    if (!old) { st.log = `> KURA leaves ${it} where it is. The bag is full.`; return show(st); }
+    st.items.splice(drop, 1);
+    if (st.wear && !st.items.includes(old)) delete st.wear[old];
+    gain(st, it);
+    st.log = `> KURA leaves ${old} behind and takes ${it}.`.slice(0, 77);
+    return show(st);
   }
   // Use one of an item. Things that can't be used yet just get looked at.
   // Lines must fit the 77 columns of a log line: with a long item name, say "it" instead.
@@ -1744,6 +1762,10 @@
   const BREAK = { COMMON: 0.08, UNCOMMON: 0.06, RARE: 0.03, MYTHIC: 0.01, MOON: 0 };
   // Nothing breaks early: no item can break before this many tries (then the per-try odds above apply).
   const BREAK_MIN = { COMMON: 10, UNCOMMON: 12, RARE: 20, MYTHIC: 40, MOON: Infinity };
+  // (v1.05.1) Fiddling long enough tells KURA whether a thing is hollow: about halfway to where it could break.
+  // Whether it is hollow is rolled then (the same odds a break uses) and kept, so the break agrees with it.
+  const REVEAL_AT = { COMMON: 5, UNCOMMON: 6, RARE: 10, MYTHIC: 20, MOON: Infinity };
+  const insideOdds = (tier, m) => ({ COMMON: 0.1, UNCOMMON: 1 / 12 }[tier] || 0) * (m === 0 ? 1.5 : 1);
   // When KURA breaks something a party member loves (folklore: old spirit things; data and
   // hardware: tech; hybrids: things that are both), they take it hard.
   const GRIEF = {
@@ -1803,8 +1825,9 @@
         lean(st, a === "LAW" ? "breakLAW" : a === "CHAOS" ? "breakCHAOS" : "break");
         // Junk is hollow: once in a while something was inside (COMMON 1 in 10, UNCOMMON 1 in 12;
         // half again as often at the new moon, when the deep is quiet). What falls out: COMMON 60%, RARE 35%, MYTHIC 5%.
-        const inside = ({ COMMON: 0.1, UNCOMMON: 1 / 12 }[tier] || 0) * (m === 0 ? 1.5 : 1);
-        if (Math.random() < inside) {
+        const inside = insideOdds(tier, m), known = st.hollow && name in st.hollow ? st.hollow[name] : null;
+        if (st.hollow) delete st.hollow[name];
+        if (known !== null ? known : Math.random() < inside) {
           const r = Math.random(), got = pick(names(r < 0.05 ? "MYTHIC" : r < 0.4 ? "RARE" : "COMMON"));
           gain(st, got);
           tally(st, "insides");
@@ -1825,9 +1848,13 @@
         }
         return show(st);
       }
-      st.log = "> " + (w === 1 ? `KURA turns ${the} over. Nothing happens.`
+      st.hollow = st.hollow || {};
+      const learn = w >= REVEAL_AT[tier] && !(name in st.hollow);
+      if (learn) st.hollow[name] = Math.random() < insideOdds(tier, m);
+      st.log = "> " + (learn ? (st.hollow[name] ? `KURA shakes ${the}. Something is rattling around inside.` : `KURA knocks on ${the}. Solid, all the way through.`)
+        : w === 1 ? `KURA turns ${the} over. Nothing happens.`
         : !odds ? `KURA tries ${the} again. It won't break. It's older than she is.`
-        : pick([`KURA shakes ${the}. Something rattles.`, `KURA turns ${the} over again. Still nothing.`,
+        : pick([`KURA shakes ${the}. Nothing new.`, `KURA turns ${the} over again. Still nothing.`,
           `KURA bangs ${the} against the wall. It holds.`, `KURA twists ${the}. It creaks.`]));
       st.log = fitIt(st.log, the);
       heatUp(st, 0.5);                 // fiddling makes a little noise too
@@ -3393,7 +3420,7 @@
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0,
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, itemMove, moveItems, movePick, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, talk, answer, swap, give: giveTo, gifts, offer, offerGive, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, itemMove, moveItems, movePick, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

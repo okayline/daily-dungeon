@@ -2,6 +2,20 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.05.1 - Pack Light - Oct 14 2026, 20:16 HST
+
+![v1.05.1](screenshots/v1.05.1.png)
+
+- **The bag holds 9 things.** When it's full, a new find asks what to leave behind, or you can leave the new thing where it lay. ICHOR doesn't take a slot.
+- **INVOKE is more compact**, with one line per thing and the bag count beside the title. Press 0 for ICHOR.
+- **Fiddling with a thing long enough tells you something about it.**
+- **AURA before a fight** reads the demon right on the "APPEARS" screen, without starting the fight.
+- **AURA outside a fight** shows what KURA does first, and the answer a beat later.
+- **KURA is always KURA** in the party panel. Your name is just for the board, and you type it when you post.
+- **BEHOLD's list** shows only how loud each thing is.
+- **After a fight**, the bottom line waits until you close the end screen.
+- **Plain search results are a plainer grey.**
+
 ## v1.05 - Aura Farming - Oct 14 2026, 19:42 HST
 
 ![v1.05](screenshots/v1.05.png)

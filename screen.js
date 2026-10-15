@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.05";
+  const VERSION = "v1.05.1";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -330,7 +330,7 @@
     // A status effect shows as a mark after the name: KURA* while she's TRIPPING.
     const mem = p => " " + ljust(short(p.name) + (p.status ? "*" : ""), 9) + ljust(`L${p.lv}`, 3) + " " +
       `${rjust(String(p.hp), 3)}/${rjust(String(p.hpmax), 3)} ${rjust(String(p.mp), 3)}/${rjust(String(p.mpmax), 3)}`;
-    const party = st.party.map((p, i) => mem(i === 0 && st.playerName ? { ...p, name: String(st.playerName).toUpperCase() } : p)); while (party.length < 4) party.push("");
+    const party = st.party.map(p => mem(p)); while (party.length < 4) party.push("");   // (v1.05.1: always KURA; the player's name is only for the board)
     // KURA is drawn on the minimap as an arrow showing the facing direction.
     const arrow = { N: "^", E: ">", S: "v", W: "<" }[st.facing] || "@";
     // The map area is 6 rows. An old 4-row map gets a blank row above and below;
