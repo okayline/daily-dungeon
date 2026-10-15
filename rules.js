@@ -539,6 +539,7 @@
   // Taking one of her two things.
   function moonTake(st, g) {
     const lines = [];
+    tally(st, "moonTook"); ev(st, "moonpick");
     switch (g.kind) {
       case "hunch": st.extra = "> " + g.say; break;
       case "breath": delete st.breath; st.extra = "> Pale light fills KURA's lungs. She breathes easy."; break;
@@ -582,7 +583,7 @@
     archive: ["blinks with rows of tiny lights", "whirs, dry and low"],
     void: ["stands bare, stripped of anything worth taking", "is empty, and smells of something already gone"],
     hall: ["is only a narrow way through, bare and echoing", "stretches on, narrow and bare"],
-    dead: ["closes in, with nowhere further to go", "is small and shut, at the end of the way"],
+    dead: ["is small and snug, with a light left on", "feels lived in, and quietly glad of company"],
     plain: ["is bare and quiet", "is plain and still"],
   };
   const FALSE_SEARCH = ["Paint. A door painted on bare stone.", "The door is flat. Brush strokes, and nothing under them.", "KURA knocks. Solid wall, dressed up as a door."];
@@ -687,7 +688,7 @@
     den: ["Snug room", "Burrow room", "Musty room"], bay: ["Quiet room", "Soft room", "Still room"],
     relay: ["Tone room", "Static room", "Dish room"], vault: ["Heavy room", "Sealed room", "Hushed room"],
     forge: ["Ash room", "Solder room", "Soot room"], altar: ["The altar"],
-    archive: ["Drive room", "Rack room", "Spin room"], hall: ["Passageway", "Conduit", "Crawlway", "Corridor", "Walkway", "Service way"], dead: ["Dead end", "Sealed end"],
+    archive: ["Drive room", "Rack room", "Spin room"], hall: ["Passageway", "Conduit", "Crawlway", "Corridor", "Walkway", "Service way"], dead: ["Beacon", "Lamp room", "Uplink", "Waystation", "Signal room", "Comms nook"],
     // Since v1.00 every dead end (with no other kind) holds the exchange's screen, and is named for it.
     exchange: ["Exchange", "Xchange", "Trade floor", "Market end", "Ticker room", "Trading gap", "Swap room"],
     plain: ["Dusty room", "Damp room", "Grey room", "Tiled room", "Mossy room", "Sooty room", "Round room", "Echo room", "Salt room",
@@ -700,7 +701,8 @@
     if (allRooms(d)[i] && allRooms(d)[i].found.includes("stairs")) return "Stairs up";
     const rs = RS(d, i);
     const rm = d.floor.rooms[i], exch = EXCHANGE_ON && rm.dead && !rm.kind;
-    if (rs.name && !(exch && NAMES_BY_KIND.dead.includes(rs.name))) return rs.name;    // (a dead end named before v1.00 takes an exchange name)
+    const oldDead = rm.dead && !rm.kind && (rs.name === "Dead end" || rs.name === "Sealed end");   // named before the signal-room names: takes a new one
+    if (rs.name && !oldDead && !(exch && NAMES_BY_KIND.dead.includes(rs.name))) return rs.name;    // (a dead end named before v1.00 takes an exchange name)
     const used = new Set(allRooms(d).map(x => x.name).filter(Boolean));
     const lists = [NAMES_BY_KIND[rm.kind || (rm.hall ? "hall" : exch ? "exchange" : rm.dead ? "dead" : "plain")] || NAMES_BY_KIND.plain, NAMES_BY_KIND.plain];
     const h = Math.abs(Math.imul((d.floor.seed | 0) ^ Math.imul(i + 1, 0x9e3779b1), 0x85ebca6b) >>> 7);
@@ -1446,9 +1448,9 @@
       "CU SITH": ['CU SITH walks ahead, nose to the floor.', 'CU SITH keeps to the middle of the way, tail low.'],
     },
     dead: {
-      ELF: ['ELF: "A dead end. Someone wanted it this way."', 'ELF: "There is nowhere left to go but back."'],
-      PIXIE: ['PIXIE: "Ugh. A dead end. I hate those."', 'PIXIE: "It just... stops. Rude."'],
-      "CU SITH": ['CU SITH turns in a circle and looks at KURA.', 'CU SITH noses the end wall and turns back.'],
+      ELF: ['ELF: "Others have stood here. You can feel it."', 'ELF: "The way ends here, and it is not unkind."'],
+      PIXIE: ['PIXIE: "Ooh, cozy! Somebody was here before us. Hi, somebody!"', 'PIXIE: "Nobody\'s chasing us in here. I like it."'],
+      "CU SITH": ['CU SITH circles once and lies down by the wall.', 'CU SITH noses the end wall, tail slowly wagging.'],
     },
     plain: {
       ELF: ['ELF: "Another room. Stay close."', 'ELF: "Nothing remarkable. Which can be a warning."'],
@@ -2024,9 +2026,9 @@
     tally(st, "beaten"); tally(st, "ichorWon", n);
     lines.push(`${THE(e.name)} falls.  +${n} ICHOR`);
     st.lastLine = lastWords(e, st);                         // shown on the end-of-fight screen, right under the art
-    // What a fallen demon leaves (v1.06): one to three things out of its own pockets. Never SILVER, never a moon thing.
+    // What a fallen demon leaves (v1.06): one or two things out of its own pockets. Never SILVER, never a moon thing.
     const had = pockets(st, e).slice().sort(() => Math.random() - 0.5);
-    for (const it of had.slice(0, Math.min(had.length, R(1, 3)))) { lines.push(`It drops ${it}.`); gain(st, it, lines); }
+    for (const it of had.slice(0, Math.min(had.length, R(1, 2)))) { lines.push(`It drops ${it}.`); gain(st, it, lines); }
     e.items = [];
     if (has(st, "PATCH")) {                            // PATCH mends the party after a fight
       st.party = st.party.map(p => p.hp > 0 ? { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 8)) } : p);
@@ -2314,7 +2316,7 @@
     archive: ["That door has so many tabs open.", "Giving librarian. Dusty, but organized."],
     void: ["Nothing back there. Like, emotionally.", "The vibes are gone. Just gone."],
     hall: ["It's a hallway. It's giving hallway.", "Long, skinny, boring. A hallway, probably."],
-    dead: ["Dead end. I can feel it. Spiritually.", "Small vibes. Nowhere-to-go small."],
+    dead: ["Small vibes, the good kind. Someone saved me a seat.", "It's giving cozy corner. Lowkey a hug of a room."],
     plain: ["Mid. Just mid.", "Nothing special back there. No offense to it."],
   };
   // THE ROOM READ: [how loud KURA is][how hard the room pulls: calm, stirring, restless]. Her own voice, half slang
@@ -2667,6 +2669,7 @@
   }
   // It goes its way: with chance `gift`, it leaves something from its pockets behind for KURA.
   function departs(st, e, lines, gift) {
+    tally(st, "peace"); ev(st, "parted");
     const have = pockets(st, e);
     if (have.length && Math.random() < gift && (st.items || []).length < BAG_MAX) {
       const it = pick(have); lines.push(`${THE(e.name)} leaves ${it} behind.`); takeFrom(st, e, it, lines);
@@ -2713,10 +2716,11 @@
       st.extra = st.talkLine = "> " + pick(WORD_TRUCE)(p.name, rival.name);
       return show(st);
     }
-    // Now and then, an offer.
+    // Now and then, an offer: only once they've already had a chat with KURA today (the 2nd WORD on), and rarely.
     const r = Math.random();
-    if (r < 0.3 * y && memberOffer(st, p)) return show(st);
-    if (r < 0.3 * y + 0.12 && confide(st, p)) return show(st);
+    const offerOdds = p.words >= 2 ? 0.12 * y : 0;
+    if (r < offerOdds && memberOffer(st, p)) return show(st);
+    if (r >= 0.3 * y && r < 0.3 * y + 0.12 && confide(st, p)) return show(st);
     // Otherwise, banter: what's on their mind, or what they make of KURA's aura. Once in a while it helps.
     const au = aura(st).band, ap = AURA_PARTY[p.name] || AURA_FAMILY[famKey(p)];
     let line = Math.random() < 0.3 && ap ? pick(ap[au === 2 ? 1 : 0]).replace(/\{n\}/g, p.name) : lineFor({ ...FAMILY_TALK, ...PARTY_TALK }, p);
@@ -2799,6 +2803,7 @@
   }
   function offerDone(st, h, it, lines) {
     const { o, who, e } = h;
+    tally(st, "traded"); ev(st, "traded");
     if (!e) {                                          // a member: a little closer for it
       delete st.offer;
       act(st, "offer:party");
@@ -3479,7 +3484,8 @@
       killer: st.killer || "",
       stats: { pacts: pacts.length, ended: pacts.filter(q => !q.on).length, broken: k.broken || 0, trips: k.trips || 0, refused: k.refused || 0, silent: k.silent || 0, wall: k.maxWall || 0,
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
-        moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0 } }; };
+        moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
+        traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
   const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;

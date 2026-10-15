@@ -649,16 +649,16 @@
   // quoting the game's own text, except a demon's last words, which are quoted and never attributed.
   const RUMORS = {
     out: ["Someone climbed out, into open air.", "Someone reached the surface tonight."],
-    refused: ["A demon rejected a traveler's paltry gift.", "A gift was thrown back.", "Something was offered. It was not enough.", "A demon looked at a gift, and laughed."],
-    asked: ["Someone was asked if they trust the dark.", "A demon asked a question, and waited.", "A question was put to a traveler, in the dark.", "Something wanted an honest answer."],
     restored: ["A corrupted voice turned, and was made whole again.", "A broken name was mended tonight.", "Something damaged was talked back to itself."],
     trickster: ["Something ran off laughing, gift in hand.", "A gift was taken. The taker did not stay.", "Laughter, going away down a hall."],
     altar: ["An altar considered an offering, and was pleased.", "A screen in a wall glowed a little warmer.", "Something was fed, and said thank you."],
     joined: ["A stranger walked in, and stayed.", "A pact was made in the dark.", "Two walked on where one had come.", "Something old took a traveler's side."],
-    silent: ["Silence, offered instead of an answer.", "A traveler said nothing at all.", "A question went unanswered. On purpose."],
     deep: ["A wall gave up its secret, after many tries.", "Something very old came out of the stone.", "Patience was rewarded, for once."],
     left: ["Someone walked out, and did not look back.", "A pact ended badly.", "One fewer set of footsteps, somewhere below."],
     fall: ["Someone fell. The dark closed over them.", "A light went out, somewhere below.", "A run ended tonight. The dungeon noticed."],
+    traded: ["Something was handed over, and something handed back.", "A bargain in the dark. Both went home glad.", "Two things changed hands, and nobody lost."],
+    parted: ["A demon heard a few kind words, and went its way.", "Something old left in peace.", "A word was enough, tonight."],
+    moonpick: ["The moon held out two things, and someone chose.", "She offered, and was answered.", "A light came down, and was taken."],
   };
   // `mine` (a level's height): the ticker's version, which puts news from that level first and says where each
   // thing happened. The title's cards (no argument) stay as they were.
@@ -727,12 +727,16 @@
     // shows once its number is above zero, so a quiet epoch has a short feed, not a wall of zeroes.
     if (titleStats) {
       const c = titleStats.counts || {}, n = k => Number(c[k]) || 0, num = v => v.toLocaleString("en-US");
-      if (titleStats.lastFall) {
-        const mins = Math.max(0, Math.floor((SMT.now().getTime() / 1000 - titleStats.lastFall) / 60));
-        const ago = mins < 1 ? "just now" : mins < 60 ? `${mins} min ago` : mins < 2880 ? `${Math.floor(mins / 60)} hour${mins < 120 ? "" : "s"} ago` : `${Math.floor(mins / 1440)} days ago`;
-        cards.push(`Last fall: ${ago}`);
-      }
+      const ago = ts => {
+        const mins = Math.max(0, Math.floor((SMT.now().getTime() / 1000 - ts) / 60));
+        return mins < 1 ? "just now" : mins < 60 ? `${mins} min ago` : mins < 2880 ? `${Math.floor(mins / 60)} hour${mins < 120 ? "" : "s"} ago` : `${Math.floor(mins / 1440)} days ago`;
+      };
+      if (titleStats.lastFall) cards.push(`Last fall: ${ago(titleStats.lastFall)}`);
+      if (titleStats.lastOut) cards.push(`Last climb out: ${ago(titleStats.lastOut)}`);
       if (n("runs")) cards.push(`Runs ended: ${num(n("runs"))}`);
+      if (n("runs") && n("turns")) cards.push(`Average run: ${num(Math.round(n("turns") / n("runs")))} turns`);
+      if (n("runs") && n("beaten")) cards.push(`Demons beaten per run: ${(n("beaten") / n("runs")).toFixed(1)}`);
+      if (n("players") && n("unlocks")) cards.push(`Doors per player: ${(n("unlocks") / n("players")).toFixed(1)}`);
       // Who is here: devices with a living run, right now (seen in the last 5 minutes, no bots), this moon and in the
       // last day. Counts only, never who or where. Nothing shows at zero.
       const here = titleStats.here || {}, lvl = h => (h <= 4 ? `B${5 - h}F` : `${h - 4}F`), live = here.now || {};
@@ -754,13 +758,16 @@
       if (n("climbs")) cards.push(`Levels climbed: ${num(n("climbs"))}`);
       if (n("moon")) cards.push(`The moon was asked: ${num(n("moon"))}x`);
       if (n("moon")) cards.push(`The moon answered: ${num(n("moonYes"))}x`);
+      if (n("moon")) cards.push(`The moon's answer rate: ${Math.min(100, Math.round(100 * n("moonYes") / n("moon")))}%`);
+      if (n("moonTook")) cards.push(`Moon offers taken: ${num(n("moonTook"))}`);
+      if (n("traded")) cards.push(`Things traded: ${num(n("traded"))}`);
+      if (n("peace")) cards.push(`Demons that went their own way: ${num(n("peace"))}`);
       if (n("breath")) cards.push(`Out of breath: ${num(n("breath"))}x`);
       if (n("silver")) cards.push(`SILVER found: ${num(n("silver"))}`);
       if (n("rare")) cards.push(`Rare finds: ${num(n("rare"))}`);
       if (n("broken")) cards.push(`Items broken: ${num(n("broken"))}`);
       if (n("trips")) cards.push(`TRIPs reported: ${num(n("trips"))}`);
       if (n("wall")) cards.push(`Longest wall search: ${num(n("wall"))}x`);
-      if (n("refused")) cards.push(`Gifts refused: ${num(n("refused"))}`);
       if (n("silent")) cards.push(`Answered [S]ILENT: ${num(n("silent"))}x`);
     }
     cards.push(RULES.omen(SMT.utcDay(SMT.now())).text.replace(/^> /, ""));

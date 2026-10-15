@@ -63,7 +63,8 @@ async function tallyFaction(db, align, floorPts) {
 // everything else adds. "players" counts distinct senders, through the seen table (never a table scan).
 // Each value is capped per run, so one forged post can't swing a total by much. None of this ranks anyone.
 const STAT_CAPS = { pacts: 30, ended: 30, broken: 200, trips: 50, refused: 200, silent: 500,
-  beaten: 300, talks: 500, joined: 30, unlocks: 400, standby: 400, climbs: 20, moon: 400, moonYes: 400, breath: 2000, silver: 100000, rare: 100 };
+  beaten: 300, talks: 500, joined: 30, unlocks: 400, standby: 400, climbs: 20, moon: 400, moonYes: 400, breath: 2000, silver: 100000, rare: 100,
+  traded: 300, peace: 300, moonTook: 100 };
 // The instant the current lunar epoch began, in unix seconds.
 const epochStart = () => Math.floor((EPOCH_REF + epochIndex() * EPOCH_SYN * 86400000) / 1000);
 async function tallyStats(db, b, turns, who) {
@@ -89,7 +90,7 @@ async function tallyStats(db, b, turns, who) {
 // the time. No name, no run, no free text, so nothing here can carry a message or a spoiler. The newest 20 of
 // each tag are kept. Forging one is cheap and harmless: nothing ranks on these or rewards them.
 const EVENT_KINDS = ["den", "bay", "relay", "vault", "forge", "altar", "archive", "void", "hall", "dead", "plain"];
-const EVENT_TAGS = ["out", "refused", "asked", "restored", "trickster", "altar", "joined", "silent", "deep", "left", "fall", "words"];
+const EVENT_TAGS = ["out", "refused", "asked", "restored", "trickster", "altar", "joined", "silent", "deep", "left", "fall", "words", "traded", "parted", "moonpick"];
 async function titleFeed(db, botsLive) {
   const epoch = epochIndex(), counts = {}, tally = { LAW: 0, CHAOS: 0 };
   const quiet = async (fn, fallback) => { try { return await fn(); } catch (e) { return fallback; } };   // a table missing on an old database just leaves its part empty
@@ -108,6 +109,7 @@ async function titleFeed(db, botsLive) {
   for (const r of await quiet(async () => (await db.prepare(`SELECT side, count FROM faction_season WHERE epoch = ?1`).bind(epoch).all()).results, [])) if (r.side in tally) tally[r.side] = r.count;
   const last = await quiet(() => db.prepare(`SELECT MAX(made) AS made FROM scores`).first(), null);
   const top = await quiet(() => db.prepare(`SELECT floor FROM scores ORDER BY floor DESC, days DESC, made ASC LIMIT 1`).first(), null);
+  const out = await quiet(() => db.prepare(`SELECT MAX(made) AS made FROM news WHERE type = 'out'`).first(), null);   // the latest climb out, for "Last climb out"
   // The latest events, with where and who (never the name). Since v0.90 they live in `news`; while that is still
   // filling, the older `events` rows (tag and number only) top the list up.
   const events = [];
@@ -119,7 +121,7 @@ async function titleFeed(db, botsLive) {
   if (events.length < 40) for (const r of await quiet(async () => (await db.prepare(`SELECT type AS t, v, made FROM events ORDER BY id DESC LIMIT ?1`).bind(40 - events.length).all()).results, [])) events.push(r);
   here.now = await liveNow(db);
   const market = await quiet(() => marketFeed(db, botsLive), { open: [], traded: [], count: 0 });
-  return { market, epoch, law: tally.LAW, chaos: tally.CHAOS, counts, lastFall: (last && last.made) || null, deepest: (top && top.floor) || null, events, here, names, deadliest };
+  return { market, epoch, law: tally.LAW, chaos: tally.CHAOS, counts, lastFall: (last && last.made) || null, lastOut: (out && out.made) || null, deepest: (top && top.floor) || null, events, here, names, deadliest };
 }
 const cors = () => ({ "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   "access-control-allow-headers": "content-type, x-admin-key, x-key", "access-control-max-age": "86400" });

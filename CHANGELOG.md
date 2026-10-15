@@ -2,6 +2,15 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.09 - A Light Left On - Oct 15 2026, 06:15 HST
+
+![v1.09](screenshots/v1.09.png)
+
+- **The end of a wing is a friendlier place.** New names for it, and new things to say about it from your party and from KURA.
+- **Demons leave a little less behind** when they fall.
+- **Your party is slower to hand you things.** A gift now comes after a talk, and not often.
+- **The title screen's numbers are fresher.** New cards: how long a run lasts, demons beaten and doors opened per run, how often the moon answers, when someone last climbed out, how many things were traded, how many demons went their own way, and how many times the moon's offer was taken. New rumors too. The ones for things that no longer happen are gone.
+
 ## v1.08.1 - Full Stop - Oct 15 2026, 00:47 HST
 
 ![v1.08.1](screenshots/v1.08.1.png)
