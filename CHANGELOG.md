@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.12 - A Warm Little Room - Oct 15 2026, 09:34 HST
+
+![v1.12](screenshots/v1.12.png)
+
+- **Heat has a shape now.** Dealing with a demon cools the room by a third. A room turning hot wears a little on your party's patience, and that is the only thing that does.
+- **Patience bottoms out calm, not upset.** Nobody snaps, lashes out or leaves anymore. A party member who has had enough just goes quiet and content, with new lines for it.
+- **Safe or gamble.** Now and then a choice comes with a sure thing beside a bigger one that only sometimes lands: under the moon, in a hot room, at a worn wall, and when a demon holds out a wrapped gift. A miss gives nothing, and says something silly.
+- **AURA shows the heat.** After you read a room, the brackets around it (and a little of the rooms next to it) warm from yellow to red, then fade after a while.
+- **Breath comes back faster, and it's harder to run out.** Steps and talking cost less.
+- **"KURA falls into step" is a line in the log, not a popup.**
+
 ## v1.11 - Room to Breathe - Oct 15 2026, 07:31 HST
 
 - **Breath comes back faster.**

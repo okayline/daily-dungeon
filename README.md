@@ -4,7 +4,7 @@
 
 **Play it:** [okayline.itch.io/4dungeon](https://okayline.itch.io/4dungeon)
 
-<img width="60%" alt="Daily Digital Demon Dungeon, build v1.10" src="screenshots/v1.10.png" />
+<img width="60%" alt="Daily Digital Demon Dungeon, build v1.12" src="screenshots/v1.12.png" />
 
 An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played on the real lunar calendar. Open one door a day. The real moon changes how the game plays.
 

@@ -324,13 +324,25 @@
     return rows.map(r => r.join("").replace(/\s+$/, ""));
   }
 
+  // (v1.12) The heat overlay for the minimap: the same grid, with a character (48 + the room's heat) under each of a
+  // drawn room's two brackets, and a blank everywhere else. state: { at, visited, heat: { room index: heat } }.
+  function heatMap(floor, state) {
+    const W = 29, H = 5, rows = Array.from({ length: H }, () => Array(W).fill(" ")), here = floor.rooms[state.at];
+    floor.rooms.forEach((room, i) => {
+      if (!room || !state.visited[i] || room.hall || state.heat[i] === undefined) return;
+      const row = 2 + (room.r - here.r) * 2, col = 13 + (room.c - here.c) * 4, ch = String.fromCharCode(48 + Math.min(24, Math.max(0, Math.round(state.heat[i]))));
+      for (const c of [col, col + 2]) if (row >= 0 && row < H && c >= 0 && c < W) rows[row][c] = ch;
+    });
+    return rows.map(r => r.join(""));
+  }
+
   // A fresh floor as KURA arrives: only the first wing is known.
   function arrive(floor, facing) {
     const firstDoor = Object.keys(floor.rooms[0].doors)[0];
     return { at: 0, visited: [true], found: [[]], facing: facing || firstDoor };
   }
 
-  const api = { generate, grow, minimap, arrive, rng, kindBehind, isSealed, symTransform, DAYS, BONUS_KIND, ANTI_KIND };
+  const api = { generate, grow, minimap, heatMap, arrive, rng, kindBehind, isSealed, symTransform, DAYS, BONUS_KIND, ANTI_KIND };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.FLOOR = api;
 })(this);

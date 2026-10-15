@@ -191,14 +191,21 @@
         // The locked door KURA faces gets a slightly brighter #: it sits in the gap beside her @ on that side.
         const ctr = (lines[17] || "").slice(49).indexOf("@"), face = save && save.facing;
         const focus = ctr < 0 ? null : face === "N" ? [16, ctr] : face === "S" ? [18, ctr] : face === "E" ? [17, ctr + 2] : face === "W" ? [17, ctr - 2] : null;
-        const map = right.replace(/[\[)][\^v][\](]|[@^v<>&$?□=‖#+\-|]/g, (m, at) => {
+        // (v1.12) After an AURA read the brackets of the rooms it felt warm from yellow to red (the rules send the heat as save.mapHeat, and it fades out).
+        const ov = (save && save.mapHeat && save.mapHeat[i - 15]) || "", fade = save && save.heatFade != null ? save.heatFade : 1;
+        const tint = (ch, k) => {
+          const heat = ov[k] && ov[k] !== " " ? ov.charCodeAt(k) - 48 : 0;
+          return heat >= 2 ? `<span style="color:hsl(${Math.round(62 - 62 * Math.min(1, (heat - 1) / 19))},95%,58%);opacity:${(0.35 + 0.65 * fade).toFixed(2)}">${ch}</span>` : ch;
+        };
+        const map = right.replace(/[\[)][\^v][\](]|[@^v<>&$?□=‖#+\-|\[\]]/g, (m, at) => {
+          if (m === "[" || m === "]") return tint(m, at);
           // The outline walls (+ - |) are dim; a # is a locked door and stays bright. The panel's own edges are left alone.
           if (/[+\-|]/.test(m)) {
             if (at === 0 || at === right.length - 1) return m;
             const l = right[at - 1], r = right[at + 1], gap = c => c === " " || c === "[" || c === "]";
             return `<span class="wall">${m}</span>`;
           }
-          if (m.length === 3) return m[0] + `<span class="cell stairs">${m[1]}</span>` + m[2];
+          if (m.length === 3) return tint(m[0], at) + `<span class="cell stairs">${m[1]}</span>` + tint(m[2], at + 2);
           const ch = m;
           const cls = { "@": "you", "^": "you", "v": "you", "<": "you", ">": "you",
             "&": "demon", "$": "gold", "?": "goal", "□": "room", "=": "door", "‖": "door", "#": "door" }[ch];

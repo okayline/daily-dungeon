@@ -328,7 +328,11 @@
       st.tell = HEAT_TELL[after][kind];
     }
     if (after !== before) { st.statusIn = 0; st.statusKind = "air"; }   // the conditions report updates right away
+    // (v1.12) A room turning hot is the only thing that wears on the party's patience: one point each.
+    if (before < 2 && after >= 2) for (const p of st.party || []) if (p.demon && p.hp > 0) p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
   }
+  // (v1.12) Dealing with a demon cools the room by a third (fight, WORD, recruit or run).
+  function coolOff(st) { const d = st.dungeon; if (d) { const rs = RS(d); rs.heat = Math.floor(rs.heat * 2 / 3); } }
   // A stub of black candle calms the room it's lit in.
   function calm(st) { const d = st.dungeon; if (d) RS(d).heat = Math.max(0, RS(d).heat - 8); }
 
@@ -521,6 +525,10 @@
     pairs.push([G.hush(), G.breath()]);
     if (near) { const it = pick(MOON_DROPS); pairs.push([G.item(it), G.hush()], [G.item(it), G.breath()]); if (m === 4) pairs.push([G.item(it), G.item(pick(MOON_DROPS.filter(x => x !== it)))]); }
     const pr = near && Math.random() < (m === 4 ? 0.6 : 0.35) ? pick(pairs.filter(p => p.some(g => g.kind === "item"))) : pick(pairs);
+    // (v1.12) SAFE OR GAMBLE under the moon: fullness / 3 of her offers (a third at the full moon, none at the new moon) put her
+    // sure gift beside a moon thing that only half the time comes through.
+    const fullness = (1 - Math.cos(moon() / 8 * 2 * Math.PI)) / 2;
+    if (Math.random() < fullness / 3) return [G.breath(), { kind: "gamble", label: pick(["a slightly glowy parcel", "a moonlit box, shaken gently", "something silver, wrapped in dusk"]), item: pick(MOON_DROPS) }].sort(() => Math.random() - 0.5);
     return pr.sort(() => Math.random() - 0.5);
   }
   function moonLook(st) {
@@ -549,6 +557,10 @@
       case "chaos": lean(st, "CHAOS", lines); st.extra = "> The light comes down crooked and warm. KURA grins, and doesn't know why."; break;
       case "hush": st.hushDay = st.day; st.extra = "> Her light settles over KURA like a sheet. Nothing down here can hear her pockets today."; break;
       case "item": gain(st, g.item, lines); st.extra = `> A piece of the moon drops into KURA's hands: ${g.item}.`; break;
+      case "gamble":
+        if (Math.random() < 0.5) { gain(st, g.item, lines); st.extra = `> A piece of the moon drops into KURA's hands: ${g.item}.`; }
+        else st.extra = "> " + pick(FIZZLE_MOON);
+        break;
     }
     st.log = `> KURA takes ${g.label}.`.slice(0, 77);
   }
@@ -731,6 +743,20 @@
     st.breathNow = breathNow(st, true); st.breathMax = BREATH_MAX;                  // for the moon strip under the map, which closes as she tires
     if (st.look && !st.dead) st.roomName = moon() === 0 ? "THE SKY" : "THE MOON";   // looking up, the slot under the map names what she sees
     st.map = FLOOR.minimap(d.floor, { at: d.at, facing: st.facing, visited: allRooms(d).map(s => s.visited), found: allRooms(d).map(s => s.found) });
+    // (v1.12) After an AURA read of the room, the map's brackets warm from yellow to red by heat: this room exactly, the
+    // rooms its doors lead to (the ones already drawn) only by tier. It fades over the next 20 actions.
+    delete st.mapHeat; delete st.heatFade;
+    if (st.heatSense && !st.dead) {
+      const left = st.heatSense.until - (st.steps || 0);
+      if (left <= 0) delete st.heatSense;
+      else {
+        const tierHeat = [0, 6, 12, 18], heat = {}, here = d.floor.rooms[d.at];
+        heat[d.at] = RS(d).heat;
+        for (const j of Object.values(here.doors || {})) if (d.floor.rooms[j] && j !== d.at) heat[j] = tierHeat[heatTier(RS(d, j).heat)];
+        st.mapHeat = FLOOR.heatMap(d.floor, { at: d.at, visited: allRooms(d).map(x => x.visited), heat });
+        st.heatFade = Math.min(1, left / 6);
+      }
+    }
     const door = dir => doorWall(room, dir);
     if (st.dead) {
       // Game over: the view goes dark and the third line points to RST.
@@ -1277,9 +1303,33 @@
     const atFixture = w.fixtureDir === dir && pile.includes("fixture") && !found.includes("fixture");
     st.log = say(noise ? pick(atFixture ? FIXTURE_NOISES : NOISES) : pick(MISSES));
     if (!nag(st)) drift(st);
+    hotGamble(st);
+    wornGamble(st, dir, w, pile);
     return show(st);
   }
-
+  // (v1.12) SAFE OR GAMBLE in a hot room: a party member points out the hot wall. [1] takes what's loose (two breaths,
+  // sure); [2] digs deep (half the time something good turns up, otherwise nothing, never a penalty).
+  // Hot (heat 12+) asks 1 time in 6 after a search, the top tier (18+) 1 in 3.
+  function hotGamble(st) {
+    const d = st.dungeon, t = heatTier(RS(d).heat), friends = (st.party || []).slice(1).filter(p => p.hp > 0);
+    if (t < 2 || st.question || st.encounter || !friends.length || Math.random() >= (t >= 3 ? 1 / 3 : 1 / 6)) return;
+    const p = pick(friends);
+    st.question = { who: p.name, pool: "HOT", k: 0, lab: ["Loose", "Dig"] };
+    st.extra = `> ${p.name}: "The wall is hot. Take what's loose, or dig?"`;
+    tally(st, "gambles");
+  }
+  // (v1.12) SAFE OR GAMBLE at a worn wall (one that still hides something and has been worked a while, the same wearing-thin point the near-miss noises use): [1] works it steadily
+  // (a sure bit of progress), [2] digs deep (the room heats up; half the time the next find is ready, otherwise only dust).
+  // Likelier as the room heats: 1 in 12 cold up to 1 in 3 at the hottest.
+  function wornGamble(st, dir, w, pile) {
+    const d = st.dungeon, friends = (st.party || []).slice(1).filter(p => p.hp > 0), heat = Math.min(1, RS(d).heat / HEAT_MAX);
+    if (st.question || st.encounter || !friends.length || !(w.taken[dir] < pile.length && ((w.prog && w.prog[dir]) || 0) >= 3)) return;
+    if (Math.random() >= 1 / 12 + (1 / 3 - 1 / 12) * heat) return;
+    const p = pick(friends);
+    st.question = { who: p.name, pool: "WORN", k: 0, lab: ["Steady", "Dig"], dir };
+    st.extra = `> ${p.name}: "This wall is worn thin. Steady, or dig deep?"`;
+    tally(st, "gambles");
+  }
   // GO: through the door toward dir (N/E/S/W; default: the way she faces). Doors that are already open are free.
   // A LOCKED door (its room not built yet) takes the day's one charge; with it spent, she can't open another until dawn.
   // A wall stops her with a message and costs nothing.
@@ -1344,7 +1394,7 @@
         return show(st);
       }
       if (locked) today(st).stepped = true;                  // the door takes the day's charge only if she gets through it
-      st.encounter = null;
+      st.encounter = null; coolOff(st);
       st.roundOver = true;
       st.round = [`KURA runs ${NAME[dir]} and leaves ${the(e.name)} behind.`, ...lines];
       tally(st, "fled");
@@ -1969,10 +2019,8 @@
         st.log = fitIt(st.log, the);
         // The break itself wears on everyone: each member loses a point of patience (a CHAOS one
         // at zero may lash out). Someone who loved it takes it harder, with a line of grief.
-        for (const q of st.party.slice(1)) if (q.hp > 0) q.patience = Math.max(0, (q.patience ?? PATIENCE) - 1);
         if (fans.length) {
           const p = pick(fans);
-          p.patience = Math.max(0, p.patience - 1);
           st.extra = st.fidgetLine = "> " + pick(GRIEF[p.name] || GRIEF[p.family || "folklore"]).replace(/\{n\}/g, p.name);
         } else fidget(st, 20);
         if (Math.random() < encounterChance(st) && !st.encounter && !st.question) {
@@ -2056,7 +2104,7 @@
     }
     st.log = `> ${THE(e.name)} falls. ${n} ICHOR.`;
     st.dungeon.scent = { room: st.dungeon.at, text: "Copper in the air" };
-    st.encounter = null;
+    st.encounter = null; coolOff(st);
   }
   function round(st, fn, idle, demonFirst) {
     st = copy(st);
@@ -2088,7 +2136,7 @@
           const friends = st.party.slice(1).filter(q => q.hp > 1);
           if (friends.length && Math.random() < 1 / 3) {
             const q = pick(friends), dmg = Math.min(q.hp - 1, hit * 2);
-            q.hp -= dmg; q.patience = Math.max(0, (q.patience ?? PATIENCE) - 2);
+            q.hp -= dmg;
             lines.push(`KURA swings at ${the(e.name)}... and hits ${q.name}. -${dmg}`);
             lines.push(`${q.name}: "${pick(["OW?? KURA!!", "Watch it!", "Not me! THEM!", "What are you DOING?"])}"`);
             continue;
@@ -2154,6 +2202,7 @@
   const DISSONANCE_SKIP = { 1: 0, 2: 1 };
   const DISSONANCE_LINGER = { 1: 0, 2: 1 };
   function wearTension(st, table) {
+    return;      // (v1.12) tension no longer wears on patience
     for (const p of st.party) if (p.demon && p.hp > 0) {
       const w = table[tensionOf(st, p)] || 0;
       if (w) p.patience = Math.max(0, (p.patience ?? PATIENCE) - w);
@@ -2383,6 +2432,7 @@
     if (breathNow(st, true) < AURA_BREATH) { nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
     spendBreath(st, AURA_BREATH);
     act(st, "aura:room");
+    st.heatSense = { until: (st.steps || 0) + 20 };
     tally(st, "auraReads");
     const band = aura(st).band, pull = Math.min(2, heatTier(RS(d).heat)), r = ROOM_READ[band][pull];
     st.log = auraLine(ROOM_LEAD, `"${pickMix(r.fun, r.plain)}"`);
@@ -2555,11 +2605,11 @@
   };
   // A member wearing thin: KURA checks in, and it helps.
   const WORD_CHECKIN = {
-    ELF: ['ELF: "...Thank you for asking. I am better."', 'ELF lets out a long breath. "Better now."'],
-    PIXIE: ['PIXIE: "Okay. Okay, I needed that."', "PIXIE leans on KURA's shoulder for a second."],
-    "CU SITH": ["CU SITH leans its whole weight on KURA. Better.", "CU SITH's ears come back up."],
-    data: ['{n}: "STATUS RESTORED. THANK YOU, USER."'], hardware: ['{n}: "you checked on me? ok. ok. better now"'],
-    hybrid: ['{n}: "Both halves of me needed that."'], folklore: ['{n}: "You have good manners, for a mortal. I am better."'],
+    ELF: ['ELF: "...Thank you for asking. All is well."', 'ELF lets out a long, easy breath. "Lovely."'],
+    PIXIE: ['PIXIE: "Aww. Okay. I\'m back!"', "PIXIE leans on KURA's shoulder for a second."],
+    "CU SITH": ["CU SITH leans its whole weight on KURA. Warm.", "CU SITH's ears come up, and its tail starts."],
+    data: ['{n}: "STATUS: PLEASANT. THANK YOU, USER."'], hardware: ['{n}: "you checked on me? ok. ok. nice"'],
+    hybrid: ['{n}: "Both halves of me liked that."'], folklore: ['{n}: "You have good manners, for a mortal."'],
   };
   // A LAW member and a CHAOS one, talked into a truce.
   const WORD_TRUCE = [(a, b) => `${a} and ${b} argue. Then, somehow, agree.`, (a, b) => `KURA gets ${a} and ${b} to call a truce.`,
@@ -2599,6 +2649,24 @@
   const demonSays = (e, table) => (beast(e) ? table.beast : `${e.name}: "${table[e.family || "folklore"] || table.folklore}"`);
 
   // Two different things from a list, one from its louder half and one from its quieter half where it can.
+  // (v1.12) SAFE OR GAMBLE on a "give" offer: the louder of the two things comes wrapped up, "maybe": half the time it is the
+  // real thing, otherwise nothing (no penalty). How often an offer comes this way depends on the giver's personality.
+  const GAMBLE_ODDS = { SLY: 1 / 4, DREAMY: 1 / 6, HAUGHTY: 1 / 8, GRUFF: 1 / 10, PRIM: 1 / 12 };
+  const WRAPPED = ["a slightly suspicious box", "an interestingly-wrapped parcel", "a bag with $$$ on the side", "a lumpy package, tied with hope",
+    "a box that rattles knowingly", "a parcel with a bow and a secret"];
+  // (v1.12) What a lost gamble says. Funny, never mean: nothing is lost.
+  const FIZZLE_WRAP = ["KURA unwraps it... *wind whooshes*", "It's a whole lot of... nothing.", "KURA opens it. A very nice bit of string.",
+    "KURA unwraps it. It was a hug. Wait, no, it was air.", "KURA opens it slowly. Dramatic. Empty.", "Inside: the concept of a gift."];
+  const FIZZLE_DIG = ["KURA digs... *tumbleweed*", "Nothing but hot dust. A very confident hot dust.", "KURA digs deep and finds more wall.",
+    "The wall says nothing. Loudly.", "KURA digs and digs. The stone is unimpressed.", "A whole lot of... nothing."];
+  const FIZZLE_MOON = ["The light wavers, and thins, and is gone. The moon looks sorry.", "KURA reaches up... *wind whooshes*",
+    "The moon hands over a handful of glitter. It was just glitter.", "The moon winks. That was the gift.", "A pale, empty glow. Nice try, moon."];
+  function wrapOne(o, who) {
+    if (o.dir !== "give" || !o.items || o.items.length < 2 || Math.random() >= (GAMBLE_ODDS[personaOf(who)] || 0)) return o;
+    const j = TIERS.indexOf(TIER[o.items[0]]) >= TIERS.indexOf(TIER[o.items[1]]) ? 0 : 1;
+    o.gamble = j; o.real = o.items[j]; o.items[j] = pick(WRAPPED);
+    return o;
+  }
   function twoOf(list) {
     const u = [...new Set(list)].sort((a, b) => TIERS.indexOf(TIER[b]) - TIERS.indexOf(TIER[a]));
     if (u.length < 2) return null;
@@ -2710,7 +2778,7 @@
     };
     let r = Math.random() * Math.max(1, w.offer + w.notice + w.join + w.gift);
     if ((r -= w.offer) < 0) {
-      e.stage = "offer"; e.offer = { dir: "give", items: twoOf(e.items) };
+      e.stage = "offer"; e.offer = wrapOne({ dir: "give", items: twoOf(e.items) }, e);
       lines.push(demonSays(e, DEMON_OFFER));
     } else if ((r -= w.notice) < 0) {
       e.stage = "offer"; e.offer = { dir: "ask", items: bagWants(st, e) };
@@ -2803,7 +2871,7 @@
     const give = twoOf(pockets(st, p)), ask = bagWants(st, p);
     const dir = give && (ask.length < 2 || Math.random() < 0.7) ? "give" : ask.length >= 2 ? "ask" : null;
     if (!dir) return false;
-    st.offer = { who: p.name, dir, items: dir === "give" ? give : ask };
+    st.offer = wrapOne({ who: p.name, dir, items: dir === "give" ? give : ask }, p);
     st.extra = "> " + lineFor(dir === "give" ? OFFER_GIVE : OFFER_ASK, p);
     return true;
   }
@@ -2900,6 +2968,13 @@
     if (i === null) return offerLeave(st, h);
     const it = o.items[i];
     if (!it) return show(st);
+    if (o.gamble === i) {                              // the wrapped one: half the time the real thing, otherwise only string
+      const real = o.real; delete o.gamble; delete o.real;
+      if (Math.random() < 0.5) { o.items[i] = real; return offerPick(st, i); }
+      const f = pick(FIZZLE_WRAP); lines.push(f); o.fizzleLine = f;
+      h.fizzle = true;
+      return offerDone(st, h, "the wrapping", lines);
+    }
     if (o.dir === "give" && (st.items || []).length >= BAG_MAX) {   // a full bag: it's a swap now
       o.pick = i;
       if (e) { e.stage = "trade"; st.round = [`KURA takes ${it}.`, beast(e) ? OFFER_TRADE.beast[0] : lineFor(OFFER_TRADE, e)]; st.roundOver = false; }
@@ -2944,6 +3019,7 @@
       delete st.offer;
       act(st, "offer:party");
       who.patience = Math.min(PATIENCE + 2, (who.patience ?? PATIENCE) + 1);
+      if (h.fizzle) { st.log = "> " + (o.fizzleLine || "KURA unwraps it... *wind whooshes*"); st.extra = st.talkLine = `> ${who.name} looks delighted anyway.`; return show(st); }
       st.log = fit77(o.dir === "give" ? `> KURA takes ${it} from ${who.name}.` : `> KURA gives ${it} to ${who.name}.`);
       st.extra = st.talkLine = "> " + (o.dir === "give" ? `${who.name} keeps the other one.` : lineFor(OFFER_THANKS, who));
       return show(st);
@@ -3046,30 +3122,32 @@
   // this same number rather than a second one -- PARTY_TENSE/FAMILY_TENSE below is its own tell,
   // shown instead of the ordinary tired line when tension, not talk fatigue, is what's at zero.)
   const PATIENCE = 5;
+  // (v1.12) The bottom of patience is CONTENT, not upset: these are the lines a member gives when they have gone calm and
+  // quiet. [0] is the calmest, [2] barely there. Nobody snaps, lashes out or leaves.
   const PARTY_TIRED = {
-    ELF: [['ELF pretends not to hear.', 'ELF has turned her back.'],
-      ['ELF sighs, long and pointed.', 'ELF: "Talk to the dog."'],
-      ['ELF: "You\'ve asked me that already."', 'ELF: "Must you?"']],
-    PIXIE: [['PIXIE flies to the far side of the room.', 'PIXIE hums loudly over KURA.'],
-      ['PIXIE: "I\'m not talking to you right now."', 'PIXIE sticks out her tongue.'],
-      ['PIXIE: "You talk a LOT, you know that?"', 'PIXIE: "Again? Okay. Fine. Hi."']],
-    "CU SITH": [['CU SITH pretends to be asleep.', 'CU SITH looks at KURA, then away.'],
-      ['CU SITH lies down facing the wall.', 'CU SITH flattens its ears.'],
-      ['CU SITH yawns at KURA.', 'CU SITH thumps its tail once. Just once.']],
+    ELF: [['ELF sits very still, listening to nothing in particular.', 'ELF watches the dust drift, quite at peace.'],
+      ['ELF hums three notes and loses the fourth.', 'ELF: "Hm. Yes. Lovely, whatever it is."'],
+      ['ELF: "I was only thinking. Go on."', 'ELF smiles at the ceiling. "Yes, little lantern?"']],
+    PIXIE: [["PIXIE has curled up in KURA's hood.", "PIXIE is watching a speck of dust like it's the best show ever."],
+      ['PIXIE: "Mmm. Hi. I\'m just... glowing."', 'PIXIE does a slow, lazy loop in the air.'],
+      ['PIXIE: "Hm? Oh. Sure. Whatever you like."', "PIXIE yawns, sparkles a little, and settles on KURA's shoulder."]],
+    "CU SITH": [['CU SITH is asleep. Its tail still wags.', 'CU SITH rests its chin on its paws, eyes half shut.'],
+      ['CU SITH lies down beside KURA with a long, happy sigh.', 'CU SITH blinks slowly at her.'],
+      ['CU SITH yawns, then thumps its tail twice.', "CU SITH leans against KURA's leg."]],
   };
   const FAMILY_TIRED = {
-    data: [['{n} does not respond. 0 bars.', '{n}: "429"'],
-      ['{n}: "RATE LIMIT EXCEEDED."', '{n}: "PLEASE WAIT."'],
-      ['{n}: "QUERY ALREADY ANSWERED."', '{n}: "REPEAT REQUEST DETECTED."']],
-    hardware: [['{n} has switched itself off.', '{n}: "..."'],
-      ['{n}: "sleep mode. sleep mode."', '{n} plays a hold tone.'],
-      ['{n}: "you said that already. it\'s ok"', '{n}: "buffer full. sorry"']],
-    hybrid: [['{n} folds into the wires and stays there.', '{n} is pretending to be furniture.'],
-      ['{n} answers only in static.', '{n} turns half its face away.'],
-      ['{n}: "Your voice is wearing a groove in me."', '{n}: "We have spoken. Enough."']],
-    folklore: [['{n} will not look at KURA.', '{n} has gone very, very still.'],
-      ['{n}: "Speak once more and I bite."', '{n} glares.'],
-      ['{n}: "Mortals never know when to stop."', '{n}: "Again? Truly?"']],
+    data: [['{n}: "IDLE. ALL QUIET. GOOD."', '{n} dims its status lights to a soft glow.'],
+      ['{n}: "PROCESSING AT A RELAXED PACE."', '{n}: "STANDING BY. NO COMPLAINTS."'],
+      ['{n}: "AWAITING YOUR NEXT QUERY. HAPPILY."', '{n}: "LOW POWER MODE. IT IS NICE."']],
+    hardware: [['{n} idles with a contented click.', '{n} hums, warm and steady.'],
+      ['{n}: "sleep mode. good sleep mode"', '{n} plays a soft little tune to itself.'],
+      ['{n}: "just listening to the quiet. it\'s nice"', '{n}: "all good here. take your time"']],
+    hybrid: [['{n} settles into the wires like a cat on a sill.', '{n} is quietly dreaming with half its face.'],
+      ['{n} hums in two voices, in harmony.', '{n} lets the static wash over it, pleased.'],
+      ['{n}: "Both halves are at rest. Go on."', '{n}: "A quiet moment. I will keep it."']],
+    folklore: [['{n} sits in the dark like an old stone, at ease.', '{n} has gone very still, and pleased with it.'],
+      ['{n}: "Mm. A pleasant dark, this."', '{n} watches the shadows, smiling slightly.'],
+      ['{n}: "Take your time, child. I am in no hurry."', '{n}: "I was only enjoying the quiet."']],
   };
   // The tell for Dissonance specifically: shown in place of PARTY_TIRED/FAMILY_TIRED's zero-patience
   // line whenever the member currently has unresolved tension with someone else standing, so a player
@@ -3168,6 +3246,36 @@
     const p = (st.party || []).find(m => m.name === q.who);
     st.question = null;
     if (!p) return show(st);
+    if (q.pool === "HOT") {
+      delete st.tell;
+      p.patience = Math.min(PATIENCE + 2, (p.patience ?? PATIENCE) + 1);
+      if (yes) {
+        const n = Math.min(BREATH_MAX, breathNow(st, true) + 2); if (n >= BREATH_MAX) delete st.breath; else st.breath = { n, at: TIME.now().getTime() + BREATH_WAIT };
+        st.log = `> KURA takes what's loose.`; st.extra = st.talkLine = "> A little comes away in her hands. She breathes easier.";
+      } else if (Math.random() < 0.5) {
+        const lines = [], got = pick(names(Math.random() < 0.25 ? "RARE" : "UNCOMMON"));
+        gain(st, got, lines);
+        st.log = `> KURA digs deep.`; st.extra = st.talkLine = `> Something gives. KURA pulls out ${got}.`;
+      } else { st.log = `> KURA digs deep.`; st.extra = st.talkLine = "> " + pick(FIZZLE_DIG); }
+      tally(st, "answers");
+      return show(st);
+    }
+    if (q.pool === "WORN") {
+      delete st.tell;
+      const d = st.dungeon, w = walls(d, d.at), dir = q.dir;
+      p.patience = Math.min(PATIENCE + 2, (p.patience ?? PATIENCE) + 1);
+      w.prog = w.prog || {}; w.need = w.need || {};
+      const need = ((w.need[dir] && w.need[dir][w.taken[dir]]) || 7) * Math.pow(1.5, w.taken[dir]);
+      if (yes) { w.prog[dir] = (w.prog[dir] || 0) + 1.5; st.log = "> KURA works the worn wall, steady."; st.extra = st.talkLine = "> It gives a little. That helps."; }
+      else {
+        heatUp(st, 2);
+        st.log = "> KURA digs deep.";
+        if (Math.random() < 0.5) { w.prog[dir] = Math.max(w.prog[dir] || 0, need); st.extra = st.talkLine = "> Something shifts behind the stone. One more search."; }
+        else st.extra = st.talkLine = "> " + pick(FIZZLE_DIG);
+      }
+      tally(st, "answers");
+      return show(st);
+    }
     if (!ASK[q.pool]) return show(st);          // a question saved before v1.10 (a last-chance or nagging one) just goes away
     const [line, dp, why] = ASK[q.pool][q.k][yes ? 1 : 2];
     p.patience = Math.max(0, Math.min(PATIENCE + 2, (p.patience ?? PATIENCE) + dp));
@@ -3181,6 +3289,7 @@
   // A party member with no patience left, pushed again: half the time they snap. CHAOS members lash
   // out at KURA (never fatally); LAW and NEUTRAL ones leave the party for good. True if they snapped.
   function snap(st, p) {
+    return false;      // (v1.12) the bottom of patience is CONTENT: nobody snaps, lashes out or leaves
     if (p.patience !== 0) { delete p.warned; return false; }
     if (!p.warned) { p.warned = true; return false; }          // the first push at zero only gets a warning (their tired line); the next can snap
     if (Math.random() >= 0.5) return false;
@@ -3198,7 +3307,7 @@
   }
   // DOING THE SAME THING OVER AND OVER (the same wall, turning round and round, searching a door):
   // after a few repeats the party starts to say something, more often the longer it goes on, and
-  // each remark costs that member a point of patience (so it can end in a snap, like any pestering).
+  // the remarks are flavor only now (v1.12): they cost nothing.
   const LOOPED = {
     ELF: ['ELF: "You have searched that wall a hundred times."', 'ELF: "Are you well?"', "ELF watches KURA, then the wall, then KURA.",
       'ELF: "If you stare long enough, it will not blink first."', 'ELF: "I have lived nine hundred years. This is the longest."',
@@ -3239,7 +3348,6 @@
     if (n < 8 || !friends.length || Math.random() >= Math.min(0.5, 0.04 * (n - 7))) return false;
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; return true; }
-    p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
     if (p.patience > 1 && banterAsk(st, p)) return true;
     const lines = p.patience <= 1 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[p.patience] : (LOOPED[p.name] || LOOPED[p.family || "folklore"]);
     st.extra = "> " + pick(lines.filter(l => "> " + l.replace(/\{n\}/g, p.name) !== st.extra)).replace(/\{n\}/g, p.name);
@@ -3259,7 +3367,6 @@
     if (!friends.length || Math.random() >= Math.min(0.5, 0.03 + 0.02 * w)) { if (st.extra === st.fidgetLine) st.extra = ""; return; }
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; st.fidgetLine = st.extra; return; }   // line 2 keeps the item; line 3 the snap
-    p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
     if (p.patience > 2 && banterAsk(st, p)) { st.fidgetLine = st.extra; return; }
     const lines = p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[p.patience] : FIDDLE;
     st.extra = st.fidgetLine = "> " + pick(lines).replace(/\{n\}/g, p.name);
@@ -3364,7 +3471,6 @@
     const friends = st.party.slice(1).filter(p => p.hp > 0);
     if (friends.length) {
       const p = pick(friends);
-      p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
       st.extra = "> " + pick(DRINK_REACT[p.name] || DRINK_REACT[p.family || "folklore"]).replace(/\{n\}/g, p.name);
     }
     return show(st);
@@ -3490,7 +3596,7 @@
     st.roundOver = true;
     return show(st);
   }
-  function leaves(st, e) { st.log = `> ${THE(e.name)} leaves.`; st.encounter = null; }
+  function leaves(st, e) { st.log = `> ${THE(e.name)} leaves.`; st.encounter = null; coolOff(st); }
   // A pact ends when the demon leaves the party.
   function endPact(st, name) { const p = (st.pacts || []).find(q => q.name === name && q.on); if (p) p.on = false; }
   function recruit(st, e, lines) {
@@ -3502,7 +3608,7 @@
     (st.pacts = st.pacts || []).push({ name: e.name, floor: st.floor, day: st.day, on: true });      // the pact is kept on record
     lean(st, e.align, lines);
     st.log = `> ${e.name} joins the party.`;
-    st.encounter = null;
+    st.encounter = null; coolOff(st);
   }
 
   // The end-of-run summary: label/value pairs for the log screen.
