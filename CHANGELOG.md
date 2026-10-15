@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.04.2 - A Moment's Peace - Oct 14 2026, 18:55 HST
+
+![v1.04.2](screenshots/v1.04.2.png)
+
+- **The bottom line is more patient.** It waits a few seconds after KURA does something before it starts a new line, and after a search it waits until the result has finished.
+
 ## v1.04.1 - Show, Don't Tell - Oct 14 2026, 18:50 HST
 
 ![v1.04.1](screenshots/v1.04.1.png)

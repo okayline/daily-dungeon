@@ -2014,7 +2014,7 @@
   var typeQuiet = false, typeHoldUntil = 0;
   // LINE 3 (v1.04.1): something to say next, ahead of the usual round: the dungeon noticing KURA's aura change, or the
   // moon reacting to a fight just ended. It waits for the line's next gap, so a search beat can't swallow it.
-  var line3Next = null;
+  var line3Next = null, line3Calm = 0;
   // In a fight the line goes quiet, and only says something when she gets hit.
   const OW = ["Ow...", "That hurt.", "Okay. Ow.", "Rude.", "That's going to bruise.", "Not the face.", "Ow ow ow.", "Ugh."];
   function line3After(name, hadFight, kuraHp) {
@@ -2040,7 +2040,8 @@
     let wait = 300;
     try {
       if (atTitle || !save || !save.dungeon) { wait = 500; }
-      else if (typeQuiet) { wait = 300; }
+      else if (typeQuiet || searchBeat) { wait = 300; line3Calm = Date.now(); }   // still searching: the 3 seconds count from when it's done
+      else if (typeMode === "gap" && Date.now() - line3Calm < 3000) { wait = 300; }   // (v1.04.2) patient: 3 seconds after the last action
       else if (typeMode === "gap") {
         // (This line never says KURA: that name belongs to the line above, where she acts.)
         const status = String(save.status || "").replace(/^> /, "").replace(/KURA is/g, "She is").replace(/\bKURA\b/g, "she").trim(), feed = tickerFeed();
@@ -2088,6 +2089,7 @@
   }
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   function act(name) {
+    line3Calm = Date.now();                          // line 3 waits a moment after anything she does before it starts a new line
     if (!searchGo && !searchBeat) beatLine1 = null;     // the party's reaction to a search lasts until she does something else
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
     // screen (resetBox() -> answerConfirm(true) -> act("reset")); that's the title's own exit into the game.
