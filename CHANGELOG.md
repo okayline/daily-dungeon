@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.07.1 - Clear Skies - Oct 15 2026, 00:20 HST
+
+![v1.07.1](screenshots/v1.07.1.png)
+
+- **The place and time are gone from the corner of the sky.** The time is already up top.
+
 ## v1.07 - Look Up - Oct 15 2026, 00:18 HST
 
 ![v1.07](screenshots/v1.07.png)

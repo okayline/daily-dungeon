@@ -164,7 +164,7 @@
     return "#" + NEU.map((v, i) => Math.round(v + (end[i] - v) * Math.abs(t)).toString(16).padStart(2, "0")).join("");
   }
   // (v1.07) THE NIGHT SKY, when KURA looks up: the view's columns (screen rows 6-20) get their stars colored, the
-  // guide's names in their pastels, and the place and time tucked small into the sky's bottom-right corner.
+  // guide's names in their pastels. (v1.07.1: the place-and-time stamp is gone; the header already has the time.)
   function skyLeft(line, i) {
     const sky = save && save.look && SMT.lastSky, y = i - 6;
     if (!sky || y < 0 || y >= sky.rows.length) return null;
@@ -177,7 +177,6 @@
       if (!col) out += esc(ch);
       else if (col[0] === "#") out += `<span class="cell skystar" style="color:${col};text-shadow:0 0 6px ${col}"><span class="g">${esc(ch)}</span></span>`;
       else out += `<span class="${col}">${esc(ch)}</span>`;
-      if (y === 11 && x === 45) out += `<span class="skystamp-at"><span class="skystamp">${esc(sky.stamp)}</span></span>`;
     }
     return out + esc(line[48] || "");
   }
