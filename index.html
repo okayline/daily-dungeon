@@ -150,6 +150,7 @@
 <script src="floor.js"></script>
 <script src="rules.js"></script>
 <script>
+  var PERIOD_STOP = 1000;   // (v1.08.1) a period is a full one-second stop wherever text types out (var: used before this script finishes running)
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   let save = null;
   // TITLE SCREEN: shown first on every load (even over a save in progress -- CONTINUE is the explicit
@@ -1797,8 +1798,13 @@
     };
     const scroll = !!(A.script && !A.result);          // its own talk scrolls in from the right; the answer types
     const W = IN - 2, stopAt = Math.min(0, W - say.length);
+    let held = 0, heldAt = -1;                          // (v1.08.1) its typing stops a full second at each period
     const paint = () => {
-      const typed1 = Math.min(say.length, Math.floor(tick / 2));
+      let typed1 = Math.min(say.length, Math.floor(tick / 2));
+      if (!scroll && typed1 > 0 && typed1 < say.length && say[typed1 - 1] === "." && say[typed1] !== "." && heldAt !== typed1) {
+        if (held < Math.round(PERIOD_STOP / 55)) { held++; s1.textContent = PAD + "|" + (" " + say.slice(0, typed1) + "_").padEnd(IN) + "|"; return; }
+        heldAt = typed1; held = 0;
+      }
       const done1 = scroll ? W - tick <= stopAt : typed1 >= say.length;
       const typed2 = A.result ? Math.max(0, Math.min(face.length, Math.floor((tick - say.length * 2 - 8) / 3))) : 0;
       const cursor = Math.floor(tick / 8) % 2 === 0 ? "_" : " ";
@@ -1833,7 +1839,7 @@
   // the damage brightens when it locks in); KURA's lines and reads type out; a party member types a touch slower;
   // the party's strike shows whole, a beat, then its damage types in. Every period is a full one-second stop. A
   // click or Enter finishes the line being spoken. No glow on any of it.
-  const VOICE_GLYPHS = "#%@!&$*?/\\<>=+~", NAME_BEAT = 450, PERIOD_STOP = 1000;
+  const VOICE_GLYPHS = "#%@!&$*?/\\<>=+~", NAME_BEAT = 450;
   let speaking = null;                                   // finishes the line being spoken, while one is
   function voiceOf(text, e) {
     const t = String(text), n = e ? e.name : "", members = ((save && save.party) || []).slice(1).map(p => p.name);
@@ -1947,7 +1953,9 @@
       if (doneSeen !== key && beats.length > 1) {
         doneSeen = key;
         const hide = beats.slice(1); hide.forEach(g => g.forEach(n => { n.style.visibility = "hidden"; }));
-        const step = () => { const g = hide.shift(); if (g) g.forEach(n => { n.style.visibility = ""; }); if (hide.length) doneTimer = setTimeout(step, 700); else { doneTimer = null; doneReveal = null; doneAt = Date.now() - 600; } };
+        const step = () => { const g = hide.shift(); if (g) g.forEach(n => { n.style.visibility = ""; });
+          const said = g ? g.map(n => n.textContent).join(" ").trim() : "";
+          if (hide.length) doneTimer = setTimeout(step, /\.["']?$/.test(said) ? PERIOD_STOP : 700); else { doneTimer = null; doneReveal = null; doneAt = Date.now() - 600; } };   // (v1.08.1) a line ending in a period holds a full second
         doneReveal = () => { if (doneTimer) clearTimeout(doneTimer); doneTimer = null; doneReveal = null; hide.splice(0).forEach(g => g.forEach(n => { n.style.visibility = ""; })); doneAt = Date.now() - 600; };
         doneTimer = setTimeout(step, 700);
       }
@@ -2253,7 +2261,7 @@
       } else if (typeMode === "type") {
         typeN++;
         const ch = typeLine[typeN - 1];
-        wait = /[.,:;!?]/.test(ch) ? 420 : ch === " " ? 120 : 80 + Math.random() * 70;     // an unhurried hand: about eight letters a second, a breath at punctuation
+        wait = ch === "." && typeLine[typeN] !== "." ? PERIOD_STOP : /[.,:;!?]/.test(ch) ? 420 : ch === " " ? 120 : 80 + Math.random() * 70;     // an unhurried hand: about eight letters a second, a breath at punctuation, a full second at a period (v1.08.1)
         if (typeN >= typeLine.length) { typeMode = "hold"; wait = 4000; }   // a finished line stays four seconds
       } else if (typeMode === "hold") { if (Date.now() < typeHoldUntil) wait = 300; else { typeMode = "delete"; wait = 30; } }
       else if (typeMode === "delete") { typeN = Math.max(0, typeN - 1); wait = 45; if (typeN === 0) { typeMode = "gap"; wait = 2200; } }   // one letter at a time, about twenty a second
@@ -2323,9 +2331,9 @@
       let dots = 0, typed = 0;
       typeHush();
       const step = () => {
-        if (dots < 3) { dots++; save.log = head + ".".repeat(dots); draw(); searchBeat = setTimeout(step, 200); return; }
+        if (dots < 3) { dots++; save.log = head + ".".repeat(dots); draw(); searchBeat = setTimeout(step, dots === 3 ? PERIOD_STOP : 200); return; }   // (v1.08.1) a full stop after the dots, and at every period
         typed = Math.min(rest.length, typed + 1); save.log = head + "... " + rest.slice(0, typed); draw();
-        if (typed < rest.length) { searchBeat = setTimeout(step, 30); return; }
+        if (typed < rest.length) { searchBeat = setTimeout(step, rest[typed - 1] === "." && rest[typed] !== "." ? PERIOD_STOP : 30); return; }
         searchBeat = null; save.log = full; typeQuiet = false; draw();
       };
       save.log = head; draw();
@@ -2371,10 +2379,10 @@
           best = /Stairs lead up/.test(full) && !gained.some(w => w) ? "stairs" : (gainedNames.map(n => RULES.tierOf(n)).find(t => t === "MOON" || t === "MYTHIC") || gainedNames.map(n => RULES.tierOf(n)).find(t => t === "RARE") || null);
           if (good) beatLine1 = partyLeans();
           save.log = head; draw();
-          searchBeat = setTimeout(step, extra ? MORE_DOT_MS : TYPE_MS);
+          searchBeat = setTimeout(step, extra ? MORE_DOT_MS : PERIOD_STOP);     // (v1.08.1) a full stop after the dots
           return;
         }
-        if (extra > 0) { extra--; head += "."; save.log = head; draw(); searchBeat = setTimeout(step, MORE_DOT_MS); return; }
+        if (extra > 0) { extra--; head += "."; save.log = head; draw(); searchBeat = setTimeout(step, extra ? MORE_DOT_MS : PERIOD_STOP); return; }
         // Type the current sentence a letter at a time; between sentences, a beat.
         const sentence = parts[shown] || "";
         if (typed < sentence.length) {

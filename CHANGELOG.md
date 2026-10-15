@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.08.1 - Full Stop - Oct 15 2026, 00:47 HST
+
+![v1.08.1](screenshots/v1.08.1.png)
+
+- **A period is a full stop everywhere text types out:** the bottom line, AURA reads and searches on line 2, the wall terminal, and the end-of-fight screen, not just fights. After the dots of a search or a read, there's a full stop before the result.
+
 ## v1.08 - Say It Slowly - Oct 15 2026, 00:45 HST
 
 ![v1.08](screenshots/v1.08.png)
