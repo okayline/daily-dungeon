@@ -1388,9 +1388,9 @@
         ["[M]OON", "look up at the moon; again to look level"],
         ["[S]CRY", "looking up: ask the moon (it takes a breath)"],
         ["[F]IGHT  [T]ALK", "deal with a demon; with none, TALK to the party"],
-        ["[A]URA in a fight", "read a demon's aura (free)"],
-        ["[G]IVE", "at a wall terminal, or in a talk: offer a gift"],
-        ["[B]EHOLD  [P]EACE", "in a talk: hold something up, or offer it to make peace"],
+        ["[A]URA in a fight", "read a demon's aura (free, once a round)"],
+        ["[G]IVE", "at a wall terminal: make an offering"],
+        ["[B]EHOLD", "hold something up to a demon (it may want it)"],
         ["[I]NVOKE", "the bag: 1-9 or arrows choose, Enter uses"],
         ["[R]UN in a fight", "run through a door (it may block you)"],
         ["[S]EARCH", "search what KURA faces (each takes a breath)"],
@@ -1738,6 +1738,12 @@
   }
 
   let introAt = 0, introTimer = null, introSeen = null;      // the fight's opening unfolds a beat at a time too, a little quicker than its ending
+  // A button on the new-demon screen: it counts as [ OK ], then does what it says. Not before the screen has unfolded.
+  function introGo(name) {
+    if (introTimer || Date.now() - introAt < 400 || !save || !save.encounter) return;
+    save.encounter.seen = true; persist();
+    act(name);
+  }
   function introOK() {
     if (introTimer || Date.now() - introAt < 400 || !save || !save.encounter) return;      // a quick tap or a held key can't dismiss it
     save.encounter.seen = true; persist();
@@ -1804,13 +1810,17 @@
       if (introTimer) { clearTimeout(introTimer); introTimer = null; }
       const groups = [], grp = fn => { const at = pre.children.length; fn(); groups.push([...pre.children].slice(at)); };
       const said = [save.extra && save.extra.includes(e.name) ? save.extra : null, ...lines].filter(Boolean).map(l => String(l).replace(/^> /, ""));
-      const iRows = said.reduce((n, l) => n + wrapText(l, COLS).length + 1, 0);
-      const iArt = Math.min(5, ROWS - 2 - iRows - 1);          // title, blank, text (+ a blank after each), [ OK ]
+      const iRows = said.reduce((n, l) => n + wrapText(l, COLS).length + 1, 0);   // (the stance row takes [ OK ]'s place: same one row)
+      const iArt = Math.min(5, ROWS - 2 - iRows - 1 - 1);      // title, blank, text (+ a blank after each), [ OK ], and the blank under the art
       if (iArt >= 3) grp(() => artSlot(iArt));
       grp(() => { add(`${e.name} APPEARS`, "demon"); add(" "); });
-      for (const l of said) grp(() => { for (const w of wrapText(l, COLS)) add(w); add(" "); });
-      grp(() => { const row = document.createElement("div"), ok = document.createElement("span");
-        ok.textContent = "[ OK ]"; ok.className = "btn"; ok.dataset.intro = "1"; row.append(ok); pre.appendChild(row); });
+      const tight = 2 + iRows + 1 > ROWS;                       // too much to say (an aura remark on top): drop the blanks between lines so [ OK ] stays in the box
+      said.forEach((l, i) => grp(() => { for (const w of wrapText(l, COLS)) add(w); if (!tight || i === said.length - 1) add(" "); }));
+      // v1.04.1: the stance row instead of [ OK ], so a demon can be read (AURA) before anything else. It shows last,
+      // once everything above has unfolded, and nothing works before then (see introGo).
+      grp(() => { const row = document.createElement("div"); row.className = "brow"; const l = document.createElement("span");
+        l.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[A]URA", "aura"), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
+        row.append(l); pre.appendChild(row); });
       // Only the first showing unfolds; a redraw shows it whole. Nothing skips it: [ OK ] works once it is on screen.
       const ikey = save.runId + ":" + (save.steps || 0) + ":" + e.name;
       if (introSeen !== ikey && groups.length > 1) {
@@ -1842,7 +1852,7 @@
         return;
       }
       if (e.stage === "pick") {                        // BEHOLD / PEACE: what KURA carries, each with how it reads and how loud
-        add(e.pickFor === "peace" ? "PEACE with what?" : "BEHOLD what?");
+        add("BEHOLD what?");
         add(" ");
         RULES.moveItems(save).forEach((g, i) => {
           const right = ` ${g.tag} ${".".repeat(g.loud)}`, room = COLS - 4 - right.length;
@@ -1866,7 +1876,7 @@
       }
       const wrapped = [];
       for (const l of gl) for (const w of wrapText(l, COLS)) wrapped.push([w, lineClass(l)]);
-      const maxLines = 2;                              // two lines of text; new ones roll the old up (the log keeps them all)
+      const maxLines = 3;                              // three lines of text (v1.04.1: room for what KURA did, the reply, and the blow); new ones roll the old up
       const body = tail(wrapped, maxLines);
       let art = Math.min(5, ROWS - 5 - body.length - 1);
       if (art < 3) art = 0;
@@ -1892,27 +1902,24 @@
         const d = add(w, c);
         if ((replayWait || final) && bi === body.length - 1) { const s = document.createElement("span"); s.className = "wait"; s.textContent = " _"; d.append(s); }   // waiting: for a click between lines, and for your choice after the last one
       });
-      const twoRows = final && (e.stage === "chat" || e.stage === "hostile");   // a talk: words on one row, item moves under them
-      const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1 - (twoRows ? 1 : 0);
+      const rest = ROWS - (art ? art + 1 : 0) - 3 - body.length - 1;
       for (let i = 0; i < rest; i++) add(" ");
       const row = document.createElement("div"); row.className = "brow";
       const left = document.createElement("span");
       if (final) {
-        if (e.stage === "chat" || e.stage === "hostile") {   // a third answer: say nothing. A fighting demon won't hear words: they're dimmed.
-          const w = [opt("[Y]ES", "yes"), opt("[N]O", "no"), opt("[S]ILENT", "silent")];
-          if (e.stage === "hostile") w.forEach(o => { o.className += " off"; });
-          left.append(w[0], "   ", w[1], "   ", w[2]);
-          row.append(left); pre.appendChild(row);
-          const row2 = document.createElement("div"); row2.className = "brow"; const l2 = document.createElement("span");
-          l2.append(opt("[G]IVE", "talkgive"), "   ", opt("[B]EHOLD", "behold"), "   ", opt("[P]EACE", "peace"));
-          row2.append(l2); pre.appendChild(row2);
-          return;
-        }
+        if (e.stage === "chat") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"), "   ", opt("[S]ILENT", "silent"), "   ", opt("[B]EHOLD", "behold"));   // say nothing, or show it something
+        else if (e.stage === "want") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));   // it wants what KURA held up: hand it over?
         else if (e.stage === "ask" || e.stage === "join") left.append(opt("[Y]ES", "yes"), "   ", opt("[N]O", "no"));
         else if (e.stage === "swap") {
           save.party.forEach((p, i) => { if (i > 0) left.append(opt(`[${i + 1}] ${p.name}`, "swap-" + i), "   "); });
           left.append(opt("[N]O", "swap-none"));
-        } else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", opt("[A]URA", "aura"), "   ", (() => { const r = opt("[R]UN", "run"); if (save.encounter.ranTried || !["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
+        } else {
+          // An angry demon won't hear words: TALK gives way to BEHOLD, at the end of the row. AURA dims once used this round.
+          const au = opt("[A]URA", "aura"); if (RULES.auraUsed(save)) au.className += " off";
+          const r = opt("[R]UN", "run"); if (save.encounter.ranTried || !["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off";
+          if (e.angered) left.append(opt("[F]IGHT", "fight"), "   ", au, "   ", r, "   ", opt("[B]EHOLD", "behold"));
+          else left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "talk"), "   ", au, "   ", r);
+        }
       }
       row.append(left);
       pre.appendChild(row);
@@ -1984,6 +1991,7 @@
     if ((save.items || []).length) own.push(`${n(save.items.length, "thing", "things")} in the bag`);
     const here = ((titleStats && titleStats.here && titleStats.here.levels) || []).find(x => x.level === (save.height || 1));
     const others = rumorCards(save.height || 1);
+    others.push(...RULES.moonChatter(save));          // the moon talks to herself now and then (v1.04.1)
     if (here && here.n > 1) others.unshift(presence("todayMine", here.n - 1, lvl));
     // Right now: from her own last live ping (under 6 minutes old), else the title's. Her own device is in the count.
     const live = liveNow && Date.now() - liveNow.at < 360000 ? liveNow : titleStats && titleStats.here && titleStats.here.now;
@@ -2004,6 +2012,27 @@
   // (v1.01.1) While a search plays out, this line goes quiet (typeQuiet): a bare > and the cursor. After a good find
   // it says one thing about it whole, not typed (typeSay), holds it, and then goes back to its usual round.
   var typeQuiet = false, typeHoldUntil = 0;
+  // LINE 3 (v1.04.1): something to say next, ahead of the usual round: the dungeon noticing KURA's aura change, or the
+  // moon reacting to a fight just ended. It waits for the line's next gap, so a search beat can't swallow it.
+  var line3Next = null;
+  // In a fight the line goes quiet, and only says something when she gets hit.
+  const OW = ["Ow...", "That hurt.", "Okay. Ow.", "Rude.", "That's going to bruise.", "Not the face.", "Ow ow ow.", "Ugh."];
+  function line3After(name, hadFight, kuraHp) {
+    if (!save || !save.dungeon || save.dead) return;
+    if (save.encounter) {
+      if (!hadFight) { typeLine = ""; typeN = 0; typeMode = "gap"; }        // a demon steps in: whatever was being typed stops
+      const k = save.party && save.party[0];
+      if (k && k.hp < kuraHp) line3Next = OW[Math.floor(Math.random() * OW.length)];
+      return;
+    }
+    const b = RULES.aura(save).band;
+    if (save.auraBand === undefined) save.auraBand = b;
+    else if (b !== save.auraBand) { const l = RULES.noticeLine(save.auraBand, b); save.auraBand = b; if (l) { line3Next = l; return; } }
+    if (hadFight && !save.encounter && Math.random() < 0.35) {
+      const l = RULES.moonReact(save, name.startsWith("go-") ? "run" : "fight");
+      if (l) line3Next = l;
+    }
+  }
   function typeHush() { typeQuiet = true; typeLine = ""; typeN = 0; typeMode = "gap"; const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml(); }
   function typeSay(line) { typeLine = String(line || "").slice(0, TYPE_W); typeN = typeLine.length; typeMode = "hold"; typeHoldUntil = Date.now() + 6000; typeQuiet = false; const el = document.getElementById("ticker"); if (el && !atTitle) el.innerHTML = tickerHtml(); }
   function tickerHtml() { return "&gt; " + esc((typeLine || "").slice(0, typeN || 0)) + (typeMode === "hold" || typeMode === "gap" ? '<span class="wait">_</span>' : "_"); }   // the > is always there
@@ -2015,7 +2044,8 @@
       else if (typeMode === "gap") {
         // (This line never says KURA: that name belongs to the line above, where she acts.)
         const status = String(save.status || "").replace(/^> /, "").replace(/KURA is/g, "She is").replace(/\bKURA\b/g, "she").trim(), feed = tickerFeed();
-        typeLine = (status && status !== typeStatus ? (typeStatus = status) : feed.length ? feed[typeNext++ % feed.length] : status || "").slice(0, TYPE_W);
+        const said3 = line3Next; line3Next = null;
+        typeLine = (said3 || save.encounter ? said3 || "" : (status && status !== typeStatus ? (typeStatus = status) : feed.length ? feed[typeNext++ % feed.length] : status || "")).slice(0, TYPE_W);
         typeN = 0; typeMode = typeLine ? "type" : "gap"; wait = 350;
       } else if (typeMode === "type") {
         typeN++;
@@ -2193,13 +2223,12 @@
     if (name === "reset") { if (!okReset) { resetBox(); return; } }
     if (name === "hold") { if (!okHold) { holdBox(); return; } }
     const log = save.log, steps = save.steps, exBefore = save.extra, ranBefore = !!(save.encounter && save.encounter.ranTried), partyBefore = (save.party || []).map(p => p.name);
-    const before = { items: (save.items || []).slice(), silver: save.silver };
+    const before = { items: (save.items || []).slice(), silver: save.silver }, hadFight = !!save.encounter, kuraHp = save.party && save.party[0] ? save.party[0].hp : 0;
     save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false) : name === "silent" ? RULES.answer(save, "silent")
       : name.startsWith("give-") ? RULES.give(save, name === "give-none" ? null : Number(name.slice(5)))
       : name.startsWith("offer-") ? RULES.offerGive(save, name === "offer-none" ? null : Number(name.slice(6)))
       : name.startsWith("pick-") ? RULES.movePick(save, name === "pick-none" ? null : Number(name.slice(5)))
-      : name === "aura" ? RULES.readAura(save) : name === "behold" ? RULES.itemMove(save, "behold") : name === "peace" ? RULES.itemMove(save, "peace")
-      : name === "talkgive" ? RULES.talkGive(save) : name === "hback" ? RULES.hostileBack(save)
+      : name === "aura" ? RULES.readAura(save) : name === "behold" ? RULES.itemMove(save)
       : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
       : name === "altar" ? RULES.altarOpen(save)
       : name === "altar-next" ? RULES.altarNext(save)
@@ -2212,6 +2241,7 @@
       heldExtra = null; logGlow = false; invSel = 0; queuedNotice = null;
     }
     remember(name === "reset" || save.steps !== steps ? "" : log);
+    if (name !== "reset") line3After(name, hadFight, kuraHp);
     persist(); draw();
     if (name === "reset" && nameBox()) return;
     // A blocked run says so in a box that waits for [ OK ]; then the fight box plays the demon's reply.
@@ -2272,7 +2302,7 @@
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
     if (e.target.closest("[data-intro]")) return introOK();
     const mode = document.getElementById("found").dataset.mode;
-    if (mode === "intro") return;
+    if (mode === "intro") { const ia = e.target.closest("[data-fact]"); if (ia) introGo(ia.dataset.fact); return; }
     const pa = e.target.closest("[data-pact]");
     if (pa && passAct) return passAct(pa.dataset.pact);
     if (mode === "pass") return;                 // clicking a field to paste must not close the box
@@ -2322,7 +2352,7 @@
     if (e.target && e.target.tagName === "INPUT") { if (key === "enter") { e.preventDefault(); confirmName(); } return; }   // typing the name
     if (!atTitle && needsName()) { const i = document.getElementById("playername"); if (i) i.focus(); if (key === "enter") confirmName(); return; }   // nothing else works until the run has a name
     const fbox = document.getElementById("found");
-    if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (key === "enter") introOK(); return; }
+    if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (e.repeat) return; if (key === "enter") introOK(); else { const k = { f: "fight", t: "talk", a: "aura", r: "run" }[key]; if (k) introGo(k); } return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
     if (!fbox.hidden) {
       if (!/^(tab|f\d+)$/.test(key)) e.preventDefault();
@@ -2347,12 +2377,12 @@
         let k;
         if (st2 === "gift") k = /^[1-8]$/.test(key) ? "give-" + (Number(key) - 1) : { n: "give-none", b: save.encounter.fromChat ? "give-none" : null, escape: "give-none" }[key];
         else if (st2 === "offer") k = /^[1-8]$/.test(key) ? "offer-" + (Number(key) - 1) : { b: "offer-none", n: "offer-none", escape: "offer-none" }[key];
-        else if (st2 === "chat") k = { y: "yes", enter: "yes", n: "no", s: "silent", escape: "no", g: "talkgive", b: "behold", p: "peace" }[key];
-        else if (st2 === "hostile") k = { g: "talkgive", b: "behold", p: "peace", escape: "hback" }[key];
+        else if (st2 === "chat") k = { y: "yes", enter: "yes", n: "no", s: "silent", escape: "no", b: "behold" }[key];
+        else if (st2 === "want") k = { y: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "pick") k = /^[1-8]$/.test(key) ? "pick-" + (Number(key) - 1) : { b: "pick-none", escape: "pick-none" }[key];
         else if (st2 === "ask" || st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", t: "talk", a: "aura", i: "invoke", r: "run" }[key];
+        else k = { f: "fight", t: "talk", a: "aura", i: "invoke", r: "run", b: save.encounter.angered ? "behold" : null }[key];
         if (k) act(k);
       } else if (fbox.dataset.mode === "found" || fbox.dataset.mode === "done") { if (key === "enter") closeFound(); }   // a find only closes on its [ OK ] (Enter or a click), never by a stray key
       else if (key === "enter" || key === " " || key === "escape") closeFound();

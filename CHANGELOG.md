@@ -2,6 +2,21 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.04.1 - Show, Don't Tell - Oct 14 2026, 18:50 HST
+
+![v1.04.1](screenshots/v1.04.1.png)
+
+- **One item move: `[B]EHOLD`.** KURA holds something up and keeps it. If the demon wants it, it asks, and `[Y]ES` hands it over. That's how a gift or a peace offering happens now. `[G]IVE` and `[P]EACE` are gone from fights.
+- **One row of buttons.** A demon's question gets `[Y]ES [N]O [S]ILENT [B]EHOLD`. An angry demon gets `[F]IGHT [A]URA [R]UN [B]EHOLD`, so you can always hit back.
+- **AURA from the start.** The screen where a demon appears has the fight buttons on it, so you can read it before anything else.
+- **AURA once a round.**
+- **AURA lines name the demon,** so it's clear who's who.
+- **The fight box shows three lines,** so you see what KURA did, what the demon said, and the hit.
+- **The bottom line goes quiet in a fight.** It only speaks up when KURA gets hurt.
+- **The dungeon notices** when KURA's aura gets louder or quieter, on the bottom line.
+- **The moon talks to herself** on the bottom line now and then, and has opinions about fights.
+- **A crowded new-demon screen** no longer pushes its buttons out of the box.
+
 ## v1.04 - Read the Room - Oct 14 2026, 18:30 HST
 
 ![v1.04](screenshots/v1.04.png)
