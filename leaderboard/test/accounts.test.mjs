@@ -172,3 +172,14 @@ test("inventory lists what you hold in 4Dungeon; send moves it to your own 88x31
   assert.deepEqual((await a("/send", { itemId: 60, copy: 1 })).data, { ok: true });
   assert.deepEqual(moves, [{ itemId: 60, copy: 1, from: { game: "4dungeon", playerId: 1 }, to: { game: "88x31", playerId: 77 } }]);
 });
+
+test("spent uses up only your own copies, and needs a sign-in", async () => {
+  const calls = [];
+  const REGISTRY = { async spendCopy(a) { calls.push(a); return a.copy === 9 ? { error: "No such copy." } : { ok: true }; } };
+  const env = makeEnv({ REGISTRY }), a = browser(env, { ip: "203.0.113.50" }), anon = browser(env, { ip: "203.0.113.51" });
+  assert.equal((await anon("/spent", { items: [{ itemId: 3, copy: 1 }] })).status, 401);
+  await a("/codes", { action: "new" });
+  const r = await a("/spent", { items: [{ itemId: 3, copy: 1 }, { itemId: 3, copy: 9 }, { itemId: "x", copy: 2 }] });
+  assert.deepEqual(r.data.done, [{ itemId: 3, copy: 1 }]);
+  assert.ok(calls.every((c) => c.holder.game === "4dungeon" && c.holder.playerId === 1));
+});

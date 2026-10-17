@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.17 - Visitors - Oct 17 2026, 07:35 HST
+
+- **Things that leave the bag are used up in the shared list too.** Signed in, an item that is used up, broken or burned in a run is marked used up in the item registry (it stays on the record, just no longer held).
+- **Visitors.** 88x31 buttons you send here now arrive in the bag, once a day or when you open the bag. They can't be broken or given to an altar, party members and demons may take an interest in them, and they are never used up. If a demon wanders off with one, it finds its way back to the bag.
+- **More tag remarks.** Fighting and giving leave a mark on KURA now, and the party and demons remark on them.
+- **Phones.** The screen fills the width in portrait and fits the height in landscape (no scrolling), and pinch zoom is off.
+- **Fixed:** an overflow item could be recorded as a find twice.
+
 ## v1.16 - Flask - Oct 17 2026, 06:58 HST
 
 - **Tags.** Demons now sometimes remark on what KURA has done lately, and so does the party. A hot room makes the others go quiet.

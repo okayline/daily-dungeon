@@ -39,10 +39,11 @@
   // THE BAG (v1.05.1) holds 9 things (ICHOR is a count, not a thing). A thing that comes to a full bag waits in
   // st.overflow; the page asks what to leave behind (keepItem). Nothing counts as found until it is kept.
   const BAG_MAX = 9;
-  function gain(st, it, lines) {
+  function gain(st, it, lines, noQueue) {
     // (v1.14) Every item gained is queued for the shared copy registry; the page sends the queue for a signed-in player
     // (registryTick in index.html) and drops it otherwise. The key (run + nth gain) makes a resend never count twice.
-    if (ITEM_ID[it] && st.runId) {
+    // (noQueue: a thing that waited in the overflow was queued the first time it came; taking it now is not a new find.)
+    if (!noQueue && ITEM_ID[it] && st.runId && !(st.visitorInfo && st.visitorInfo[it])) {
       st.gainN = (st.gainN || 0) + 1;
       st.finds = (st.finds || []).concat({ id: ITEM_ID[it], key: st.runId + ":" + st.gainN }).slice(-50);
     }
@@ -650,8 +651,64 @@
     }
     return (rs.name = NAMES_BY_KIND.plain[h % NAMES_BY_KIND.plain.length]);
   }
+  // (REGISTRY) A thing that leaves the bag for good (broken, given, traded, used up, left behind) is a copy used up in the
+  // shared registry: show() notices what went missing since the last time and queues it in st.gone for the page to send.
+  // A visitor from another game is registered here by name so the bag knows its tier, alignment and nature.
+  const VISITOR_TIER = { common: "COMMON", uncommon: "UNCOMMON", rare: "RARE", prototype: "RARE", relic: "MYTHIC", ultra: "MYTHIC", moon: "MOON" };
+  function regVisitor(v) {
+    if (!v || !v.name || (ITEM_ID[v.name] && !(TIER[v.name] && ITEM_INFO[v.name] && ITEM_INFO[v.name].visitor))) return;   // never over one of our own
+    TIER[v.name] = VISITOR_TIER[String(v.rarity || "common").toLowerCase()] || "COMMON";
+    ITEM_INFO[v.name] = { text: v.note || "A visitor from another game.", use: null, say: null, visitor: true };
+    ITEM_ALIGN[v.name] = ["LAW", "NEUTRAL", "CHAOS"].includes(String(v.align || "").toUpperCase()) ? String(v.align).toUpperCase() : "NEUTRAL";
+    ITEM_NATURE[v.name] = ["tech", "spirit", "both"].includes(v.nature) ? v.nature : "plain";
+    ITEM_ID[v.name] = v.itemId;
+  }
+  const isVisitor = (st, name) => !!(st.visitorInfo && st.visitorInfo[name]);
+  function trackBag(st) {
+    for (const v of Object.values(st.visitorInfo || {})) regVisitor(v);
+    const cur = st.items || [];
+    if (st.itemSnap) {
+      const gone = st.itemSnap.slice();
+      for (const n of cur) { const i = gone.indexOf(n); if (i >= 0) gone.splice(i, 1); }
+      if (gone.length) st.gone = (st.gone || []).concat(gone.filter(n => ITEM_ID[n] && !isVisitor(st, n))).slice(-50);   // a visitor is never used up: it can change hands and comes home
+    }
+    st.itemSnap = cur.slice();
+  }
+  // A visiting 88x31 button joins the bag at dawn and whenever the bag is opened (the page asks the registry; a full bag waits).
+  // It is a guest: it can't be broken by fiddling or given to an altar, but party members and demons may ask for it, and it
+  // changes hands without ever being used up. It counts toward her aura like any item. If it has left the bag and isn't in a
+  // party member's pockets either (a demon walked off with it), the next look brings it home to the bag.
+  const hasVisitor = (st, name) => (st.items || []).includes(name) || (st.party || []).some(p => (p.items || []).includes(name));
+  function welcomeVisitor(st, v) {
+    st = copy(st);
+    if (!st.dungeon || st.dead || !v || !v.name || !Number.isInteger(v.itemId) || !Number.isInteger(v.copy)) return st;
+    const key = v.itemId + ":" + v.copy;
+    st.visitors = st.visitors || {};
+    if (hasVisitor(st, v.name) || (st.items || []).length >= BAG_MAX) return st;
+    const back = !!st.visitors[key];
+    st.visitorInfo = st.visitorInfo || {};
+    st.visitorInfo[v.name] = { name: v.name, itemId: v.itemId, rarity: v.rarity, note: v.note, align: v.align, nature: v.nature };
+    regVisitor(st.visitorInfo[v.name]);
+    st.visitors[key] = v.name;
+    st.items = (st.items || []).concat(v.name);
+    st.itemSnap = (st.items || []).slice();
+    st.extra = back ? "> " + v.name + " finds its way back to KURA." : "> A visitor arrives: " + v.name + ".";
+    return show(st);
+  }
+  // Take one thing out of the bag without it counting as lost (it was sent home).
+  function takeAway(st, name) {
+    st = copy(st);
+    const i = (st.items || []).indexOf(name);
+    if (i >= 0) {
+      st.items.splice(i, 1);
+      if (st.itemSnap) { const j = st.itemSnap.indexOf(name); if (j >= 0) st.itemSnap.splice(j, 1); }
+    } else for (const p of st.party || []) { const k = (p.items || []).indexOf(name); if (k >= 0) { p.items.splice(k, 1); break; } }   // it was in a party member's pockets
+    if (isVisitor(st, name) && !hasVisitor(st, name)) { delete st.visitorInfo[name]; for (const k of Object.keys(st.visitors || {})) if (st.visitors[k] === name) delete st.visitors[k]; }
+    return show(st);
+  }
   function show(st) {
     if (!st.dungeon) return st;
+    trackBag(st);
     if (st.dreadCheck) dread(st);
     st.align = aura(st).dom;                           // (AURA) her colour follows what she carries and who is with her
     const d = st.dungeon, room = d.floor.rooms[d.at];
@@ -1586,7 +1643,7 @@
   function altarUsed(st) { const d = st.dungeon; return !!(d && RS(d).altarDay === st.day); }
   function altarGifts(st) {
     const n = 20 * floorNum(st), out = [{ silver: n, ok: (st.silver ?? 0) >= n, label: `${n} SILVER` }];
-    for (const it of inventory(st).slice(0, 5)) out.push({ item: it.name, ok: true, label: it.name });
+    for (const it of inventory(st).filter(x => !isVisitor(st, x.name)).slice(0, 5)) out.push({ item: it.name, ok: true, label: it.name });   // a guest is never offered to the altar
     return out;
   }
   function altarOpen(st) {                               // [G]IVE in an Altar room
@@ -1796,7 +1853,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "hollow", "overflow", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "moonNight", "hushDay", "offer", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
+      "itemSnap", "gone", "visitors", "visitorInfo", "regCopies", "visitDay", "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "moonNight", "hushDay", "offer", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
@@ -1851,10 +1908,10 @@
     if (!it) return show(st);
     st.overflow.shift(); if (!st.overflow.length) delete st.overflow;
     const old = drop === null || drop === undefined ? null : (st.items || [])[drop];
-    if (!old) { st.log = `> KURA leaves ${it} where it is. The bag is full.`; return show(st); }
+    if (!old) { st.gone = (st.gone || []).concat(it).slice(-50); st.log = `> KURA leaves ${it} where it is. The bag is full.`; return show(st); }   // (it was found, but never kept: its copy is used up)
     st.items.splice(drop, 1);
     if (st.wear && !st.items.includes(old)) delete st.wear[old];
-    gain(st, it);
+    gain(st, it, undefined, true);
     st.log = `> KURA leaves ${old} behind and takes ${it}.`.slice(0, 77);
     return show(st);
   }
@@ -1896,6 +1953,7 @@
     const info = ITEM_INFO[name] || {};
     // Most things can't be used (yet). Trying anyway can break it: every try is a roll, so one battery
     // survives a dozen tries and the next snaps on the first. Rarer things are sturdier; MOON things never break.
+    if (!info.use && isVisitor(st, name)) { st.log = `> ${name.replace(/^an? /, "The ").replace(/^The /, "The ")} looks back at KURA. A guest.`.slice(0, 77); return show(st); }
     if (!info.use) {
       act(st, `use:${name}`);
       const the = name.replace(/^an? /, "the "), tier = TIER[name] || "COMMON", nat = natureOf(name), m = moon();
@@ -2167,7 +2225,7 @@
     if (after !== before) {
       st.align = after;
       st.alignTold = false;
-      say = after === "LAW" ? "The system takes notice. [KPT]" : after === "CHAOS" ? "The old things take notice. [FRL]" : "KURA finds her balance. [STR]";
+      say = after === "LAW" ? "Something orderly leans toward KURA. [KPT]" : after === "CHAOS" ? "Something old leans toward KURA. [FRL]" : "KURA settles, belonging to neither. [STR]";
     } else if (after === "NEUTRAL" && Math.abs(s) >= 3 && !st.alignTold) {
       // A tell just before a flip, once each time she drifts that close.
       st.alignTold = true;
@@ -2403,7 +2461,7 @@
     hybrid: "You carry a piece of the moon. Bold.", folklore: "You carry moonlight, child. She will want it back.", beast: "CU SITH whines at the light in KURA's bag." };
   // (TAGS) A demon sometimes remarks on one of KURA's recent choices (her tags), in its family's voice. The party does too,
   // in their banter. Which tag speaks: the most recent one that has lines.
-  const TAG_KIND = { kill: "finished", run: "ran", pay: "paid", task: "paid", break: "broke", breakLAW: "broke", breakCHAOS: "broke", talk: "talked", talkLAW: "talked", talkCHAOS: "talked", restore: "restored" };
+  const TAG_KIND = { kill: "finished", run: "ran", pay: "paid", task: "paid", break: "broke", breakLAW: "broke", breakCHAOS: "broke", talk: "talked", talkLAW: "talked", talkCHAOS: "talked", restore: "restored", fight: "fought", offer: "gave", offerLAW: "gave" };
   const tagKind = st => { const t = st.tags || []; for (let i = t.length - 1; i >= 0; i--) if (TAG_KIND[t[i]]) return TAG_KIND[t[i]]; return null; };
   const TAG_SAY = {
     finished: { data: '{n}: "PRIOR INSTANCE TERMINATED. BY YOU. NOTED."', hardware: "{n} remembers the sound of the last one going quiet.", hybrid: "{n} looks at KURA with both halves, and neither is surprised.", folklore: '{n}: "You smell of someone I knew."' },
@@ -2411,12 +2469,18 @@
     paid: { data: '{n}: "TRANSACTION HISTORY: FAVORABLE."', hardware: "{n} perks up. Somebody here pays what they owe.", hybrid: "{n} nods, once, in two voices.", folklore: '{n}: "A hand that opens. I had forgotten them."' },
     broke: { data: '{n}: "DAMAGE REPORT FOLLOWS YOU. IT IS LONG."', hardware: "{n} keeps a polite distance from KURA's hands.", hybrid: "{n} flinches on its mechanical side only.", folklore: '{n}: "You leave things in pieces, child."' },
     talked: { data: '{n}: "VERBAL HANDSHAKE ACCEPTED. PROCEED."', hardware: "{n} sits up a little. It has heard that voice before.", hybrid: '{n} lowers both halves. "You are the one who talks."', folklore: '{n}: "They say there is a mortal who listens. Is it you?"' },
+    fought: { data: '{n}: "COMBAT LOG LOADED. IT IS NOT SHORT."', hardware: "{n} eyes the scuffs on KURA's hands.", hybrid: "{n} looks at the marks on KURA, and weighs them.", folklore: '{n}: "You have been hitting things. I can tell."' },
+    gave: { data: '{n}: "USER SHARES RESOURCES. FLAGGED AS UNUSUAL."', hardware: "{n} wonders if KURA would part with something for it, too.", hybrid: '{n}: "I hear you give things away. Do you?"', folklore: '{n}: "A giving hand is a rare thing down here."' },
     restored: { data: '{n}: "THE NOISE FELT QUIETER ON YOUR APPROACH."', hardware: "{n} stops grinding for a moment, and does not say why.", hybrid: '{n}: "Something in you smooths the static."', folklore: '{n}: "You mend. It is rare. It is noticed."' },
   };
   const PARTY_TAG_SAY = {
     finished: { ELF: 'ELF: "Quickly done. I did not look."', PIXIE: 'PIXIE: "Was it... was it okay?"', "CU SITH": "CU SITH licks its lips, then looks away." },
     ran: { ELF: 'ELF: "Good. I was not ready either."', PIXIE: 'PIXIE: "YES. Running is great."', "CU SITH": "CU SITH is already ahead of you." },
     paid: { ELF: 'ELF: "Generous. It suits you."', PIXIE: 'PIXIE: "Aw. You\'re nice."', "CU SITH": "CU SITH nudges KURA's hand, approving." },
+    broke: { ELF: 'ELF: "You have a talent for ruin."', PIXIE: 'PIXIE: "Oops. You broke it. Oops."', "CU SITH": "CU SITH sniffs the pieces, then looks away." },
+    talked: { ELF: 'ELF: "They listen to you. It is a strange gift."', PIXIE: 'PIXIE: "You\'re good at talking to scary things!"', "CU SITH": "CU SITH thumps its tail. KURA is good at this." },
+    fought: { ELF: 'ELF: "Do not make a habit of it."', PIXIE: 'PIXIE: "That was a lot of hitting."', "CU SITH": "CU SITH is still buzzing from the fight." },
+    gave: { ELF: 'ELF: "You give too easily. I like it."', PIXIE: 'PIXIE: "You gave it away?? I would have kept it!"', "CU SITH": "CU SITH watches KURA's bag, hopeful." },
   };
   function tagRemark(st, e) {
     const k = tagKind(st);
@@ -2443,6 +2507,7 @@
     let s = gap === 0 ? 2 : gap === 1 ? 0 : -2;
     const t = (TASTE[e.family || "folklore"] || TASTE.folklore)[nat];
     if (t !== undefined) s += t < 0 ? -2 : t >= 1.5 ? 1 : 0;
+    if (ITEM_INFO[it] && ITEM_INFO[it].visitor) s += 1;      // a visiting button from another game: everyone is a little curious about it
     const rank = TIERS.indexOf(tier);
     switch (personaOf(e)) {
       case "GRUFF": s += rank <= 1 ? 1 : -1; break;
@@ -3576,7 +3641,7 @@
       if (!seen.found) return { name, known: false };
       const a = itemAlign(name) || "NEUTRAL", r = relicAlign(name), info = ITEM_INFO[name] || {}, nat = natureOf(name), an = itemAlignName(name);
       const lines = [info.text, `${NATURE_NAME[nat]}. ${tastes(nat)}`, `alignment: ${an} (${a})`];
-      if (r === "LAW" || r === "CHAOS") lines.push(`A relic: finding or giving it pulls KURA toward ${NAT[r]}.`,
+      if (r === "LAW" || r === "CHAOS") lines.push(`A relic: finding or giving it marks KURA toward ${NAT[r]}. The mark fades as she does other things.`,
         `${a} demons prize it. ${a === "LAW" ? "CHAOS" : "LAW"} demons think less of it.`);
       else if (r) lines.push("A relic, but it pulls no way.");
       if (info.use) lines.push("Can be used from INVOKE.");
@@ -3689,7 +3754,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);
