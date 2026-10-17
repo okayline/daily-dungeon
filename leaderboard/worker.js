@@ -10,6 +10,7 @@
 //   GET  /admin/here (header x-admin-key)                      -> every device seen this moon, for the X-mode board (v1.01.1)
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
+import { accountsRoute, playerOf } from "./accounts.js";
 const MAX = { floor: 20, days: 400 };
 // Same lunar-epoch math as screen.js's epochIndex -- a whole-number count of real lunar months since
 // the same new-moon reference, so it's identical for every player (and this Worker) at every instant.
@@ -124,7 +125,7 @@ async function titleFeed(db, botsLive) {
   return { market, epoch, law: tally.LAW, chaos: tally.CHAOS, counts, lastFall: (last && last.made) || null, lastOut: (out && out.made) || null, deepest: (top && top.floor) || null, events, here, names, deadliest };
 }
 const cors = () => ({ "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
-  "access-control-allow-headers": "content-type, x-admin-key, x-key", "access-control-max-age": "86400" });
+  "access-control-allow-headers": "content-type, authorization, x-admin-key, x-key", "access-control-max-age": "86400" });
 const json = (data, status, origin) => new Response(JSON.stringify(data), { status: status || 200, headers: { "content-type": "application/json", ...cors() } });
 const hash = async s => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].slice(0, 8).map(b => b.toString(16).padStart(2, "0")).join("");
 
@@ -497,10 +498,16 @@ async function giftBox(req, env, pageOk, from, allow) {
 export default {
   async fetch(req, env) {
     const url = new URL(req.url), allow = "*";
+    // On the game's own address the Worker answers under /api/ (dungeon.88x31.app/api/score, /api/eco/..., /api/account):
+    // the same routes as ever, with that prefix taken off. The old workers.dev address keeps working unchanged.
+    if (url.pathname.startsWith("/api/")) url.pathname = url.pathname.slice(4);
     // ALLOW_ORIGIN: the pages allowed to post or delete, comma-separated (blank: any page). Everyone may read the board.
     const pages = String(env.ALLOW_ORIGIN || "").split(",").map(s => s.trim().replace(/\/$/, "")).filter(Boolean);
     const from = req.headers.get("origin") || "", pageOk = !pages.length || pages.includes(from);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors() });   // a 204 must have no body, or the browser's preflight fails
+    // PLAYER ACCOUNTS (v1.13): /account /codes /load /passkey /logout /save (accounts.js). Login is a bearer token the page keeps.
+    const acct = await accountsRoute(req, env, url);
+    if (acct) return acct;
 
     if (url.pathname === "/top" && req.method === "GET") {
       const n = Math.max(1, Math.min(50, Number(url.searchParams.get("n")) || 20)), run = url.searchParams.get("run") || "";
@@ -647,6 +654,8 @@ export default {
         if (align) try { await tallyFaction(env.DB, align, floor); } catch (e) {}
         try { await tallyStats(env.DB, b, turns, who); } catch (e) {}
       }
+      // A post from a logged-in player is remembered as theirs (the board itself stays as anonymous as it was).
+      try { const me = await playerOf(env, req); if (me) await env.DB.prepare(`INSERT OR IGNORE INTO score_players (run, player_id) VALUES (?1, ?2)`).bind(run, me.id).run(); } catch (e) {}
       const row = await env.DB.prepare(`SELECT name, floor, days, demons, turns, made FROM scores WHERE run = ?1`).bind(run).first();
       return json({ ok: true, rank: await rankOf(env.DB, row) }, 200, allow);
     }
