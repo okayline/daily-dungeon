@@ -500,7 +500,8 @@ export default {
     const url = new URL(req.url), allow = "*";
     // On the game's own address the Worker answers under /api/ (dungeon.88x31.app/api/score, /api/eco/..., /api/account):
     // the same routes as ever, with that prefix taken off. The old workers.dev address keeps working unchanged.
-    if (url.pathname.startsWith("/api/")) url.pathname = url.pathname.slice(4);
+    const viaApi = url.pathname.startsWith("/api/");
+    if (viaApi) url.pathname = url.pathname.slice(4);
     // ALLOW_ORIGIN: the pages allowed to post or delete, comma-separated (blank: any page). Everyone may read the board.
     const pages = String(env.ALLOW_ORIGIN || "").split(",").map(s => s.trim().replace(/\/$/, "")).filter(Boolean);
     const from = req.headers.get("origin") || "", pageOk = !pages.length || pages.includes(from);
@@ -664,6 +665,7 @@ export default {
     if (url.pathname === "/tally") return tallyDoor(req, env, pageOk, from, allow);
     // THE EXCHANGE: everything under /eco/ (see economy() above).
     if (url.pathname.startsWith("/eco/")) return economy(req, env, url, pageOk, from);
+    if (env.ASSETS && (req.method === "GET" || req.method === "HEAD") && !viaApi) return env.ASSETS.fetch(req);   // the game's page and files (dungeon.88x31.app)
     return json({ error: "not found" }, 404, allow);
   },
 };
