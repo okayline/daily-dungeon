@@ -17,6 +17,19 @@ const now = () => Math.floor(Date.now() / 1000);
 const tidy = (st) => { delete st.breath; return st; };          // breath off: no breath record means a full bar
 const OUTBOX = ["finds", "gone", "events", "tally", "line3", "exchangeOpen"];
 const kept = (st) => { const k = { ...st }; for (const f of OUTBOX) delete k[f]; return k; };
+// (v1.24) WHAT THE PAGE IS SENT: the run without its secrets. The seeds (which would rebuild the whole floor), which
+// kind of room is behind which door, where the stairs and the locker are, and what each wall hides and how deep. The
+// page only draws: everything it reads (the view, the map, the doors, offers, aura, codex, bag, summary, score) comes out
+// the same without them (checked over 400 run states, v1.24 dev changelog). The webmaster gets the whole run (the debug line).
+function secretless(st) {
+  const s = JSON.parse(JSON.stringify(st)), d = s.dungeon, f = d && d.floor;
+  delete s.pseed;
+  if (!f) return s;
+  delete d.seed; delete f.seed; delete f.pseed; delete f.kinds; delete f.stairs; delete f.lure;
+  for (const r of f.rooms || []) delete r.hidden;
+  for (const r of d.state || []) if (r && r.walls) r.walls = { taken: r.walls.taken };
+  return s;
+}
 
 async function load(env, me) {
   return env.DB.prepare("SELECT state, n FROM runs WHERE player_id = ?").bind(me.id).first();
@@ -39,18 +52,18 @@ async function run(env, req, ctx) {
     if (!row) return { run: null };
     const st = tidy(ACT.apply(JSON.parse(row.state), { t: "tick" }));
     await store(env, me, st, row.n);
-    return { run: st, n: row.n };
+    return { run: st, n: row.n, admin: !!me.admin };
   }
   const me = (await playerOf(env, req)) || (await makePlayer(env, req, ctx));
   const row = await load(env, me);
   if (!row || b.fresh === true) {
     const st = fresh(), n = row ? row.n + 1 : 0;
     await store(env, me, st, n);
-    return { run: st, n };
+    return { run: st, n, admin: !!me.admin };
   }
   const st = tidy(ACT.apply(JSON.parse(row.state), { t: "tick" }));   // catch up with the real date
   await store(env, me, st, row.n);
-  return { run: st, n: row.n };
+  return { run: st, n: row.n, admin: !!me.admin };
 }
 
 // (v1.21.1) One action is two trips to the database, each a single batch: (1) who this is, their run, and the rate
@@ -74,7 +87,7 @@ async function act(env, req, inner) {
   if (ACT.ADMIN.has(a.t) && !me.admin) throw new Oops("That's for the webmaster.", 403);
   const row = me.state == null ? null : { state: me.state, n: me.n };
   if (!row) throw new Oops("No run yet.", 404);
-  if (b.n !== row.n) return { stale: true, run: JSON.parse(row.state), n: row.n };
+  if (b.n !== row.n) return { stale: true, run: JSON.parse(row.state), n: row.n, admin: !!me.admin };
   let st;
   try { st = tidy(ACT.apply(JSON.parse(row.state), a)); }
   catch (e) { console.error(e); throw new Oops("That didn't work.", 400); }
@@ -88,7 +101,7 @@ async function act(env, req, inner) {
   ];
   if (Math.random() < 0.01) write.push(env.DB.prepare("DELETE FROM acct_limits WHERE window_start < ?").bind(t - 86400));
   await env.DB.batch(write);
-  return { run: st, n: row.n + 1, out: st, me, spends };
+  return { run: st, n: row.n + 1, out: st, me, spends, admin: !!me.admin };
 }
 
 // (v1.22) WHAT THE RULES QUEUED FOR THE OUTSIDE WORLD, sent by the server after it has answered (ctx.waitUntil), through
@@ -153,7 +166,7 @@ export async function gameRoute(req, env, url, wctx, inner) {
     if (!/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const out = url.pathname === "/run" ? await run(env, req, ctx) : await act(env, req, inner);
     if (out.run && out.out && inner) await later(wctx, sendOut(env, inner, out.me, out.out, out.spends));
-    if (out.run) { out.run = kept(out.run); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; if (out.out.exchangeOpen) out.run.exchangeOpen = true; } delete out.out; delete out.me; delete out.spends; }
+    if (out.run) { out.run = out.admin ? kept(out.run) : secretless(kept(out.run)); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; if (out.out.exchangeOpen) out.run.exchangeOpen = true; } delete out.out; delete out.me; delete out.spends; delete out.admin; }
     if (out.stale) return reply({ run: out.run, n: out.n, error: "The run moved on." }, 409);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {

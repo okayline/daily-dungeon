@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.24 - Behind Closed Doors - Oct 17 2026, 10:50 HST
+
+- **What's behind the doors stays behind them.** The server keeps what each door and wall hides to itself and only sends your browser what's on screen.
+
 ## v1.23 - Numbered - Oct 17 2026, 10:35 HST
 
 - **Everything you find is its own numbered thing.** Signed in or not, each find in KURA's bag is a numbered copy in the shared item list from the moment she picks it up, and when it's used up, broken or given away, that exact copy is the one that goes.

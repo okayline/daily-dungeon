@@ -88,3 +88,13 @@ test("each find in the bag gets its registry copy; a thing gone uses up that cop
   assert.deepEqual(sent, [["birth", 1], ["spend", 1, 7]]);
   assert.equal((JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state).copies || {})[name], undefined);
 });
+
+test("the page is never sent the run's secrets (the webmaster is)", async () => {
+  const env = { DB: fakeD1() }, me = browser(env);
+  const r = (await me("/run", {})).data.run, d = r.dungeon, f = d.floor;
+  assert.equal(r.pseed, undefined); assert.equal(d.seed, undefined); assert.equal(f.seed, undefined); assert.equal(f.kinds, undefined);
+  assert.ok(f.rooms.every((x) => x.hidden === undefined));
+  assert.ok(JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state).dungeon.floor.kinds, "the server keeps them");
+  env.DB.raw.prepare("UPDATE players SET admin = 1").run();
+  assert.ok((await me("/run", { peek: true })).data.run.dungeon.floor.kinds);
+});
