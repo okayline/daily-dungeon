@@ -1330,7 +1330,7 @@
   // A button can go home to your 88x31; a dungeon item can visit it.
   function drawReg(pre, add) {
     const R = invReg, per = 7;
-    add("INVENTORY".padEnd(35) + "[ESC] back", ""); add(" ");
+    add("MAIL".padEnd(35) + "[ESC] back", ""); add(" ");
     const btn2 = (t, a) => { const sp = document.createElement("span"); sp.className = "btn"; sp.textContent = t; sp.dataset.regact = a; return sp; };
     if (!signedIn()) {
       for (const w of wrapText(ACCOUNT_HOST ? "Sign in from the ACCOUNT page, and what you find is kept here too." : "Items are kept in the shared list when you are signed in at dungeon.88x31.app.", 41)) add(w, "dim");
@@ -1345,7 +1345,7 @@
     add(R.err || (items.length ? `${items.length} kept${pages > 1 ? `   page ${R.page + 1}/${pages}` : ""}` : "Nothing yet. Items you find while signed in land here."), "dim");
     for (const it of items.slice(R.page * per, R.page * per + per)) {
       const row = document.createElement("div"), home = it.from === "88x31";
-      row.append(`${it.name} #${it.copy}`.slice(0, 24).padEnd(25), btn2(home ? "[ SEND HOME ]" : "[ VISIT 88x31 ]", `send:${it.itemId}:${it.copy}`));
+      row.append(`${it.name} #${it.copy}`.slice(0, 22).padEnd(23), btn2(home ? "[ SEND HOME ]" : "[ SEND TO 88x31 ]", `send:${it.itemId}:${it.copy}`));
       pre.appendChild(row);
     }
     add(" ");
@@ -1450,7 +1450,7 @@
     const help = add("", "");
     if (empty) help.style.marginTop = "0";                       // (v1.06.1) with nothing in the bag, the foot comes up under the list
     if (holdBtn) { const hl = document.createElement("div"); hl.append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : ""))); help.append(hl); }
-    help.append("[1-9] use  ", btn("INVENTORY", "reg"), "  ", btn("[C]LOSE", "close"));   // (v1.06.1: a number uses it straight away; 0 is ICHOR when there is some; arrows and Enter still work)
+    help.append("[1-9] use  ", btn("MAIL", "reg"), "  ", btn("[C]LOSE", "close"));   // (v1.06.1: a number uses it straight away; 0 is ICHOR when there is some; arrows and Enter still work)
   }
   // THE EXCHANGE WINDOW (v1.00): opened from the screen in a dead end's wall; one window over the view like INVOKE. Four tabs:
   //   MARKET - public offers (others' only). ENTER takes one; one that asks for something takes a matching thing of yours.
