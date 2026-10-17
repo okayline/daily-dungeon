@@ -817,7 +817,6 @@
       if (n("joined")) cards.push(`Demons joined: ${num(n("joined"))}`);
       if (titleStats.deadliest && titleStats.deadliest.name) cards.push(`Most falls: ${titleStats.deadliest.name}`);
       if (n("unlocks")) cards.push(`Doors unlocked: ${num(n("unlocks"))}`);
-      if (n("standby")) cards.push(`STANDBY nights: ${num(n("standby"))}`);
       if (n("climbs")) cards.push(`Levels climbed: ${num(n("climbs"))}`);
       if (n("moon")) cards.push(`The moon was asked: ${num(n("moon"))}x`);
       if (n("moon")) cards.push(`The moon answered: ${num(n("moonYes"))}x`);
@@ -1226,7 +1225,7 @@
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
   const HOLD_OMEN_ON = false;
-  let invList = [], invSel = 0, logGlow = false, ichorPick = -1, holdBtn = null;   // ichorPick: who the picker is on (-1: closed); holdBtn: Hold/Release Omen's own button, not a numbered slot
+  let invList = [], invSel = 0, topSel = 0,  logGlow = false, ichorPick = -1, holdBtn = null;   // ichorPick: who the picker is on (-1: closed); holdBtn: Hold/Release Omen's own button, not a numbered slot
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
   function textBox(title, tag, lines, W = 70) {
     const out = ["+" + "-".repeat(W + 2) + "+"];
@@ -1264,7 +1263,7 @@
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
     // (v1.06.1: ICHOR is always shown, even at 0.)
     if (save) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
-      text: "Demon blood and old light. Heals demons. Not meant for KURA." });
+      text: "A flask of demon blood and old light. Heals the party. Not meant for KURA." });
     // Hold Omen / Release Omen: its own button on the INVOKE header now, not a slot in the numbered
     // list -- it's a standing action always in the same place, not something to dig for among found
     // items. One morphing control: normally Hold Omen; once a day's held, it becomes Release Omen (was
@@ -1300,17 +1299,19 @@
     const ich = invList.length && invList[0].ichor ? 1 : 0;      // ICHOR is a count, not a thing: it sits above the bag as 0
     const empty = !(save && (save.items || []).length);
     add(" ");                                                    // (v1.06.1) a little air under the title, above ICHOR
-    invList.forEach((it, i) => { add(
-      `${i === invSel ? ">" : " "} ${it.ichor ? 0 : i - ich + 1}  ${it.ichor ? `ICHOR  (${save.ichor})` : it.name}`.replace(/^(.{42}).{4,}$/, "$1..."),
+    invList.forEach((it, i) => { add(it.ichor
+      ? `${i === invSel && topSel === 0 ? ">" : " "} 0  ICHOR  (${save.ichor}/${RULES.FLASK_MAX})   ${i === invSel && topSel === 1 ? ">" : " "} SILVER  (${save.silver || 0})`
+      : `${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{42}).{4,}$/, "$1..."),
       "btn", i); });
     if (empty) add("  1  The bag is empty", "dim");               // (v1.06.1) no row of empty slots when there's nothing in it
     else for (let k = invList.length - ich; k < RULES.BAG_MAX; k++) add(`  ${k + 1}  .`, "dim");
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
     // The chosen thing (v1.05.1, compact so a full bag fits): a rule with its name and tag, then what it is.
-    const it = invList[invSel];
+    const it0 = invList[invSel];
+    const it = it0 && it0.ichor && topSel === 1 ? { ...it0, silver: true, text: `Cold, pure metal. Cools the room and clears what clouds KURA. Costs ${RULES.silverCost(save)}.` } : it0;
     if (it) {
-      const tag = it.ichor ? `${save.ichor} in hand` : RULES.itemAlignName(it.name);
-      const nm = it.ichor ? "ICHOR" : it.name, room = 41 - 4 - tag.length - 2;
+      const tag = it.silver ? `${save.silver || 0} in hand` : it.ichor ? `${save.ichor} in hand` : RULES.itemAlignName(it.name);
+      const nm = it.silver ? "SILVER" : it.ichor ? "ICHOR" : it.name, room = 41 - 4 - tag.length - 2;
       const shown = nm.length > room ? nm.slice(0, room - 2) + ".." : nm;
       const descRows = (it.ichor ? [it.text] : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : [])]).reduce((n, l) => n + wrapText(l, 41).length, 0);
       if (descRows < 2) add(" ");                                // (v1.06.1) a blank line above the chosen thing's rule, given up for a two-line description
@@ -1329,7 +1330,7 @@
     const help = add("", "");
     if (empty) help.style.marginTop = "0";                       // (v1.06.1) with nothing in the bag, the foot comes up under the list
     if (holdBtn) { const hl = document.createElement("div"); hl.append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : ""))); help.append(hl); }
-    help.append("[1-9] use  ", btn("[C]LOSE", "close"));   // (v1.06.1: a number uses it straight away; 0 is ICHOR when there is some; arrows and Enter still work)
+    help.append("[1-9] use  [<][>] ICHOR/SILVER  ", btn("[C]LOSE", "close"));   // (v1.06.1: a number uses it straight away; 0 is ICHOR when there is some; arrows and Enter still work)
   }
   // THE EXCHANGE WINDOW (v1.00): opened from the screen in a dead end's wall; one window over the view like INVOKE. Four tabs:
   //   MARKET - public offers (others' only). ENTER takes one; one that asks for something takes a matching thing of yours.
@@ -1686,6 +1687,12 @@
     const it = invList[i];
     if (!it || !save) return;
     const log = save.log;
+    if (it.ichor && topSel === 1) {          // SILVER: cools the room and clears what clouds KURA
+      save = RULES.useSilver(save);
+      logGlow = true; remember(log); persist(); draw();
+      if (save.encounter) { showInv(false); encounterBox(); return; }
+      return showInv(true);
+    }
     if (it.ichor && !(save.ichor > 0)) { save.log = "> There's no ICHOR left."; persist(); draw(); return showInv(true); }
     if (it.ichor && !drink) { ichorPick = 0; return showInv(true); }
     save = it.ichor ? RULES.giveIchor(save, Number(drink) || 0) : RULES.useItem(save, it.name);
@@ -1751,7 +1758,7 @@
     box.dataset.mode = "confirm";
     box.hidden = false;
   }
-  const holdBox = () => askBox("hold", "GO ON STANDBY?", ["KURA stays put and opens no new door today.", "This uses today's key. The party camps, and tonight runs deeper."]);
+  const holdBox = () => askBox("hold", "HOLD THE OMEN?", ["KURA stays put and opens no new door today.", "This uses today's key. The day's omen is kept for later."]);
   const resetBox = () => askBox("reset", "BEGIN A NEW RUN?", ["This run will be lost."]);
   function answerConfirm(yes) {
     if (pending) {
@@ -2334,7 +2341,6 @@
     if (k.broken) own.push(`${n(k.broken, "thing", "things")} broken in her hands, ${k.insides || 0} with something inside`);
     if (k.unlocks) own.push(`${n(k.unlocks, "door", "doors")} unlocked, ${n(k.steps || 0, "room", "rooms")} entered`);
     if (k.floors) own.push(`${n(k.floors, "level", "levels")} climbed since she woke`);
-    if (k.standby) own.push(`${n(k.standby, "night", "nights")} spent on STANDBY`);
     if (save.bankedOmen !== undefined) own.push("An omen is held in reserve . . .");
     if (k.fixtures) own.push(`${n(k.fixtures, "fixture", "fixtures")} put to use`);
     if (k.offerings) own.push(`${n(k.offerings, "offering", "offerings")} made at a terminal`);
@@ -2465,6 +2471,8 @@
     if (searchBeat) return;
     // AURA OUT OF A FIGHT (v1.05.2) has a search's beat: line 2 says what she does, three dots, then what came of it is
     // typed out after them. The rules decide it all at once; the page only holds it back. Nothing else works meanwhile.
+    // (v1.16) TALK with nobody to talk to is the old room read, so it keeps that beat.
+    if (name === "word" && save && !save.encounter && !save.dead && !save.question && !(save.party || []).slice(1).some(q => q.hp > 0)) name = "aura";
     if (name === "aura" && save && !auraGo && !save.encounter && !save.dead && !save.question) {
       auraGo = true; try { act("aura"); } finally { auraGo = false; }
       const full = save.log || "", m = /^(> KURA [^.]*?)\.\.\. (.+)$/.exec(full);
@@ -2802,7 +2810,8 @@
       }
       if (key === "i" || key === "c" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
       else if (key === "h") { e.preventDefault(); holdAction(); }
-      else if (/^[0-9]$/.test(key)) { e.preventDefault(); const ich = invList.length && invList[0].ichor ? 1 : 0, n = Number(key);   // 0 is ICHOR, 1-9 the bag
+      else if ((key === "arrowleft" || key === "arrowright") && invSel === 0 && invList.length && invList[0].ichor) { e.preventDefault(); topSel = key === "arrowright" ? 1 : 0; showInv(true); }
+      else if (/^[0-9]$/.test(key)) { e.preventDefault(); if (key === "0") topSel = 0; const ich = invList.length && invList[0].ichor ? 1 : 0, n = Number(key);   // 0 is ICHOR, 1-9 the bag
         if (n === 0 ? ich : n <= invList.length - ich) { invSel = n === 0 ? 0 : n - 1 + ich; showInv(true); useInv(invSel); } }   // (v1.06.1) pressing the number uses it
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }

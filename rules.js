@@ -254,6 +254,7 @@
     // (VIBES) A room turning hot is the only thing that touches the party, and it takes nothing away: everyone goes quiet
     // for the rest of the day (p.hush), and a night's sleep, or a TALK with them, brings them back.
     if (before < 2 && after >= 2) for (const p of st.party || []) if (p.demon && p.hp > 0) p.hush = true;
+    if (before < 2 && after >= 2 && (st.party || []).some(p => p.demon && p.hp > 0) && !st.tell) st.tell = "> The others go quiet.";
   }
   // (v1.12) Dealing with a demon cools the room by a third (fight, WORD, recruit or run).
   function coolOff(st) { const d = st.dungeon; if (d) { const rs = RS(d); rs.heat = Math.floor(rs.heat * 2 / 3); } }
@@ -506,7 +507,7 @@
     bay: ["> A note taped to the wall: SAFE TO REST. NOTHING GETS IN.", "> Chalked low on the stone: A PLACE TO LIE DOWN. ONE DOOR."],
     relay: ["> Scrawled in marker: THE DISHES TURN. LISTEN, IT KNOWS THE WAY.", "> A cable, tied in a knot, tagged: FOLLOW THE CARRIER."],
     vault: ["> Chalked on the stone: COIN. RACKS OF IT. DON'T LINGER.", "> A tally of numbers, and under it: SILVER, BEHIND THE COLD DOOR."],
-    forge: ["> A scorched tag: BENCH AND TOOLS. BRING THE TAINT TO BURN OUT.", "> Scratched deep: IT MENDS THE BAD OUT OF YOU."],
+    forge: ["> A scorched tag: BENCH AND TOOLS. BRING WHAT YOU DRANK TO BURN OUT.", "> Scratched deep: IT MENDS THE BAD OUT OF YOU."],
     altar: ["> A scrap of print: IT ASKS. GIVE, AND IT ANSWERS.", "> Written small, over and over: FEED THE SCREEN."],
     archive: ["> A label, half peeled: EVERYTHING EVER SAVED. TAKE ONE.", "> Stamped on a drive: ONE STILL SPINS."],
   };
@@ -776,8 +777,6 @@
     if (st.dungeon && st.dungeon.deadline > real + 16) st.dungeon.deadline = real + 16;   // never further out than two quarters
     st.extra = "> The calendar shudders and settles on today.";
   }
-  const STANDBY_LINES = ["> KURA kept still all day. The party sleeps deeper tonight.", "> A quiet day. Everyone wakes lighter.",
-    "> Nothing moved, and nothing was lost. The room feels kinder.", "> The long stillness did its work."];
   // BREATH. KURA's own tiredness: eight breaths (six before v1.06), one spent by every search (and by asking the moon). Out of breath,
   // she can't search. It comes back by itself in real time, starting 2 seconds after the last one spent, and the
   // lower it has run the slower it returns: BREATH_BACK[n] is the seconds to climb from n to n + 1, so a small dip
@@ -830,7 +829,7 @@
     // there's still no stamp, so take one now.)
     if (st.omenDay === undefined) st.omenDay = utcDay();
     if (!newDay || st.dead) return st;
-    // A day KURA chose to HOLD (see hold) is STANDBY: a deeper rest tonight.
+    // A day KURA chose to HOLD (see hold) only banks its omen now (STANDBY, the camp with its heal and cool-down, is gone).
     const held = !!st.today.held && st.today.date === t - 1 && !!st.dungeon && !st.dead;
     // A day with no step spent at all, not even STANDBY: an unmanaged tense party gets a little worse
     // even when nothing is actively happening (see the DISSONANCE block above fight/alignOf).
@@ -888,17 +887,10 @@
     st.party = (st.party || []).map(p => p.patience === undefined ? { ...p, chats: 0, words: 0 } : { ...p, chats: 0, words: 0 });
     // Members go out in the night and come back with something (v1.06).
     const found = st.dungeon && !st.dead ? nightFinds(st) : null;
+    if (st.dungeon && !st.dead) campJobs(st);       // program demons work in the night: COMPILER and CACHE
     for (const p of st.party) { delete p.buzz; delete p.hush; }   // an ichor buzz wears off overnight, and so does a quiet day
     // A night's rest heals a fifth of everyone's HP (fallen allies too, slowly).
     if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
-    if (held) {   // standby is a camp: everyone standing is whole again, patience is full, taint is gone, the room cools right down
-      st.party = st.party.map(p => p.hp > 0 ? { ...p, hp: p.hpmax, mp: p.mpmax ?? p.mp, ...(p.patience === undefined ? {} : { patience: PATIENCE }) } : { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) });
-      st.taint = 0;
-      campJobs(st);
-      if (st.dungeon) { for (const rs of allRooms(st.dungeon)) rs.heat = Math.floor(rs.heat / 2); RS(st.dungeon).heat = 0; }
-      st.loop = { key: "", n: 0 };
-      tally(st, "standby");
-    }
     const d = st.dungeon;
     if (d && t > d.deadline) {
       st.dead = true;
@@ -910,11 +902,11 @@
     st.log = `> KURA wakes on ${st.floor}.` + (st.campNote ? " " + st.campNote : "");
     delete st.campNote;
     st.extra = d && t === d.deadline ? "> The air grows heavy. The way up closes tonight."
-      : held ? (st.restedDay = t, `> In the dark, a voice: "${omen(st.omenDay + 1).text.replace(/^> "|"$/g, "")}"`) : found || (settled ? "> The room settles." : atmosphere(st));
+      : held ? `> In the dark, a voice: "${omen(st.omenDay + 1).text.replace(/^> "|"$/g, "")}"` : found || (settled ? "> The room settles." : atmosphere(st));
     return st;
   }
 
-  // PROGRAM JOBS at camp: COMPILER merges two COMMON items into an UNCOMMON one; CACHE keeps a copy of one COMMON.
+  // PROGRAM JOBS, every night: COMPILER merges two COMMON items into an UNCOMMON one; CACHE keeps a copy of one COMMON.
   function campJobs(st) {
     const commons = () => (st.items || []).filter(n => TIER[n] === "COMMON");
     if (has(st, "COMPILER") && commons().length >= 2) {
@@ -964,7 +956,7 @@
         st.round = corrupt ? [`${A(name)} blocks the way.`, "Its edges flicker. The data is damaged."]
           : isProgram(base) ? [`${A(name)} is running here.`, "It does not seem to mind KURA."]
           : [`${A(name)} blocks the way.`, STANCE_LINE[stance(st, st.encounter)](name)];
-        const remark = auraRemark(st, st.encounter);
+        const remark = auraRemark(st, st.encounter) || tagRemark(st, st.encounter);
         if (remark) st.round.push(remark);
         if (disguised(st) && --st.disguise.n <= 0) delete st.disguise;
         note(st, "demons", base, "met"); tally(st, "met");
@@ -1175,11 +1167,11 @@
     heatUp(st, 1);
     const fx = omen(effectiveOmenDay(st)).fx;
     // How much a search is worth. The day's omen sets the luck of the day (hard 0.5, easy 1.6). A calm room means
-    // steady hands (x1.25) and a hot one hurried ones (x0.75). After a STANDBY day KURA is rested (x1.25).
+    // steady hands (x1.25) and a hot one hurried ones (x0.75).
     // The moon's fullness helps too: up to x1.35 at the full moon, nothing at the new moon. Capped under 2 points, so nothing
     // can ever turn up on a first look (the cheapest thing needs 5).
     const fullness = (1 - Math.cos(moon() / 8 * 2 * Math.PI)) / 2;
-    const worth = Math.min(1.9, fx.find * (tier === 0 ? 1.25 : tier >= 2 ? 0.75 : 1) * (st.restedDay === clock(st) ? 1.25 : 1) * (1 + 0.35 * fullness));
+    const worth = Math.min(1.9, fx.find * (tier === 0 ? 1.25 : tier >= 2 ? 0.75 : 1) * (1 + 0.35 * fullness));
     const where = `KURA searches the ${NAME[dir]} wall...`;
     const say = text => {
       const long = `> ${where} ${text}`;
@@ -1523,7 +1515,7 @@
       const n = R(40, 110) * floorNum(st);
       st.silver = (st.silver ?? 0) + n; tally(st, "silverFound", n);
       st.log = `> The drawers slide open. ${n} SILVER.`;
-    } else if (k === "forge") {              // purify: clears the ichor taint
+    } else if (k === "forge") {              // purify: clears the drunk
       const dirty = (st.taint || 0) > 0 || tripping(st);
       if (dirty) { st.taint = 0; const kura = st.party[0]; delete kura.status; st.tripLeft = 0; delete st.turnShown; }
       st.log = dirty ? "> KURA works at the bench. The air clears." : "> KURA works at the bench. Nothing needs mending.";
@@ -1685,8 +1677,7 @@
   }
 
 
-  // HOLD (STANDBY): KURA lays the day's key down instead of opening a door. It spends the key, and tonight's rest
-  // is deeper (see sync). Doors that are already open stay free to walk through.
+  // HOLD (dormant: no button or key reaches it): KURA lays the day's key down instead of opening a door, and banks its omen. Doors that are already open stay free to walk through.
   function hold(st) {
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
@@ -1743,7 +1734,7 @@
     const row1 = [`ROOM ${d.at + 1}/${fl.count} ${kind} WING ${rm.wing + 1}/${fl.pairs + 2}`, stairs, exs];
     const row2 = [`KEY ${(st.today || {}).stepped ? "spent" : "ready"}`, `HIDDEN ${left}`, wall ? `TERMINAL ${NAME[wall]}` : null,
       `HEAT ${RS(d).heat}/${HEAT_MAX}`, `ENC ${enc}%`, onOmenCooldown(st) ? `OMEN COOLDOWN ${7 - (st.day - st.omenCooldownDay)}d` : null];
-    const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `TAINT ${st.taint || 0}`, `DAY ${st.day}`,
+    const row3 = [`LOOP ${(st.loop && st.loop.n) || 0}`, `LINGER ${RS(d).linger}/${LINGER_AT}`, `LEAN ${(st.alignScore || 0).toFixed(1)}`, `DRUNK ${st.taint || 0}`, `DAY ${st.day}`,
       `OMEN ${omen(effectiveOmenDay(st)).key}${st.useBanked ? "(banked)" : ""}${st.bankedOmen !== undefined ? " +BANK" : ""}`,
       `BONUS ${st.bonusCount || 0}/2${fl.pendingBonus ? " +PEND" : ""}${fl.pendingAnti ? " +PEND(void)" : ""}`];
     return [row1, row2, row3].map(r => r.filter(Boolean).join("  ")).join("\n");   // three lines under the screen
@@ -2017,12 +2008,19 @@
     if (st) ev(st, "words", ALL_WORDS.indexOf(w));          // quoted on the title screen, never attributed
     return `"${w}"`;
   }
+  // THE FLASK. ICHOR lives in a flask KURA always has: it holds FLASK_MAX, and anything past that is lost. It fills from a
+  // fallen demon and from a demon that parts in peace; the party drinks from it (see feedIchor, giveIchor).
+  const FLASK_MAX = 60;
+  function fillFlask(st, n) {
+    const have = st.ichor ?? st.mag ?? 0, got = Math.max(0, Math.min(n, FLASK_MAX - have));
+    st.ichor = have + got;
+    return got;
+  }
   function win(st, lines) {
     const e = st.encounter;
-    const n = R(5, 30) + 3 * floorNum(st);
-    st.ichor = (st.ichor ?? st.mag ?? 0) + n;
+    const n = fillFlask(st, R(5, 30) + 3 * floorNum(st));
     tally(st, "beaten"); tally(st, "ichorWon", n);
-    lines.push(`${THE(e.name)} falls.  +${n} ICHOR`);
+    lines.push(`${THE(e.name)} falls.${n ? `  +${n} ICHOR` : "  The flask is full."}`);
     st.lastLine = lastWords(e, st);                         // shown on the end-of-fight screen, right under the art
     // What a fallen demon leaves (v1.06): one or two things out of its own pockets. Never SILVER, never a moon thing.
     const had = pockets(st, e).slice().sort(() => Math.random() - 0.5);
@@ -2032,7 +2030,7 @@
       st.party = st.party.map(p => p.hp > 0 ? { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 8)) } : p);
       lines.push("PATCH mends the party a little.");
     }
-    st.log = `> ${THE(e.name)} falls. ${n} ICHOR.`;
+    st.log = n ? `> ${THE(e.name)} falls. ${n} ICHOR.` : `> ${THE(e.name)} falls. The flask is full.`;
     st.dungeon.scent = { room: st.dungeon.at, text: "Copper in the air" };
     st.encounter = null; coolOff(st);
   }
@@ -2403,6 +2401,29 @@
   };
   const MOON_ITEM_REMARK = { data: "UNKNOWN OBJECT IN USER INVENTORY. ORIGIN: UP.", hardware: "is that... from the sky?",
     hybrid: "You carry a piece of the moon. Bold.", folklore: "You carry moonlight, child. She will want it back.", beast: "CU SITH whines at the light in KURA's bag." };
+  // (TAGS) A demon sometimes remarks on one of KURA's recent choices (her tags), in its family's voice. The party does too,
+  // in their banter. Which tag speaks: the most recent one that has lines.
+  const TAG_KIND = { kill: "finished", run: "ran", pay: "paid", task: "paid", break: "broke", breakLAW: "broke", breakCHAOS: "broke", talk: "talked", talkLAW: "talked", talkCHAOS: "talked", restore: "restored" };
+  const tagKind = st => { const t = st.tags || []; for (let i = t.length - 1; i >= 0; i--) if (TAG_KIND[t[i]]) return TAG_KIND[t[i]]; return null; };
+  const TAG_SAY = {
+    finished: { data: '{n}: "PRIOR INSTANCE TERMINATED. BY YOU. NOTED."', hardware: "{n} remembers the sound of the last one going quiet.", hybrid: "{n} looks at KURA with both halves, and neither is surprised.", folklore: '{n}: "You smell of someone I knew."' },
+    ran: { data: '{n}: "EXIT LOG SHOWS YOU LEAVE EARLY. OFTEN."', hardware: "{n} has heard you run. Lightly, and well.", hybrid: '{n} tilts one half of its head. "Quick feet."', folklore: '{n}: "The ones who run live long. Mostly."' },
+    paid: { data: '{n}: "TRANSACTION HISTORY: FAVORABLE."', hardware: "{n} perks up. Somebody here pays what they owe.", hybrid: "{n} nods, once, in two voices.", folklore: '{n}: "A hand that opens. I had forgotten them."' },
+    broke: { data: '{n}: "DAMAGE REPORT FOLLOWS YOU. IT IS LONG."', hardware: "{n} keeps a polite distance from KURA's hands.", hybrid: "{n} flinches on its mechanical side only.", folklore: '{n}: "You leave things in pieces, child."' },
+    talked: { data: '{n}: "VERBAL HANDSHAKE ACCEPTED. PROCEED."', hardware: "{n} sits up a little. It has heard that voice before.", hybrid: '{n} lowers both halves. "You are the one who talks."', folklore: '{n}: "They say there is a mortal who listens. Is it you?"' },
+    restored: { data: '{n}: "THE NOISE FELT QUIETER ON YOUR APPROACH."', hardware: "{n} stops grinding for a moment, and does not say why.", hybrid: '{n}: "Something in you smooths the static."', folklore: '{n}: "You mend. It is rare. It is noticed."' },
+  };
+  const PARTY_TAG_SAY = {
+    finished: { ELF: 'ELF: "Quickly done. I did not look."', PIXIE: 'PIXIE: "Was it... was it okay?"', "CU SITH": "CU SITH licks its lips, then looks away." },
+    ran: { ELF: 'ELF: "Good. I was not ready either."', PIXIE: 'PIXIE: "YES. Running is great."', "CU SITH": "CU SITH is already ahead of you." },
+    paid: { ELF: 'ELF: "Generous. It suits you."', PIXIE: 'PIXIE: "Aw. You\'re nice."', "CU SITH": "CU SITH nudges KURA's hand, approving." },
+  };
+  function tagRemark(st, e) {
+    const k = tagKind(st);
+    if (!k || beast(e) || UNIQUE[e.base || e.name] || Math.random() >= 0.25) return null;
+    const l = TAG_SAY[k][famOf(e)];
+    return l ? l.replace(/\{n\}/g, e.name) : null;
+  }
   function auraRemark(st, e) {
     if (isProgram(e.base || e.name) || UNIQUE[e.base || e.name]) return null;
     const au = aura(st), f = famOf(e);
@@ -2736,6 +2757,8 @@
       const it = pick(have); lines.push(`${THE(e.name)} leaves ${it} behind.`); takeFrom(st, e, it, lines);
       lines.push(`${THE(e.name)} is content. ${say2(e, "leave")}`);
     } else lines.push(`${THE(e.name)} goes its way. ${say2(e, "leave")}`);
+    const gift2 = fillFlask(st, R(6, 12));              // a demon that parts in peace leaves a little ICHOR in the flask
+    if (gift2) { tally(st, "ichorWon", gift2); lines.push(`It leaves ${gift2} ICHOR in the flask.`); }
     leaves(st, e);
   }
 
@@ -2797,7 +2820,8 @@
     if (r >= 0.3 * y && r < 0.3 * y + 0.12 && confide(st, p)) return show(st);
     // Otherwise, banter: what's on their mind, or what they make of KURA's aura. Once in a while it helps.
     const au = aura(st).band, ap = AURA_PARTY[p.name] || AURA_FAMILY[famKey(p)];
-    let line = Math.random() < 0.3 && ap ? pick(ap[au === 2 ? 1 : 0]).replace(/\{n\}/g, p.name) : lineFor({ ...FAMILY_TALK, ...PARTY_TALK }, p);
+    const pk = tagKind(st), ptl = pk && PARTY_TAG_SAY[pk] && PARTY_TAG_SAY[pk][p.name];
+    let line = ptl && Math.random() < 0.2 ? ptl : Math.random() < 0.3 && ap ? pick(ap[au === 2 ? 1 : 0]).replace(/\{n\}/g, p.name) : lineFor({ ...FAMILY_TALK, ...PARTY_TALK }, p);
     const kura = st.party[0];
     if (Math.random() < 0.2 * y && kura.hp > 0 && kura.hp < kura.hpmax) {
       const n = Math.max(1, Math.ceil(kura.hpmax / 10)); kura.hp = Math.min(kura.hpmax, kura.hp + n);
@@ -3304,7 +3328,7 @@
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; return true; }
     if (!p.hush && banterAsk(st, p)) return true;
-    const lines = p.hush ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[1] : (LOOPED[p.name] || LOOPED[p.family || "folklore"]);
+    const lines = p.hush ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"]).flat() : (LOOPED[p.name] || LOOPED[p.family || "folklore"]);
     st.extra = "> " + pick(lines.filter(l => "> " + l.replace(/\{n\}/g, p.name) !== st.extra)).replace(/\{n\}/g, p.name);
     return true;
   }
@@ -3323,14 +3347,14 @@
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; st.fidgetLine = st.extra; return; }   // line 2 keeps the item; line 3 the snap
     if (!p.hush && banterAsk(st, p)) { st.fidgetLine = st.extra; return; }
-    const lines = p.hush ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[1] : FIDDLE;
+    const lines = p.hush ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"]).flat() : FIDDLE;
     st.extra = st.fidgetLine = "> " + pick(lines).replace(/\{n\}/g, p.name);
   }
 
   // ICHOR is demon blood and old light: what's left when a demon falls. It's the party's medicine:
   // it heals demons (about 1 ICHOR per HP; bringing back a fallen one costs three times as much), but not KURA.
   // KURA can drink it anyway. It heals her badly (10 ICHOR for 5 HP), pulls her hard toward CHAOS, and
-  // leaves TAINT, which fades a point each night. Any taint gives her a buzz (her blows land a little
+  // leaves her DRUNK (st.taint), which fades a point each night. Any taint gives her a buzz (her blows land a little
   // harder). From 3 she starts seeing things (strange thoughts on line 3). At 6 she TRIPS (a status,
   // KURA* in the party panel) for 50-100 actions, or until she sleeps: she strikes twice as hard but a
   // third of her blows go wild and hit the party (never knocking anyone out), she sometimes answers
@@ -3359,6 +3383,28 @@
     st.log = `> ${fed.length === 1 ? fed[0] + " drinks" : "The party drinks"}. ICHOR -${spent}.`;
     st.extra = "> " + pick([`${pick(fed)} laps it up. The wounds close.`, `${pick(fed)} drinks deep and sighs.`,
       "The ichor glows, then is gone. So are the wounds.", `${pick(fed)}: the color comes back.`]);
+    return show(st);
+  }
+  // SILVER is pure: it cools the room KURA is standing in (to nothing) and clears what clouds her (the drunk and a trip, with no
+  // coming-down cost) and the party's quiet. It costs SILVER_COST a level, and does nothing if there is nothing to clear.
+  const SILVER_COST = 40;
+  function useSilver(st) {
+    st = copy(st);
+    if (st.dead) { st.extra = OVER; return show(st); }
+    if (!ensureFloor(st)) return show(st);
+    const cost = SILVER_COST * floorNum(st), rs = RS(st.dungeon);
+    if ((st.silver ?? 0) < cost) { st.log = `> It takes ${cost} SILVER. There isn't enough.`; return show(st); }
+    const hot = rs.heat >= 6, clouded = (st.taint || 0) > 0 || tripping(st), quiet = (st.party || []).some(p => p.hush);
+    if (!hot && !clouded && !quiet) { st.log = "> The air is already clean. KURA keeps her SILVER."; return show(st); }
+    act(st, "silver:use");
+    st.silver -= cost;
+    tally(st, "silverUsed", cost);
+    rs.heat = 0;
+    if (clouded) { st.taint = 0; const k = st.party[0]; delete k.status; st.tripLeft = 0; delete st.turnShown; }
+    for (const p of st.party) delete p.hush;
+    st.statusIn = 0;
+    st.log = `> KURA lets the silver go. SILVER -${cost}.`;
+    st.extra = "> " + pick(["The air cools. Things settle.", "Cold, clean light, and then nothing at all.", "The room exhales. So does KURA.", "The silver tarnishes in her hand, and the room is still."]);
     return show(st);
   }
   // Give ICHOR to one member (KURA drinks). A wounded demon is healed; a whole one takes it anyway: 3 ICHOR, wasted
@@ -3643,7 +3689,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

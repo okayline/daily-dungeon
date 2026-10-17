@@ -2,6 +2,15 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.16 - Flask - Oct 17 2026, 06:58 HST
+
+- **Tags.** Demons now sometimes remark on what KURA has done lately, and so does the party. A hot room makes the others go quiet.
+- **ICHOR is a flask.** KURA always carries it. It holds a fixed amount, fills from a fallen demon and from a demon that parts in peace, and the party drinks from it.
+- **SILVER cools and cleans.** Spend it from the bag (ICHOR and SILVER share one line; left and right choose) to cool the room and clear what clouds KURA.
+- **TAINT is DRUNK.** Same thing, easier name.
+- **STANDBY is gone.** The key is for doors. Program demons now do their jobs every night.
+- **README** brought up to date.
+
 ## v1.15 - Talk - Oct 17 2026, 06:22 HST
 
 - **WORD is TALK.** `[T]` talks. With a party it is a conversation with them; alone, KURA listens to the room or the door she faces. In a fight, talking also tells you how the demon comes off.
