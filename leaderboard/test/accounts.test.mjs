@@ -138,3 +138,18 @@ test("logout needs a way back in; making players is rate limited per address", a
   for (let i = 0; i < 20; i++) assert.equal((await browser(env, { ip: "198.51.100.7" })("/api/codes", { action: "new" })).status, 200);
   assert.equal((await browser(env, { ip: "198.51.100.7" })("/api/codes", { action: "new" })).status, 429);
 });
+
+test("a signed-in player's finds become registry copies: own items only, resends count once, signed-out refused", async () => {
+  const born = new Map(), calls = [];
+  const REGISTRY = { async birth(a) { calls.push(a); if (!born.has(a.key)) born.set(a.key, born.size + 1); return { itemId: a.itemId, copy: born.get(a.key) }; } };
+  const env = makeEnv({ REGISTRY }), a = browser(env, { ip: "203.0.113.30" }), anon = browser(env, { ip: "203.0.113.31" });
+  assert.equal((await anon("/found", { finds: [{ id: 1, key: "r:1" }] })).status, 401);
+  await a("/codes", { action: "new" });   // makes this browser a player
+  const finds = [{ id: 1, key: "run1:1" }, { id: 47, key: "run1:2" }, { id: 46, key: "run1:3" }];   // 47 is an 88x31 button: not ours
+  const r1 = await a("/found", { finds });
+  assert.deepEqual(r1.data.copies.map((c) => c.key), ["run1:1", "run1:3"]);
+  const r2 = await a("/found", { finds });   // a resend: same keys, same copies
+  assert.deepEqual(r2.data.copies, r1.data.copies);
+  assert.deepEqual([...new Set(calls.map((c) => c.game))], ["4dungeon"]);
+  assert.ok(calls.every((c) => c.key.startsWith(c.playerId + ":")));
+});

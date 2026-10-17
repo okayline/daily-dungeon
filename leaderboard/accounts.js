@@ -16,8 +16,11 @@
 //   POST /logout                        this browser forgets its player (needs a code or passkey first)
 //   GET  /save                          the run saved to the cloud: {code, saved} or {code: null}
 //   POST /save {code}                   save the run (its PASSWORD text) to the cloud
-const GAME = "4dungeon", MAX_SAVE = 400000;
-const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/save"]);
+//   POST /found {finds: [{id, key}]}    (v1.14) register gained items as numbered copies in the shared registry
+import SHARED from "../items.js";
+const GAME = "4dungeon", MAX_SAVE = 400000, MAX_FOUND_A_DAY = 300;
+const OUR_ITEMS = new Set(SHARED.filter((i) => !i.retired).map((i) => i.id));   // only 4Dungeon's own items are registered from here
+const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/save", "/found"]);
 
 class Oops extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 const now = () => Math.floor(Date.now() / 1000);
@@ -180,7 +183,7 @@ export async function accountsRoute(req, env, url) {
     if (!originsOf(env).includes(from)) throw new Oops("Accounts work at dungeon.88x31.app. Open the game there to use them.", 403);
     if (req.method === "POST" && !/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const p = url.pathname, m = req.method;
-    if (p !== "/save") ACC(env);   // no accounts service, no players made
+    if (p !== "/save" && p !== "/found") ACC(env);   // no accounts service, no players made
     let out;
     if (p === "/account" && m === "GET") out = await account(env, req);
     else if (p === "/codes" && m === "POST") out = await codes(env, req, ctx);
@@ -188,6 +191,7 @@ export async function accountsRoute(req, env, url) {
     else if (p === "/passkey" && m === "POST") out = await passkey(env, req, ctx);
     else if (p === "/logout" && m === "POST") out = await logout(env, req, ctx);
     else if (p === "/save" && (m === "GET" || m === "POST")) out = await saveRun(env, req, m);
+    else if (p === "/found" && m === "POST") out = await found(env, req);
     else return reply({ error: "No such thing." }, 404);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {
@@ -195,4 +199,25 @@ export async function accountsRoute(req, env, url) {
     console.error(e);
     return reply({ error: "Something broke. Try again in a moment." }, 500);
   }
+}
+
+// (v1.14) Items a signed-in player gained, as numbered copies in the shared copy registry (dungeon-items, binding
+// REGISTRY). The game runs in the browser, so this trusts the page the way the board does: only 4Dungeon's own items,
+// at most MAX_FOUND_A_DAY a player a day, and each find's key (the player, the run, the nth item gained) makes a resend
+// return the same copy instead of a new one. Answers { copies: [{ key, copy }] } for the ones that went in.
+async function found(env, req) {
+  const me = await mustPlayer(env, req);
+  if (!env.REGISTRY) throw new Oops("The item registry is unavailable right now.", 503);
+  const list = (await body(req)).finds;
+  if (!Array.isArray(list) || list.length > 50) throw new Oops("Up to 50 finds at a time.");
+  const finds = list.filter((f) => f && OUR_ITEMS.has(f.id) && typeof f.key === "string" && /^[A-Za-z0-9:_-]{1,80}$/.test(f.key));
+  const day = Math.floor(now() / 86400) * 86400, key = "found:" + me.id;
+  const r = await env.DB.prepare("INSERT INTO acct_limits (key, window_start, count) VALUES (?, ?, ?) ON CONFLICT(key, window_start) DO UPDATE SET count = count + excluded.count RETURNING count").bind(key, day, finds.length).first();
+  if (r.count > MAX_FOUND_A_DAY) throw new Oops("That's a lot of finds for one day. Try again tomorrow.", 429);
+  const copies = [];
+  for (const f of finds) {
+    const b = await env.REGISTRY.birth({ itemId: f.id, game: GAME, playerId: me.id, key: me.id + ":" + f.key });
+    if (b && !b.error) copies.push({ key: f.key, copy: b.copy });
+  }
+  return { copies };
 }

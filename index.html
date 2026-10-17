@@ -148,6 +148,7 @@
 <script src="sky.js"></script>
 <script src="screen.js"></script>
 <script src="floor.js"></script>
+<script src="items.js"></script>
 <script src="rules.js"></script>
 <script>
   var PERIOD_STOP = 1000;   // (v1.08.1) a period is a full one-second stop wherever text types out (var: used before this script finishes running)
@@ -377,12 +378,28 @@
     offerBox();
     boxTick();
     tallyTick();
+    registryTick();
   }
   // The door she just opened, for the signal rooms' scratches (fire and forget: a mark that doesn't land costs nothing).
   function tallyTick() {
     if (!save || !save.tally) return;
     const t = save.tally; delete save.tally; persist();
     try { fetch(LEADERBOARD_URL + "/tally", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify(t) }).catch(() => {}); } catch (e) {}
+  }
+  // THE SHARED REGISTRY (v1.14): items she gained (save.finds, queued by the rules) become numbered copies for a signed-in
+  // player. Not signed in, or not on the game's own address: the queue is dropped. A send that fails stays queued (50 at most).
+  let regBusy = false;
+  function registryTick() {
+    if (!save || !save.finds || !save.finds.length || regBusy) return;
+    let tok = ""; try { tok = localStorage.getItem("dd-token") || ""; } catch (e) {}
+    if (!tok || !ACCOUNT_HOST) { delete save.finds; persist(); return; }
+    regBusy = true;
+    const batch = save.finds.slice(0, 50), sent = new Set(batch.map(f => f.key));
+    fetch(LEADERBOARD_URL + "/found", { method: "POST", headers: { authorization: "Bearer " + tok, "content-type": "application/json" }, body: JSON.stringify({ finds: batch }) })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && Array.isArray(d.copies)) { save.finds = (save.finds || []).filter(f => !sent.has(f.key)); persist(); } })
+      .catch(() => {})
+      .finally(() => { regBusy = false; });
   }
   // THE GIFT BOX (v1.10): the rules say a box is here (save.box) or a swap is waiting on the server (save.boxPending);
   // the page does the asking, and tells the rules what came back. A box it cannot reach just isn't there this time.

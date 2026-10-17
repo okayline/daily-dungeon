@@ -31,3 +31,8 @@ binding = "ACCOUNTS"
 service = "dungeon-items"
 entrypoint = "Accounts"
 
+# (v1.14) The shared copy registry (dungeon-items, `Registry` entrypoint): a signed-in player's finds become numbered copies.
+[[services]]
+binding = "REGISTRY"
+service = "dungeon-items"
+entrypoint = "Registry"
