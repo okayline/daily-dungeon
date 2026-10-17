@@ -30,11 +30,11 @@ const now = () => Math.floor(Date.now() / 1000);
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type, authorization", "access-control-max-age": "86400" };
 export const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...CORS } });
 const hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
-const sha = async (s) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
+export const sha = async (s) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
 const newToken = () => hex(crypto.getRandomValues(new Uint8Array(32)));
-const readToken = (req) => { const m = (req.headers.get("authorization") || "").match(/^Bearer ([A-Za-z0-9_-]{20,200})$/); return m ? m[1] : null; };
+export const readToken = (req) => { const m = (req.headers.get("authorization") || "").match(/^Bearer ([A-Za-z0-9_-]{20,200})$/); return m ? m[1] : null; };
 export const originsOf = (env) => String(env.ACCOUNT_ORIGINS || "https://dungeon.88x31.app").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean);
-const ipOf = (req) => req.headers.get("cf-connecting-ip") || "unknown";
+export const ipOf = (req) => req.headers.get("cf-connecting-ip") || "unknown";
 const ACC = (env) => { if (!env.ACCOUNTS) throw new Oops("Accounts are unavailable right now. Try again in a moment.", 503); return env.ACCOUNTS; };
 const ok = (r) => { if (r && r.error) throw new Oops(r.error, r.status || 400); return r; };
 
@@ -181,7 +181,8 @@ async function saveRun(env, req, method) {
 // Returns a Response for an account route, or null when the path isn't one (the caller carries on with the board).
 export async function accountsRoute(req, env, url) {
   if (!SAVE_ROUTES.has(url.pathname)) return null;
-  const from = (req.headers.get("origin") || "").replace(/\/$/, ""), ctx = { token: null, origin: from };
+  // (v1.21.1) A same-origin GET carries no Origin header: the page's own address is the request's.
+  const from = (req.headers.get("origin") || (req.headers.get("sec-fetch-site") === "same-origin" ? new URL(req.url).origin : "")).replace(/\/$/, ""), ctx = { token: null, origin: from };
   try {
     if (!originsOf(env).includes(from)) throw new Oops("Accounts work at dungeon.88x31.app. Open the game there to use them.", 403);
     if (req.method === "POST" && !/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);

@@ -769,7 +769,9 @@
   }
   // The leaderboard's address (the Cloudflare Worker, see leaderboard/README.md). Empty: every board button stays hidden.
   const ACCOUNT_HOST = location.hostname === "dungeon.88x31.app";   // passkeys belong to 88x31.app, so accounts only work on the game's own address
-  const LEADERBOARD_URL = "https://daily-dungeon-board.ddddungeon.workers.dev";
+  // (v1.21.1) On the game's own address the board is the same Worker under /api: same origin, so no CORS preflight
+  // (an extra trip before every POST) and one shared connection.
+  const LEADERBOARD_URL = ACCOUNT_HOST ? "/api" : "https://daily-dungeon-board.ddddungeon.workers.dev";
   // THE RUN ON THE SERVER (v1.21, stage 3 of dungeon-notes/4dungeon-server-move.md). On the game's own address (or a local
   // wrangler dev), every action goes to the Worker (/api/act), which keeps the run and plays it with the same rules
   // (act.js). Anywhere else (itch.io, a file) the page plays it itself, as before. Breath is off on the server for now.
@@ -778,7 +780,7 @@
   const SERVER = ACCOUNT_HOST || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const PAGE_KEEP = ["history", "logged", "ecoSeen", "ecoRun", "ecoNews", "ecoEnded", "key", "unsaved", "saved", "endShown", "submitted", "auraBand", "regCopies", "visitDay", "breathNow"];
   const OUT_LIST = ["finds", "gone", "events"], OUT_ONE = ["tally", "line3", "exchangeOpen"];
-  let runN = 0, waiting = false, chain = Promise.resolve();
+  let runN = 0, waiting = false, chain = Promise.resolve(), prefetch = null;
   function adopt(run, n, old) {
     if (old) {
       for (const k of PAGE_KEEP) if (old[k] !== undefined) run[k] = old[k];
@@ -1594,6 +1596,7 @@
   }
   // Every 110 ms: the walk steps every third beat, the ticker every second. paintOnly: repaint without stepping.
   function exTick(paintOnly) {
+    if (!RULES.EXCHANGE_ON) return;                   // (v1.21.1) parked: no need to tick its chart ten times a second
     if (!paintOnly) { EXW.tick++; if (EXW.tick % 3 === 0) { EXW.v.push(exStep(EXW.v[EXW.v.length - 1])); EXW.v.shift(); } if (EXW.tick % 2 === 0) EXW.tape++; }
     // The arrow follows the line's trend, not each step: it looks again about every 1.5 seconds (14 beats), comparing
     // now with six steps back, and keeps its way on a tie.
@@ -2632,7 +2635,9 @@
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   let auraGo = false;                           // (the same for an AURA read)
   async function act(name) {
-    if (waiting) return;                             // (v1.21) the server is still answering the last one
+    const early = prefetch && prefetch.name === name && searchGo ? prefetch.p : null;   // (v1.21.1) asked for at the start of the beat
+    if (early) prefetch = null;
+    else if (waiting) return;                        // (v1.21) the server is still answering the last one
     line3Calm = Date.now();                          // line 3 waits a moment after anything she does before it starts a new line
     if (!searchGo && !searchBeat) beatLine1 = null;     // the party's reaction to a search lasts until she does something else
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
@@ -2729,6 +2734,7 @@
         if (shown >= parts.length) { searchBeat = null; save.log = head + " " + parts.join(" "); draw(); showHeld(); done(); return; }
         searchBeat = setTimeout(step, BEAT_MS);
       };
+      if (SERVER) prefetch = { name: "search", p: play(ACT.fromName("search")) };   // (v1.21.1) asked now, answered by the time the dots are done
       save.log = lead; draw();
       searchBeat = setTimeout(step, 200);
       return;
@@ -2789,7 +2795,7 @@
     if (name === "hold") { if (!okHold) { holdBox(); return; } }
     const log = save.log, steps = save.steps, exBefore = save.extra, ranBefore = !!(save.encounter && save.encounter.ranTried), partyBefore = (save.party || []).map(p => p.name);
     const before = { items: (save.items || []).slice(), silver: save.silver }, hadFight = !!save.encounter, kuraHp = save.party && save.party[0] ? save.party[0].hp : 0;
-    save = await play(ACT.fromName(name));                     // (v1.21) the server's answer (v1.19: one action list)
+    save = await (early || play(ACT.fromName(name)));          // (v1.21) the server's answer (v1.19: one action list)
     if (save.line3) { line3Next = save.line3; delete save.line3; }   // AURA's own read goes on line 3, next
     if (name === "reset") {
       save.history = [];

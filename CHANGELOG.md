@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.21.1 - Quicker Steps - Oct 17 2026, 10:05 HST
+
+- **Less waiting.** Each move asks the server fewer questions, and a search asks while KURA is still searching, so the answer is usually there by the time the dots are done.
+
 ## v1.21 - Down the Wire - Oct 17 2026, 09:55 HST
 
 - **Your run lives on the server now.** At dungeon.88x31.app every move is played by the server, so a run is the same on every device you sign in on, and nothing about it can be changed from the browser.

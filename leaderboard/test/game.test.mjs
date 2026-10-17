@@ -14,7 +14,7 @@ function fakeD1() {
     all: async () => ({ results: db.prepare(sql).all(...args) }),
     run: async () => { const r = db.prepare(sql).run(...args); return { meta: { changes: Number(r.changes) } }; },
   });
-  return { prepare: (s) => prep(s), batch: async (st) => Promise.all(st.map((x) => x.run())), raw: db };
+  return { prepare: (s) => prep(s), batch: async (st) => { db.exec("BEGIN"); try { const o = st.map((x) => ({ results: db.prepare(x.sql).all(...x.args), meta: {} })); db.exec("COMMIT"); return o; } catch (e) { db.exec("ROLLBACK"); throw e; } }, raw: db };
 }
 const ORIGIN = "https://dungeon.88x31.app";
 function browser(env) {
