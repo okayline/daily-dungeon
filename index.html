@@ -395,6 +395,7 @@
   }
   // The door she just opened, for the signal rooms' scratches (fire and forget: a mark that doesn't land costs nothing).
   function tallyTick() {
+    if (SERVER) return;                                // (v1.22) the server sends what the rules queued
     if (!save || !save.tally) return;
     const t = save.tally; delete save.tally; persist();
     try { fetch(LEADERBOARD_URL + "/tally", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify(t) }).catch(() => {}); } catch (e) {}
@@ -403,6 +404,7 @@
   // player. Not signed in, or not on the game's own address: the queue is dropped. A send that fails stays queued (50 at most).
   let regBusy = false;
   function registryTick() {
+    if (SERVER) return;                                // (v1.22) the server registers finds itself
     if (!save || !save.finds || !save.finds.length || regBusy) return;
     let tok = ""; try { tok = localStorage.getItem("dd-token") || ""; } catch (e) {}
     if (!tok || !ACCOUNT_HOST) { delete save.finds; persist(); return; }
@@ -421,6 +423,7 @@
   // newest copy of that item from this run is the one that goes. A name with no copy yet waits while its find is still queued.
   let goneBusy = false;
   function goneTick() {
+    if (SERVER) return;                                // (v1.22) the server uses them up in the registry itself
     if (!save || !save.gone || !save.gone.length || goneBusy) return;
     let tok = ""; try { tok = localStorage.getItem("dd-token") || ""; } catch (e) {}
     if (!tok || !ACCOUNT_HOST) { delete save.gone; persist(); return; }
@@ -684,7 +687,7 @@
     pingHere();
     if (!save || !save.events || !save.events.length) return;
     const list = save.events; delete save.events;
-    if (!LEADERBOARD_URL || save.freeSteps || save.cheated) return;
+    if (SERVER || !LEADERBOARD_URL || save.freeSteps || save.cheated) return;   // (v1.22) on the server, the server sends them
     for (const e of list.slice(-4)) try { fetch(LEADERBOARD_URL + "/event", { method: "POST", keepalive: true, headers: { "content-type": "application/json" }, body: JSON.stringify(e) }).catch(() => {}); } catch (err) {}
   }
   // TESTING CHEATS (X: infinite steps, Shift+X: a day ahead) first ask for the admin key. The Worker checks it
@@ -1426,7 +1429,7 @@
     const [, itemId, copy] = a.split(":").map(Number);
     const r = await acctApi("/send", { itemId, copy });
     if (!r.error && save) {       // it is gone from the run's bag too, without counting as lost
-      const name = (save.visitors || {})[itemId + ":" + copy] || ((save.regCopies || []).some(c => c.id === itemId && c.copy === copy) ? RULES.nameOf(itemId) : null);
+      const own = RULES.nameOf(itemId), name = (save.visitors || {})[itemId + ":" + copy] || ((save.regCopies || []).some(c => c.id === itemId && c.copy === copy) || (SERVER && own && (save.items || []).includes(own)) ? own : null);
       if (name) { save = await play({ t: "takeAway", name }); }
       save.regCopies = (save.regCopies || []).filter(c => !(c.id === itemId && c.copy === copy)); persist(); draw();
     }

@@ -496,8 +496,8 @@ async function giftBox(req, env, pageOk, from, allow) {
   }
 }
 
-export default {
-  async fetch(req, env) {
+const WORKER = {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url), allow = "*";
     // On the game's own address the Worker answers under /api/ (dungeon.88x31.app/api/score, /api/eco/..., /api/account):
     // the same routes as ever, with that prefix taken off. The old workers.dev address keeps working unchanged.
@@ -510,7 +510,10 @@ export default {
     const acct = await accountsRoute(req, env, url);
     if (acct) return acct;
     // (v1.20) THE RUN ON THE SERVER: /run and /act (game.js). Not used by the page yet.
-    const game = await gameRoute(req, env, url);
+    // (v1.22) The game's own follow-up calls (registry, tallies, events) go through these same routes, as the player.
+    const inner = (path, data) => WORKER.fetch(new Request(new URL(path, req.url), { method: "POST", body: JSON.stringify(data),
+      headers: { "content-type": "application/json", origin: req.headers.get("origin") || "", "cf-connecting-ip": req.headers.get("cf-connecting-ip") || "", authorization: req.headers.get("authorization") || "" } }), env, ctx);
+    const game = await gameRoute(req, env, url, ctx, inner);
     if (game) return game;
 
     if (url.pathname === "/top" && req.method === "GET") {
@@ -671,3 +674,4 @@ export default {
     return json({ error: "not found" }, 404, allow);
   },
 };
+export default WORKER;

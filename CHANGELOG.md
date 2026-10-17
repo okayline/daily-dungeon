@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.22 - Word Gets Around - Oct 17 2026, 10:20 HST
+
+- **Fewer calls from your browser.** The server now passes on what a move leaves behind (your finds for the shared item list, things used up, the marks by the doors, the news for the title screen) after it has already answered you, so moves don't wait on any of it.
+
 ## v1.21.1 - Quicker Steps - Oct 17 2026, 10:05 HST
 
 - **Less waiting.** Each move asks the server fewer questions, and a search asks while KURA is still searching, so the answer is usually there by the time the dots are done.

@@ -87,11 +87,32 @@ async function act(env, req) {
   ];
   if (Math.random() < 0.01) write.push(env.DB.prepare("DELETE FROM acct_limits WHERE window_start < ?").bind(t - 86400));
   await env.DB.batch(write);
-  return { run: st, n: row.n + 1 };
+  return { run: st, n: row.n + 1, out: st, me };
 }
 
+// (v1.22) WHAT THE RULES QUEUED FOR THE OUTSIDE WORLD, sent by the server after it has answered (ctx.waitUntil), through
+// the Worker's own routes as this player, so their checks and limits are the same as ever: finds become registry
+// copies (/found); items gone from the bag for good are used up there (/spent, the newest copy this player holds of
+// that item); a door's first entry is a tally mark (/tally); the run's moments are rumors (/event). A run that used
+// the testing tools sends no events. Nothing here can fail a move.
+async function sendOut(env, inner, me, st) {
+  const finds = st.finds || [], gone = st.gone || [], events = st.events || [];
+  if (finds.length) await inner("/found", { finds });
+  if (gone.length && env.REGISTRY) {
+    const held = (await env.REGISTRY.heldBy("4dungeon", me.id)) || [], used = new Set(), items = [];
+    for (const name of gone) {
+      const id = ACT.itemId(name), c = held.filter((h) => h.itemId === id && !used.has(id + ":" + h.copy)).sort((a, b) => b.copy - a.copy)[0];
+      if (c) { used.add(id + ":" + c.copy); items.push({ itemId: id, copy: c.copy }); }
+    }
+    if (items.length) await inner("/spent", { items });
+  }
+  if (st.tally) await inner("/tally", st.tally);
+  if (!st.cheated && !st.freeSteps) for (const e of events.slice(-4)) await inner("/event", e);
+}
+const later = (ctx, job) => { const p = job.catch((e) => console.error("sendOut", e)); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else return p; };
+
 // Returns a Response for /run or /act, or null for any other path.
-export async function gameRoute(req, env, url) {
+export async function gameRoute(req, env, url, wctx, inner) {
   if (url.pathname !== "/run" && url.pathname !== "/act") return null;
   const from = (req.headers.get("origin") || "").replace(/\/$/, ""), ctx = { token: null };
   try {
@@ -99,6 +120,8 @@ export async function gameRoute(req, env, url) {
     if (req.method !== "POST") throw new Oops("No such thing.", 404);
     if (!/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const out = url.pathname === "/run" ? await run(env, req, ctx) : await act(env, req);
+    if (out.run && out.out && inner) await later(wctx, sendOut(env, inner, out.me, out.out));
+    if (out.run) { out.run = kept(out.run); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; if (out.out.exchangeOpen) out.run.exchangeOpen = true; } delete out.out; delete out.me; }
     if (out.stale) return reply({ run: out.run, n: out.n, error: "The run moved on." }, 409);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {
