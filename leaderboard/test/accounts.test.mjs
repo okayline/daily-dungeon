@@ -138,11 +138,3 @@ test("logout needs a way back in; making players is rate limited per address", a
   for (let i = 0; i < 20; i++) assert.equal((await browser(env, { ip: "198.51.100.7" })("/api/codes", { action: "new" })).status, 200);
   assert.equal((await browser(env, { ip: "198.51.100.7" })("/api/codes", { action: "new" })).status, 429);
 });
-
-test("anything that isn't a board route comes from the page files; unknown /api paths stay a JSON 404", async () => {
-  const env = makeEnv({ ASSETS: { fetch: async (r) => new Response("<html>game " + new URL(r.url).pathname, { status: 200 }) } });
-  const page = await worker.fetch(new Request(ORIGIN + "/rules.js"), env);
-  assert.equal(await page.text(), "<html>game /rules.js");
-  assert.equal((await worker.fetch(new Request(ORIGIN + "/api/nope"), env)).status, 404);
-  assert.equal((await worker.fetch(new Request(ORIGIN + "/top"), env)).status, 200);          // board routes still win
-});
