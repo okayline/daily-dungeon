@@ -2,9 +2,11 @@ name = "daily-dungeon-board"
 main = "worker.js"
 compatibility_date = "2024-11-01"
 
-# Player accounts only work when the page and these routes share one address. For dungeon.88x31.app, once that name
-# points at the game's page (a proxied DNS record), uncomment this so /api/* on it comes to this Worker:
-# routes = [{ pattern = "dungeon.88x31.app/api/*", zone_name = "88x31.app" }]
+# One Worker for dungeon.88x31.app: it serves the game's page (the repo's files, minus what .assetsignore lists) and
+# the board's routes under /api/*, so cookies and passkeys share one address. Add the address as a custom domain on this Worker.
+[assets]
+directory = ".."
+run_worker_first = ["/api/*"]
 
 [[d1_databases]]
 binding = "DB"

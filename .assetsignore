@@ -1,0 +1,8 @@
+# Not part of the page (used by the Worker's static assets, see leaderboard/wrangler.toml)
+leaderboard
+archive
+screenshots
+.git
+.gitignore
+.assetsignore
+*.md
