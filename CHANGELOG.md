@@ -2,7 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
-## v1.13 - Accounts - Oct 17 2026, 02:57 HST
+## v1.14 - Shared Things - Oct 17 2026, 04:55 HST
+
+- **Your finds are real now.** Signed in at dungeon.88x31.app, every item you pick up is also kept as a numbered copy in the shared item registry, the same one the other 88x31 games use.
+- **INVENTORY.** Account → INVENTORY lists the items kept for you, and any of them can visit your 88x31 cLuB page. 88x31 buttons you send here show up in it too, and can be sent home.
+- **Nothing changes in a run.** The bag, the items and what they do are exactly as before; the item list now comes from the shared list.
+
+## v1.13 - Accounts - Oct 17 2026, 03:43 HST
 
 - **Optional accounts.** At dungeon.88x31.app, the PASSWORD screen has an ACCOUNT button: make a save code or add a passkey (the same one as the other 88x31 games).
 - **Your run follows you.** SAVE RUN puts it in the cloud; GET RUN on another device brings it back into the password box to load.
