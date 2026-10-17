@@ -671,7 +671,8 @@
     } catch (e) {}
   }
   // The leaderboard's address (the Cloudflare Worker, see leaderboard/README.md). Empty: every board button stays hidden.
-  const LEADERBOARD_URL = "https://daily-dungeon-board.ddddungeon.workers.dev";
+  const ACCOUNT_HOST = location.hostname === "dungeon.88x31.app";   // accounts need the game and the board on one address (cookies, passkeys)
+  const LEADERBOARD_URL = ACCOUNT_HOST ? location.origin + "/api" : "https://daily-dungeon-board.ddddungeon.workers.dev";
   async function start() {
     document.getElementById("ver").textContent = SMT.VERSION;
     await syncTime();
@@ -1084,7 +1085,7 @@
   }
 
   // PASS: the run's password, like old console games: copy it to keep or move the run; paste one to continue it.
-  function backup() {
+  function backup(prefill) {
     // The code carries the run and the last 300 log entries, so it stays short enough to copy.
     // With no run yet (opened from the title screen), there is nothing to copy: only the paste field shows.
     const code = save ? btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) })))) : "";
@@ -1098,16 +1099,17 @@
     let mine = null;
     if (save) { add("Copy it to keep this run or move it to another device."); add("It carries your key too: whoever has it has your stash."); mine = field(code, true); add(" "); }
     add("To continue a run, paste its password here.");
-    const theirs = field("", false);
+    const theirs = field(prefill || "", false);
     const msg = add(" ");
     const row = document.createElement("div");
     if (save) row.append(btn("[ COPY ]", "copy"), "   ");
-    row.append(btn("[ LOAD ]", "load"), "   ", btn("[ CLOSE ]", "close"));
+    row.append(btn("[ LOAD ]", "load"), "   ", btn("[ ACCOUNT ]", "account"), "   ", btn("[ CLOSE ]", "close"));
     pre.appendChild(row);
     box.dataset.mode = "pass";
     box.hidden = false;
     passAct = a => {
       if (a === "close") { box.hidden = true; draw(); return; }
+      if (a === "account") return accountBox();
       if (a === "copy") {
         if (!mine) return;
         mine.select();
@@ -1130,6 +1132,72 @@
     };
   }
   let passAct = null;
+
+  // ACCOUNT: a save code or passkey (the shared 88x31 accounts) so the run follows you across devices. Optional.
+  function accountBox(note) {
+    const box = document.getElementById("found"), pre = box.querySelector("pre");
+    floatBox(box); pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
+    const btn = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.pact = a; return e; };
+    const b64 = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const unb64 = t => { t = t.replace(/-/g, "+").replace(/_/g, "/"); return Uint8Array.from(atob(t + "===".slice((t.length + 3) % 4)), c => c.charCodeAt(0)); };
+    const api = async (path, body) => { try { const r = await fetch(LEADERBOARD_URL + path, body === undefined ? { credentials: "same-origin" } : { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); return await r.json(); } catch (e) { return { error: "Can't reach the server." }; } };
+    add("ACCOUNT", "gold"); add(" ");
+    const msg = add(note || " ");
+    box.dataset.mode = "pass"; box.hidden = false;
+    const row = document.createElement("div");
+    const close = () => { backup(); };
+    if (!ACCOUNT_HOST) {
+      msg.textContent = "Accounts work at dungeon.88x31.app. Open the game there to use them.";
+      row.append(btn("[ BACK ]", "back"));
+      pre.appendChild(row);
+      passAct = () => close();
+      return;
+    }
+    const codeBox = document.createElement("div"); pre.insertBefore(codeBox, msg);
+    const draw2 = async () => {
+      const a = await api("/account");
+      codeBox.textContent = "";
+      const line = t => { const d = document.createElement("div"); d.textContent = t; codeBox.appendChild(d); };
+      if (a.error) { line(a.error); } else if (!a.player) { line("Not signed in. Playing without an account is fine."); }
+      else { line("Signed in. " + (a.codes ? a.codes.length : 0) + " save code(s), " + (a.passkeys ? a.passkeys.length : 0) + " passkey(s)." + (a.saved ? " A run is saved in the cloud." : "")); }
+      row.textContent = "";
+      row.append(btn("[ NEW SAVE CODE ]", "code"), "   ");
+      if (window.PublicKeyCredential) row.append(btn("[ ADD PASSKEY ]", "pk"), "   ", btn("[ PASSKEY LOGIN ]", "pklogin"), "   ");
+      row.append(btn("[ ENTER CODE ]", "enter"), "   ");
+      if (a.player) row.append(btn("[ SAVE RUN ]", "put"), "   ", btn("[ GET RUN ]", "get"), "   ", btn("[ SIGN OUT ]", "out"), "   ");
+      row.append(btn("[ BACK ]", "back"));
+    };
+    pre.appendChild(row);
+    const say = t => { msg.textContent = t; };
+    passAct = async a => {
+      if (a === "back" || a === "close") return close();
+      if (a === "code") { const r = await api("/codes", { action: "new" }); if (r.error) say(r.error); else say("Your save code (write it down, it shows once): " + r.code); return draw2(); }
+      if (a === "enter") { const c = prompt("Save code"); if (!c) return; const r = await api("/load", { code: c.trim() }); say(r.error || "Signed in."); return draw2(); }
+      if (a === "out") { const r = await api("/logout", {}); say(r.error || "Signed out."); return draw2(); }
+      if (a === "put") {
+        if (!save) return say("No run to save yet.");
+        const r = await api("/save", { code: btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) })))) });
+        say(r.error || "Run saved to the cloud."); return draw2();
+      }
+      if (a === "get") { const r = await api("/save"); if (r.error) return say(r.error); if (!r.code) return say("No run saved in the cloud yet."); return backup(r.code); }
+      try {
+        if (a === "pk") {
+          const o = await api("/passkey", { action: "register_options" }); if (o.error) return say(o.error);
+          const cred = await navigator.credentials.create({ publicKey: { ...o, challenge: unb64(o.challenge), user: { ...o.user, id: unb64(o.user.id) }, excludeCredentials: o.excludeCredentials.map(c => ({ ...c, id: unb64(c.id) })) } });
+          const r = await api("/passkey", { action: "register", label: "4Dungeon", credential: { id: cred.id, response: { clientDataJSON: b64(cred.response.clientDataJSON), attestationObject: b64(cred.response.attestationObject) } } });
+          say(r.error || "Passkey added."); return draw2();
+        }
+        if (a === "pklogin") {
+          const o = await api("/passkey", { action: "login_options" }); if (o.error) return say(o.error);
+          const cred = await navigator.credentials.get({ publicKey: { ...o, challenge: unb64(o.challenge) } });
+          const r = await api("/passkey", { action: "login", credential: { id: cred.id, response: { clientDataJSON: b64(cred.response.clientDataJSON), authenticatorData: b64(cred.response.authenticatorData), signature: b64(cred.response.signature) } } });
+          say(r.error || "Signed in."); return draw2();
+        }
+      } catch (e) { say("That didn't work or was cancelled."); }
+    };
+    draw2();
+  }
 
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.

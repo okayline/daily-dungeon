@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.13 - Accounts - Oct 17 2026, 02:57 HST
+
+- **Optional accounts.** At dungeon.88x31.app, the PASSWORD screen has an ACCOUNT button: make a save code or add a passkey (the same one as the other 88x31 games).
+- **Your run follows you.** SAVE RUN puts it in the cloud; GET RUN on another device brings it back into the password box to load.
+- **Nothing changes if you skip it.** Playing without an account works as before, and your scores are tied to your account only when you're signed in.
+
 ## v1.12.1 - Softer Edges - Oct 15 2026, 09:48 HST
 
 ![v1.12.1](screenshots/v1.12.1.png)

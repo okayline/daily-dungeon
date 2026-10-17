@@ -2,6 +2,10 @@ name = "daily-dungeon-board"
 main = "worker.js"
 compatibility_date = "2024-11-01"
 
+# Player accounts only work when the page and these routes share one address. For dungeon.88x31.app, once that name
+# points at the game's page (a proxied DNS record), uncomment this so /api/* on it comes to this Worker:
+# routes = [{ pattern = "dungeon.88x31.app/api/*", zone_name = "88x31.app" }]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "daily-dungeon-board"
@@ -16,3 +20,10 @@ ALLOW_ORIGIN = "https://okayline.github.io,https://html-classic.itch.zone,https:
 BOTS_PUBLIC = "1"
 # Optional: comma-separated words a name may not contain (lowercase).
 BLOCKLIST = ""
+
+# Save codes and passkeys: the shared Accounts service (the dungeon-items Worker, `Accounts` entrypoint; see its ACCOUNTS.md).
+[[services]]
+binding = "ACCOUNTS"
+service = "dungeon-items"
+entrypoint = "Accounts"
+

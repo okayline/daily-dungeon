@@ -129,3 +129,39 @@ CREATE TABLE IF NOT EXISTS eco_retired (
   run TEXT PRIMARY KEY,
   at  INTEGER NOT NULL
 );
+
+-- PLAYER ACCOUNTS (v1.13). Save codes and passkeys live in the shared Accounts service (the dungeon-items Worker); these are
+-- this game's own side. A player is a browser cookie (only the token's hash is kept); the account's player here is linked
+-- in the shared service under the game name "4dungeon". No names, no email.
+CREATE TABLE IF NOT EXISTS players (
+  id          INTEGER PRIMARY KEY,
+  token_hash  TEXT NOT NULL UNIQUE,
+  created_at  INTEGER NOT NULL,
+  seen_at     INTEGER NOT NULL
+);
+-- other devices a player is logged in on (the first device uses players.token_hash)
+CREATE TABLE IF NOT EXISTS player_sessions (
+  token_hash  TEXT PRIMARY KEY,
+  player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  created_at  INTEGER NOT NULL,
+  seen_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS player_sessions_player ON player_sessions (player_id);
+-- the run saved to the cloud: the page's PASSWORD text, one per player, the newest write wins
+CREATE TABLE IF NOT EXISTS cloud_saves (
+  player_id   INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+  code        TEXT NOT NULL,
+  saved       INTEGER NOT NULL
+);
+-- which player posted which run to the board (never shown; the board stays anonymous)
+CREATE TABLE IF NOT EXISTS score_players (
+  run         TEXT PRIMARY KEY,
+  player_id   INTEGER NOT NULL
+);
+-- slows down making players and cloud saves
+CREATE TABLE IF NOT EXISTS acct_limits (
+  key           TEXT NOT NULL,
+  window_start  INTEGER NOT NULL,
+  count         INTEGER NOT NULL,
+  PRIMARY KEY (key, window_start)
+);
