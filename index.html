@@ -105,6 +105,9 @@
   #ticker { display: inline-block; width: 76ch; overflow: hidden; white-space: pre; vertical-align: top; }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
+  .foundbox[data-mode="pass"] { max-width: calc(100vw - 8px); box-sizing: border-box; }   /* the account page wraps instead of scrolling sideways */
+  .foundbox[data-mode="pass"] pre { white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+  .brow2 { display: flex; flex-wrap: wrap; gap: 0 2ch; }
   .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
   .nameinput.bad { border-color: var(--demon); }
   #board .auto { color: var(--trail); }
@@ -716,6 +719,7 @@
       delete save.unsaved;
       save.saved = hstDate();
       localStorage.setItem(KEY, JSON.stringify(save));
+      cloudSoon();
     } catch (e) {
       save.unsaved = true;   // private window or storage blocked: play still works, it just won't last
     }
@@ -1182,6 +1186,42 @@
   }
   let passAct = null;
 
+  // The account server, shared by the account page, the bag's INVENTORY and the cloud save. The login is a token kept in localStorage ("dd-token"), sent as a bearer header.
+  const acctApi = async (path, body, keep) => {
+    let tok = ""; try { tok = localStorage.getItem("dd-token") || ""; } catch (e) {}
+    const headers = tok ? { authorization: "Bearer " + tok } : {};
+    try {
+      const r = await fetch(LEADERBOARD_URL + path, body === undefined ? { headers } : { method: "POST", keepalive: !!keep, headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (typeof d.token === "string") try { d.token ? localStorage.setItem("dd-token", d.token) : localStorage.removeItem("dd-token"); } catch (e) {}
+      return d;
+    } catch (e) { return { error: "Can't reach the server." }; }
+  };
+  const signedIn = () => { if (!ACCOUNT_HOST) return false; try { return !!localStorage.getItem("dd-token"); } catch (e) { return false; } };
+  // THE CLOUD SAVE (v1.17): signed in, the run follows you by itself. The browser's own storage is still the working copy (instant, works
+  // offline); the cloud copy is sent at most once every two minutes while you play, and when the page is left. When you sign in on a device,
+  // or open the page signed in, a cloud run that is further along (later day, then more steps) is offered in place of the local one.
+  let cloudTimer = 0, cloudLast = "";
+  function cloudPush(leaving) {
+    if (cloudTimer) { clearTimeout(cloudTimer); cloudTimer = 0; }
+    if (!save || !signedIn()) return;
+    const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) }))));
+    if (code === cloudLast) return;
+    cloudLast = code;
+    acctApi("/save", { code }, leaving).then(r => { if (r && r.error) cloudLast = ""; });
+  }
+  function cloudSoon() { if (!cloudTimer && signedIn()) cloudTimer = setTimeout(() => cloudPush(false), 120000); }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") cloudPush(true); });
+  window.addEventListener("pagehide", () => cloudPush(true));
+  async function cloudPull(say) {
+    if (!signedIn()) return;
+    const r = await acctApi("/save"); if (r.error || !r.code) return cloudPush(false);
+    let c; try { c = JSON.parse(decodeURIComponent(escape(atob(r.code)))); } catch (e) { return; }
+    const cd = c.day || 0, ld = save ? save.day || 0 : 0;
+    if (!save || cd > ld || (cd === ld && (c.steps || 0) > (save.steps || 0))) return loadRunCode(r.code, say || (() => {}));
+    cloudPush(false);                               // this device is ahead (or level): the cloud takes it
+  }
+
   // ACCOUNT: a save code or passkey (the shared 88x31 accounts) so the run follows you across devices. Optional.
   function accountBox(note) {
     const box = document.getElementById("found"), pre = box.querySelector("pre");
@@ -1190,16 +1230,7 @@
     const btn = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.pact = a; return e; };
     const b64 = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     const unb64 = t => { t = t.replace(/-/g, "+").replace(/_/g, "/"); return Uint8Array.from(atob(t + "===".slice((t.length + 3) % 4)), c => c.charCodeAt(0)); };
-    const api = async (path, body) => {             // the login is a token kept here (localStorage "dd-token"), sent as a bearer header
-      let tok = ""; try { tok = localStorage.getItem("dd-token") || ""; } catch (e) {}
-      const headers = tok ? { authorization: "Bearer " + tok } : {};
-      try {
-        const r = await fetch(LEADERBOARD_URL + path, body === undefined ? { headers } : { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify(body) });
-        const d = await r.json();
-        if (typeof d.token === "string") try { d.token ? localStorage.setItem("dd-token", d.token) : localStorage.removeItem("dd-token"); } catch (e) {}
-        return d;
-      } catch (e) { return { error: "Can't reach the server." }; }
-    };
+    const api = acctApi;
     add("ACCOUNT", "gold"); add(" ");
     const msg = add(note || " ");
     box.dataset.mode = "pass"; box.hidden = false;
@@ -1219,14 +1250,13 @@
       codeBox.textContent = "";
       const line = t => { const d = document.createElement("div"); d.textContent = t; codeBox.appendChild(d); };
       if (a.error) { line(a.error); } else if (!a.player) { line("Not signed in. Playing without an account is fine."); }
-      else { line("Signed in. " + (a.codes ? a.codes.length : 0) + " save code(s), " + (a.passkeys ? a.passkeys.length : 0) + " passkey(s)." + (a.saved ? " A run is saved in the cloud." : "")); }
+      else { line("Signed in. " + (a.codes ? a.codes.length : 0) + " save code(s), " + (a.passkeys ? a.passkeys.length : 0) + " passkey(s)." + (a.saved ? " Your run saves to the cloud by itself." : "")); }
       row.textContent = "";
-      row.append(btn("[ NEW SAVE CODE ]", "code"), "   ");
-      if (newCode) row.append(btn("[ COPY CODE ]", "copycode"), "   ", btn("[ DOWNLOAD .TXT ]", "dlcode"), "   ");
-      if (window.PublicKeyCredential) row.append(btn("[ ADD PASSKEY ]", "pk"), "   ", btn("[ PASSKEY LOGIN ]", "pklogin"), "   ");
-      row.append(btn("[ ENTER CODE ]", "enter"), "   ");
-      if (a.player) row.append(btn("[ SAVE RUN ]", "put"), "   ", btn("[ GET RUN ]", "get"), "   ", btn("[ INVENTORY ]", "inv"), "   ", btn("[ SIGN OUT ]", "out"), "   ");
-      row.append(btn("[ BACK ]", "back"));
+      const line2 = (...b) => { const d = document.createElement("div"); d.className = "brow2"; d.append(...b); row.appendChild(d); };
+      line2(btn("[ NEW SAVE CODE ]", "code"), btn("[ ENTER CODE ]", "enter"));
+      if (newCode) line2(btn("[ COPY CODE ]", "copycode"), btn("[ DOWNLOAD .TXT ]", "dlcode"));
+      if (window.PublicKeyCredential) line2(btn("[ ADD PASSKEY ]", "pk"), btn("[ PASSKEY LOGIN ]", "pklogin"));
+      line2(...(a.player ? [btn("[ SIGN OUT ]", "out")] : []), btn("[ BACK ]", "back"));
     };
     pre.appendChild(row);
     const say = t => { msg.textContent = t; };
@@ -1243,38 +1273,8 @@
         const l = document.createElement("a"); l.href = url; l.download = "4dungeon-save-code.txt"; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
         return say("Save code downloaded.");
       }
-      if (a === "enter") { const c = prompt("Save code"); if (!c) return; const r = await api("/load", { code: c.trim() }); say(r.error || "Signed in."); return draw2(); }
+      if (a === "enter") { const c = prompt("Save code"); if (!c) return; const r = await api("/load", { code: c.trim() }); say(r.error || "Signed in."); await draw2(); if (!r.error) cloudPull(say); return; }
       if (a === "out") { const r = await api("/logout", {}); say(r.error || "Signed out."); return draw2(); }
-      if (a === "put") {
-        if (!save) return say("No run to save yet.");
-        const r = await api("/save", { code: btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) })))) });
-        say(r.error || "Run saved to the cloud."); return draw2();
-      }
-      // INVENTORY (v1.14): what the shared registry says you hold in 4Dungeon (your registered finds, 88x31 buttons
-      // visiting), not the run's bag. Any of them can go to your 88x31: a button goes home, a dungeon item visits.
-      if (a === "inv") {
-        const r = await api("/inventory"); if (r.error) return say(r.error);
-        codeBox.textContent = "";
-        const add2 = (...kids) => { const d = document.createElement("div"); d.append(...kids); codeBox.appendChild(d); return d; };
-        add2("INVENTORY  (" + r.items.length + ")" + (r.items.length ? "" : ": nothing yet. Items you find while signed in land here."));
-        for (const it of r.items.slice(0, 40)) {
-          const tag = it.from === "88x31" ? "  [88x31 BUTTON]" : "";
-          add2(`  ${it.name} #${it.copy} (${String(it.rarity).toUpperCase()})${tag}  `, btn(it.from === "88x31" ? "[ SEND HOME ]" : "[ SEND TO 88x31 ]", `send:${it.itemId}:${it.copy}`));
-        }
-        if (r.items.length > 40) add2(`  ...and ${r.items.length - 40} more.`);
-        return;
-      }
-      if (a.startsWith("send:")) {
-        const [, itemId, copy] = a.split(":").map(Number);
-        const r = await api("/send", { itemId, copy });
-        if (!r.error && save) {       // it is gone from the run's bag too, without counting as lost
-          const name = (save.visitors || {})[itemId + ":" + copy] || ((save.regCopies || []).some(c => c.id === itemId && c.copy === copy) ? RULES.nameOf(itemId) : null);
-          if (name) { save = RULES.takeAway(save, name); }
-          save.regCopies = (save.regCopies || []).filter(c => !(c.id === itemId && c.copy === copy)); persist(); draw();
-        }
-        say(r.error || "Sent to your 88x31."); return passAct("inv");
-      }
-      if (a === "get") { const r = await api("/save"); if (r.error) return say(r.error); if (!r.code) return say("No run saved in the cloud yet."); return loadRunCode(r.code, say); }
       try {
         if (a === "pk") {
           const o = await api("/passkey", { action: "register_options" }); if (o.error) return say(o.error);
@@ -1286,7 +1286,7 @@
           const o = await api("/passkey", { action: "login_options" }); if (o.error) return say(o.error);
           const cred = await navigator.credentials.get({ publicKey: { ...o, challenge: unb64(o.challenge) } });
           const r = await api("/passkey", { action: "login", credential: { id: cred.id, response: { clientDataJSON: b64(cred.response.clientDataJSON), authenticatorData: b64(cred.response.authenticatorData), signature: b64(cred.response.signature) } } });
-          say(r.error || "Signed in."); return draw2();
+          say(r.error || "Signed in."); await draw2(); if (!r.error) cloudPull(say); return;
         }
       } catch (e) { say("That didn't work or was cancelled."); }
     };
@@ -1296,6 +1296,7 @@
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
   const HOLD_OMEN_ON = false;
+  let invReg = null;   // the bag's INVENTORY view (what the shared item list says you hold), or null
   let invList = [], invSel = 0, topSel = 0,  logGlow = false, ichorPick = -1, holdBtn = null;   // ichorPick: who the picker is on (-1: closed); holdBtn: Hold/Release Omen's own button, not a numbered slot
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
   function textBox(title, tag, lines, W = 70) {
@@ -1325,10 +1326,52 @@
     const x = document.getElementById("exch"); if (!x.hidden) placeInView(x);
     const f = document.getElementById("found"); if (!f.hidden && f.classList.contains("inframe")) placeInView(f, 15);
   });
+  // INVENTORY inside the bag: what the shared item list says you hold in 4Dungeon (finds registered while signed in, and 88x31 buttons visiting).
+  // A button can go home to your 88x31; a dungeon item can visit it.
+  function drawReg(pre, add) {
+    const R = invReg, per = 7;
+    add("INVENTORY".padEnd(35) + "[ESC] back", ""); add(" ");
+    const btn2 = (t, a) => { const sp = document.createElement("span"); sp.className = "btn"; sp.textContent = t; sp.dataset.regact = a; return sp; };
+    if (!signedIn()) {
+      for (const w of wrapText(ACCOUNT_HOST ? "Sign in from the ACCOUNT page, and what you find is kept here too." : "Items are kept in the shared list when you are signed in at dungeon.88x31.app.", 41)) add(w, "dim");
+      add(" "); const f = add(""); f.append(btn2("[ BACK ]", "back")); return;
+    }
+    if (R.items === null) {
+      add("Looking...", "dim");
+      if (!R.loading) { R.loading = true; acctApi("/inventory").then(r => { if (invReg !== R) return; R.loading = false; R.err = r.error || ""; R.items = r.items || []; showInv(true); }); }
+      return;
+    }
+    const items = R.items, pages = Math.max(1, Math.ceil(items.length / per)); R.page = Math.min(R.page, pages - 1);
+    add(R.err || (items.length ? `${items.length} kept${pages > 1 ? `   page ${R.page + 1}/${pages}` : ""}` : "Nothing yet. Items you find while signed in land here."), "dim");
+    for (const it of items.slice(R.page * per, R.page * per + per)) {
+      const row = document.createElement("div"), home = it.from === "88x31";
+      row.append(`${it.name} #${it.copy}`.slice(0, 24).padEnd(25), btn2(home ? "[ SEND HOME ]" : "[ VISIT 88x31 ]", `send:${it.itemId}:${it.copy}`));
+      pre.appendChild(row);
+    }
+    add(" ");
+    if (R.msg) add(R.msg, "gold");
+    const f = add(""); if (pages > 1) f.append(btn2("[ < ]", "prev"), " ", btn2("[ > ]", "next"), "  "); f.append(btn2("[ BACK ]", "back"));
+  }
+  async function regAct(a) {
+    const R = invReg; if (!R) return;
+    if (a === "back") { invReg = null; return showInv(true); }
+    if (a === "prev" || a === "next") { R.page = Math.max(0, R.page + (a === "next" ? 1 : -1)); return showInv(true); }
+    if (!a.startsWith("send:")) return;
+    const [, itemId, copy] = a.split(":").map(Number);
+    const r = await acctApi("/send", { itemId, copy });
+    if (!r.error && save) {       // it is gone from the run's bag too, without counting as lost
+      const name = (save.visitors || {})[itemId + ":" + copy] || ((save.regCopies || []).some(c => c.id === itemId && c.copy === copy) ? RULES.nameOf(itemId) : null);
+      if (name) { save = RULES.takeAway(save, name); }
+      save.regCopies = (save.regCopies || []).filter(c => !(c.id === itemId && c.copy === copy)); persist(); draw();
+    }
+    if (invReg !== R) return;
+    R.msg = r.error || "Sent to your 88x31."; R.items = null; R.loading = false;
+    showInv(true);
+  }
   function showInv(open) {
     const box = document.getElementById("inv");
     box.hidden = !open;
-    if (!open) return;
+    if (!open) { invReg = null; return; }
     placeInView(box);
     visitorTick(true);                                // a visiting button may be waiting: check when the bag opens
     invList = save ? RULES.inventory(save).flatMap(it => Array.from({ length: it.count }, () => ({ ...it, count: 1 }))) : [];   // one line per thing (v1.05.1)
@@ -1364,6 +1407,7 @@
       return;
     }
     if (ichorPick >= 0) ichorPick = -1;
+    if (invReg) return drawReg(pre, add);
     // KURA's aura sits beside the title: her two-word name and how loud she is (v1.04).
     const au = save ? RULES.aura(save) : null;
     const head = `INVOKE   BAG ${(save && save.items || []).length}/${RULES.BAG_MAX}`;
@@ -1371,10 +1415,14 @@
     const ich = invList.length && invList[0].ichor ? 1 : 0;      // ICHOR is a count, not a thing: it sits above the bag as 0
     const empty = !(save && (save.items || []).length);
     add(" ");                                                    // (v1.06.1) a little air under the title, above ICHOR
-    invList.forEach((it, i) => { add(it.ichor
-      ? `${i === invSel && topSel === 0 ? ">" : " "} 0  ICHOR  (${save.ichor}/${RULES.FLASK_MAX})   ${i === invSel && topSel === 1 ? ">" : " "} SILVER  (${save.silver || 0})`
-      : `${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{42}).{4,}$/, "$1..."),
-      "btn", i); });
+    invList.forEach((it, i) => {
+      if (it.ichor) {                                          // ICHOR and SILVER: one line, two buttons
+        const row = document.createElement("div"); row.dataset.i = i;
+        const mk = (t, top) => { const sp = document.createElement("span"); sp.className = "btn"; sp.dataset.top = top; sp.textContent = t; return sp; };
+        row.append(mk(`${i === invSel && topSel === 0 ? ">" : " "} 0  ICHOR  (${save.ichor}/${RULES.FLASK_MAX})`, 0), "   ", mk(`${i === invSel && topSel === 1 ? ">" : " "} SILVER  (${save.silver || 0})`, 1));
+        pre.appendChild(row); return;
+      }
+      add(`${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{42}).{4,}$/, "$1..."), "btn", i); });
     if (empty) add("  1  The bag is empty", "dim");               // (v1.06.1) no row of empty slots when there's nothing in it
     else for (let k = invList.length - ich; k < RULES.BAG_MAX; k++) add(`  ${k + 1}  .`, "dim");
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
@@ -1402,7 +1450,7 @@
     const help = add("", "");
     if (empty) help.style.marginTop = "0";                       // (v1.06.1) with nothing in the bag, the foot comes up under the list
     if (holdBtn) { const hl = document.createElement("div"); hl.append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : ""))); help.append(hl); }
-    help.append("[1-9] use  [<][>] ICHOR/SILVER  ", btn("[C]LOSE", "close"));   // (v1.06.1: a number uses it straight away; 0 is ICHOR when there is some; arrows and Enter still work)
+    help.append("[1-9] use  ", btn("INVENTORY", "reg"), "  ", btn("[C]LOSE", "close"));   // (v1.06.1: a number uses it straight away; 0 is ICHOR when there is some; arrows and Enter still work)
   }
   // THE EXCHANGE WINDOW (v1.00): opened from the screen in a dead end's wall; one window over the view like INVOKE. Four tabs:
   //   MARKET - public offers (others' only). ENTER takes one; one that asks for something takes a matching thing of yours.
@@ -2783,6 +2831,10 @@
   });
   // Clicking an item chooses it; clicking the chosen one again uses it. Only [C]LOSE, I or Esc closes it.
   document.getElementById("inv").addEventListener("click", e => {
+    if (invReg) { const ra = e.target.closest("[data-regact]"); if (ra) regAct(ra.dataset.regact); return; }
+    if (e.target.closest("[data-reg]")) { invReg = { page: 0, items: null, msg: "", err: "", loading: false }; return showInv(true); }
+    const tp = e.target.closest("[data-top]");
+    if (tp && ichorPick < 0) { const t = Number(tp.dataset.top); if (invSel === 0 && topSel === t) return useInv(0); invSel = 0; topSel = t; return showInv(true); }
     if (e.target.closest("[data-use]")) return useInv(invSel);
     if (e.target.closest("[data-close]")) { showInv(false); if (save && save.encounter) encounterBox(); return; }
     if (e.target.closest("[data-codex]")) { showInv(false); codexSel = -1; return showCodex(true); }
@@ -2871,6 +2923,7 @@
     }
     if (exOpen()) { if (document.activeElement && document.activeElement.id === "excode") return; return exKey(e, key); }
     if (!document.getElementById("inv").hidden) {
+      if (invReg) { e.preventDefault(); if (key === "escape" || key === "c" || key === "i" || key === "backspace") { invReg = null; showInv(true); } return; }
       if (ichorPick >= 0) {
         e.preventDefault();
         const n = save.party.length;
@@ -2922,7 +2975,7 @@
     if (k) { e.preventDefault(); RULES.holding(e.repeat); try { act(k); } finally { RULES.holding(false); } }
   });
 
-  start();
+  Promise.resolve(start()).then(() => cloudPull());
   // Live clock: redraw the moment the minute turns over (the colon blinks on its own),
   // and catch up with the real date so midnight brings the new day.
   let shownMinute = SMT.now().getMinutes();

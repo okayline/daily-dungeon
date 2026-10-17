@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.18 - Automatic Saves - Oct 17 2026, 07:50 HST
+
+- **The cloud save is automatic.** Signed in, your run saves itself (every couple of minutes while you play, and when you leave the page). Signing in on another device brings the run along; if the cloud run is further ahead than the one on a device, you are asked before it replaces it. SAVE RUN and GET RUN are gone.
+- **INVENTORY moved into INVOKE.** The bag has an INVENTORY button for the shared item list, where buttons can go home and items can visit your 88x31.
+- **ICHOR and SILVER are two buttons** on their line in the bag.
+- **The account page fits a phone.**
+
 ## v1.17 - Visitors - Oct 17 2026, 07:35 HST
 
 - **Things that leave the bag are used up in the shared list too.** Signed in, an item that is used up, broken or burned in a run is marked used up in the item registry (it stays on the record, just no longer held).
