@@ -1191,7 +1191,7 @@
       row.append(btn("[ NEW SAVE CODE ]", "code"), "   ");
       if (window.PublicKeyCredential) row.append(btn("[ ADD PASSKEY ]", "pk"), "   ", btn("[ PASSKEY LOGIN ]", "pklogin"), "   ");
       row.append(btn("[ ENTER CODE ]", "enter"), "   ");
-      if (a.player) row.append(btn("[ SAVE RUN ]", "put"), "   ", btn("[ GET RUN ]", "get"), "   ", btn("[ SIGN OUT ]", "out"), "   ");
+      if (a.player) row.append(btn("[ SAVE RUN ]", "put"), "   ", btn("[ GET RUN ]", "get"), "   ", btn("[ INVENTORY ]", "inv"), "   ", btn("[ SIGN OUT ]", "out"), "   ");
       row.append(btn("[ BACK ]", "back"));
     };
     pre.appendChild(row);
@@ -1205,6 +1205,25 @@
         if (!save) return say("No run to save yet.");
         const r = await api("/save", { code: btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) })))) });
         say(r.error || "Run saved to the cloud."); return draw2();
+      }
+      // INVENTORY (v1.14): what the shared registry says you hold in 4Dungeon (your registered finds, 88x31 buttons
+      // visiting), not the run's bag. Any of them can go to your 88x31: a button goes home, a dungeon item visits.
+      if (a === "inv") {
+        const r = await api("/inventory"); if (r.error) return say(r.error);
+        codeBox.textContent = "";
+        const add2 = (...kids) => { const d = document.createElement("div"); d.append(...kids); codeBox.appendChild(d); return d; };
+        add2("INVENTORY  (" + r.items.length + ")" + (r.items.length ? "" : ": nothing yet. Items you find while signed in land here."));
+        for (const it of r.items.slice(0, 40)) {
+          const tag = it.from === "88x31" ? "  [88x31 BUTTON]" : "";
+          add2(`  ${it.name} #${it.copy} (${String(it.rarity).toUpperCase()})${tag}  `, btn(it.from === "88x31" ? "[ SEND HOME ]" : "[ SEND TO 88x31 ]", `send:${it.itemId}:${it.copy}`));
+        }
+        if (r.items.length > 40) add2(`  ...and ${r.items.length - 40} more.`);
+        return;
+      }
+      if (a.startsWith("send:")) {
+        const [, itemId, copy] = a.split(":").map(Number);
+        const r = await api("/send", { itemId, copy });
+        say(r.error || "Sent to your 88x31."); return passAct("inv");
       }
       if (a === "get") { const r = await api("/save"); if (r.error) return say(r.error); if (!r.code) return say("No run saved in the cloud yet."); return backup(r.code); }
       try {

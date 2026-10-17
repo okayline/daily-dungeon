@@ -17,10 +17,12 @@
 //   GET  /save                          the run saved to the cloud: {code, saved} or {code: null}
 //   POST /save {code}                   save the run (its PASSWORD text) to the cloud
 //   POST /found {finds: [{id, key}]}    (v1.14) register gained items as numbered copies in the shared registry
+//   GET  /inventory                     (v1.14) the copies you hold in 4Dungeon: your finds, and 88x31 buttons visiting
+//   POST /send {itemId, copy}           (v1.14) send one to your 88x31 (a button goes home; a dungeon item visits)
 import SHARED from "../items.js";
 const GAME = "4dungeon", MAX_SAVE = 400000, MAX_FOUND_A_DAY = 300;
 const OUR_ITEMS = new Set(SHARED.filter((i) => !i.retired).map((i) => i.id));   // only 4Dungeon's own items are registered from here
-const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/save", "/found"]);
+const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/save", "/found", "/inventory", "/send"]);
 
 class Oops extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 const now = () => Math.floor(Date.now() / 1000);
@@ -183,7 +185,7 @@ export async function accountsRoute(req, env, url) {
     if (!originsOf(env).includes(from)) throw new Oops("Accounts work at dungeon.88x31.app. Open the game there to use them.", 403);
     if (req.method === "POST" && !/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const p = url.pathname, m = req.method;
-    if (p !== "/save" && p !== "/found") ACC(env);   // no accounts service, no players made
+    if (p !== "/save" && p !== "/found" && p !== "/inventory") ACC(env);   // no accounts service, no players made
     let out;
     if (p === "/account" && m === "GET") out = await account(env, req);
     else if (p === "/codes" && m === "POST") out = await codes(env, req, ctx);
@@ -192,6 +194,8 @@ export async function accountsRoute(req, env, url) {
     else if (p === "/logout" && m === "POST") out = await logout(env, req, ctx);
     else if (p === "/save" && (m === "GET" || m === "POST")) out = await saveRun(env, req, m);
     else if (p === "/found" && m === "POST") out = await found(env, req);
+    else if (p === "/inventory" && m === "GET") out = await inventory(env, req);
+    else if (p === "/send" && m === "POST") out = await send(env, req);
     else return reply({ error: "No such thing." }, 404);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {
@@ -220,4 +224,27 @@ async function found(env, req) {
     if (b && !b.error) copies.push({ key: f.key, copy: b.copy });
   }
   return { copies };
+}
+
+// (v1.14) YOUR INVENTORY: the copies the shared registry says you hold in 4Dungeon (not the run's bag, which lives in
+// the browser): your registered finds, and 88x31 buttons visiting. Display only for now; any of them can go to your 88x31
+// (same shared account): an 88x31 button goes home there, a dungeon item visits.
+async function inventory(env, req) {
+  const me = await playerOf(env, req);
+  if (!me || !env.REGISTRY) return { items: [] };
+  const held = await env.REGISTRY.heldBy(GAME, me.id);
+  return { items: (held || []).map((c) => ({ itemId: c.itemId, copy: c.copy, name: c.item.name, note: c.item.note, rarity: c.item.rarity,
+    from: c.item.source, image: c.item.source === "88x31" ? c.item.image : null })) };
+}
+async function send(env, req) {
+  const me = await mustPlayer(env, req);
+  if (!env.REGISTRY) throw new Oops("The item registry is unavailable right now.", 503);
+  const b = await body(req), itemId = Number(b.itemId), copy = Number(b.copy);
+  const acct = await accountFor(env, me);
+  if (!acct) throw new Oops("Make a save code or passkey first, so your games know they're both you.");
+  const { playerId } = await ACC(env).playerFor(acct, "88x31");
+  if (!playerId) throw new Oops("Sign in to 88x31 (88x31.app) with the same save code or passkey first.");
+  const r = await env.REGISTRY.moveCopy({ itemId, copy, from: { game: GAME, playerId: me.id }, to: { game: "88x31", playerId } });
+  if (!r || r.error) throw new Oops(r && r.error ? r.error : "Nothing moved.");
+  return { ok: true };
 }

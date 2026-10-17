@@ -153,3 +153,22 @@ test("a signed-in player's finds become registry copies: own items only, resends
   assert.deepEqual([...new Set(calls.map((c) => c.game))], ["4dungeon"]);
   assert.ok(calls.every((c) => c.key.startsWith(c.playerId + ":")));
 });
+
+test("inventory lists what you hold in 4Dungeon; send moves it to your own 88x31 player, and only yours", async () => {
+  const moves = [];
+  const REGISTRY = {
+    async heldBy(g, p) { return [{ itemId: 3, copy: 2, moves: 0, item: { source: "4dungeon", name: "a vending machine coin", note: "n", rarity: "common" } },
+      { itemId: 60, copy: 1, moves: 1, item: { source: "88x31", name: "Neon", rarity: "rare", image: "https://88x31.app/api/img?d=9" } }]; },
+    async moveCopy(a) { moves.push(a); return { ok: true, moves: 1 }; },
+  };
+  const env = makeEnv({ REGISTRY }), a = browser(env, { ip: "203.0.113.40" });
+  assert.deepEqual((await a("/inventory")).data, { items: [] });               // not signed in: nothing, no error
+  await a("/codes", { action: "new" });
+  const inv = (await a("/inventory")).data.items;
+  assert.deepEqual(inv.map((i) => [i.itemId, i.from, i.image]), [[3, "4dungeon", null], [60, "88x31", "https://88x31.app/api/img?d=9"]]);
+  assert.match((await a("/send", { itemId: 60, copy: 1 })).data.error, /Sign in to 88x31/);   // no 88x31 player on the account yet
+  const accountId = (await env.ACCOUNTS.accountOf("4dungeon", 1)).accountId;
+  await env.ACCOUNTS.link(accountId, "88x31", 77);
+  assert.deepEqual((await a("/send", { itemId: 60, copy: 1 })).data, { ok: true });
+  assert.deepEqual(moves, [{ itemId: 60, copy: 1, from: { game: "4dungeon", playerId: 1 }, to: { game: "88x31", playerId: 77 } }]);
+});
