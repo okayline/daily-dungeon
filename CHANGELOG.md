@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.21 - Down the Wire - Oct 17 2026, 09:55 HST
+
+- **Your run lives on the server now.** At dungeon.88x31.app every move is played by the server, so a run is the same on every device you sign in on, and nothing about it can be changed from the browser.
+- **A fresh start.** Runs from before this update stay in the browser they were played in and aren't carried over: everyone starts a new run.
+- **Breath is resting.** It doesn't run out for now, while it's retuned for the new pace.
+- **The cloud save is gone,** since there's nothing left to send.
+- If the server can't be reached, the move doesn't happen and the game says so. Try again in a moment.
+
 ## v1.20 - The Other Side - Oct 17 2026, 09:30 HST
 
 - **Behind the scenes:** the server can now keep a run and play it with the same rules as the page. The game doesn't use it yet; nothing plays differently.

@@ -38,6 +38,8 @@
     takeAway: (st, a) => RULES.takeAway(st, a.name),
     boxFound: (st, a) => RULES.boxFound(st, a.item, a.marks),
     boxDone: (st, a) => RULES.boxDone(st, !!a.ok, a.got === undefined ? null : a.got),
+    boxCancel: st => { st = JSON.parse(JSON.stringify(st)); delete st.box; return st; },          // (v1.21) the box couldn't be reached
+    roundClear: st => { st = JSON.parse(JSON.stringify(st)); delete st.round; delete st.roundOver; return st; },   // (v1.21) a fight's lines were read
     // the run itself
     tick: st => RULES.tick(st),
     reset: st => RULES.reset(st || {}),

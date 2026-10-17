@@ -55,3 +55,16 @@ test("admin tools need the admin flag", async () => {
   const r = await me("/act", { n: 0, action: { t: "freesteps" } });
   assert.equal(r.status, 200); assert.equal(r.data.run.freeSteps, true);
 });
+
+test("peek never makes a player; a no-change action writes nothing; the page's queues are handed over once", async () => {
+  const env = { DB: fakeD1() }, me = browser(env);
+  assert.deepEqual((await me("/run", { peek: true })).data, { run: null });
+  assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM players").get().n, 0);
+  await me("/run", {});
+  const t1 = await me("/act", { n: 0, action: { t: "tick" } });
+  assert.equal(t1.data.same, true); assert.equal(t1.data.n, 0);
+  env.DB.raw.prepare("UPDATE runs SET state = json_set(state, '$.finds', json('[1]'))").run();
+  const r = await me("/act", { n: 0, action: { t: "turn", dir: "L" } });
+  assert.deepEqual(r.data.run.finds, [1]);
+  assert.equal(JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state).finds, undefined);
+});

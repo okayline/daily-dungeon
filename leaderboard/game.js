@@ -2,9 +2,12 @@
 // and applies actions to it with the same rules the page runs (act.js -> rules.js). The page doesn't use these yet.
 //   POST /run {}               your run (a new one if you have none). Makes a guest player if this browser has none.
 //   POST /run {fresh: true}    start a new run
+//   POST /run {peek: true}     your run, or {run: null}: never makes a player or a run (the page's title screen)
 //   POST /act {n, action}      do one action. n is how many actions the page has seen on this run, so a resend of the
 //                              same action is refused instead of done twice. Answers {run, n}; a stale n gets 409 and the
 //                              run as it really is.
+// The rules' queues for the page (OUTBOX: finds, gone, events, tally, ...) are handed over once, in the answer, and
+// not kept. An action that changes nothing answers {same: true, n} and writes nothing (the page's once-a-minute tick).
 // Breath is off here (always full) until it's retuned for the server's feel. Admin tools (ACT.ADMIN) need players.admin.
 import ACT from "../act.js";
 import { playerOf, makePlayer, Oops, reply, body, limited, originsOf } from "./accounts.js";
@@ -12,12 +15,14 @@ import { playerOf, makePlayer, Oops, reply, body, limited, originsOf } from "./a
 const MAX_RUN = 400000;
 const now = () => Math.floor(Date.now() / 1000);
 const tidy = (st) => { delete st.breath; return st; };          // breath off: no breath record means a full bar
+const OUTBOX = ["finds", "gone", "events", "tally", "line3", "exchangeOpen"];
+const kept = (st) => { const k = { ...st }; for (const f of OUTBOX) delete k[f]; return k; };
 
 async function load(env, me) {
   return env.DB.prepare("SELECT state, n FROM runs WHERE player_id = ?").bind(me.id).first();
 }
 async function store(env, me, st, n) {
-  const s = JSON.stringify(st);
+  const s = JSON.stringify(kept(st));
   if (s.length > MAX_RUN) throw new Oops("This run has grown too big to keep.", 413);
   await env.DB.prepare("INSERT INTO runs (player_id, state, n, updated) VALUES (?, ?, ?, ?) ON CONFLICT(player_id) DO UPDATE SET state = excluded.state, n = excluded.n, updated = excluded.updated").bind(me.id, s, n, now()).run();
 }
@@ -29,6 +34,13 @@ function fresh() {
 
 async function run(env, req, ctx) {
   const b = await body(req);
+  if (b.peek === true) {
+    const me = await playerOf(env, req), row = me && (await load(env, me));
+    if (!row) return { run: null };
+    const st = tidy(ACT.apply(JSON.parse(row.state), { t: "tick" }));
+    await store(env, me, st, row.n);
+    return { run: st, n: row.n };
+  }
   const me = (await playerOf(env, req)) || (await makePlayer(env, req, ctx));
   const row = await load(env, me);
   if (!row || b.fresh === true) {
@@ -55,6 +67,7 @@ async function act(env, req) {
   let st;
   try { st = tidy(ACT.apply(JSON.parse(row.state), a)); }
   catch (e) { console.error(e); throw new Oops("That didn't work.", 400); }
+  if (JSON.stringify(kept(st)) === row.state && !OUTBOX.some((f) => st[f] !== undefined)) return { same: true, n: row.n };
   await store(env, me, st, row.n + 1);
   return { run: st, n: row.n + 1 };
 }

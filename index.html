@@ -458,11 +458,11 @@
     visitBusy = true;
     fetch(LEADERBOARD_URL + "/inventory", { headers: { authorization: "Bearer " + tok } })
       .then(r => r.ok ? r.json() : null)
-      .then(d => {
+      .then(async d => {
         if (!d || !Array.isArray(d.items) || !save || save.dead) return;
         for (const it of d.items) if (it.from === "88x31") {
           const before = (save.items || []).length;
-          save = ACT.apply(save, { t: "welcomeVisitor", info: { name: it.name, itemId: it.itemId, copy: it.copy, rarity: it.rarity, note: it.note, align: it.align, nature: it.nature } });
+          save = await play({ t: "welcomeVisitor", info: { name: it.name, itemId: it.itemId, copy: it.copy, rarity: it.rarity, note: it.note, align: it.align, nature: it.nature } });
           if ((save.items || []).length > before && !(save.regCopies || []).some(c => c.id === it.itemId && c.copy === it.copy)) save.regCopies = (save.regCopies || []).concat({ id: it.itemId, copy: it.copy }).slice(-100);
         }
         save.visitDay = save.day; persist(); draw();
@@ -483,14 +483,14 @@
       if (swap) {
         const r = await fetch(LEADERBOARD_URL + "/gift", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ k: swap.k, give: swap.give }), signal: ctl.signal });
         const j = r.ok ? await r.json() : null;
-        save = ACT.apply(save, { t: "boxDone", ok: !!(j && j.ok), got: j ? j.got : null });
+        save = await play({ t: "boxDone", ok: !!(j && j.ok), got: j ? j.got : null });
       } else {
         const r = await fetch(LEADERBOARD_URL + "/gift?k=" + encodeURIComponent(save.box.k), { signal: ctl.signal });
         const j = r.ok ? await r.json() : null;
-        if (j) save = ACT.apply(save, { t: "boxFound", item: j.item, marks: j.marks }); else delete save.box;
+        save = await play(j ? { t: "boxFound", item: j.item, marks: j.marks } : { t: "boxCancel" });
       }
     } catch (err) {
-      if (swap) save = ACT.apply(save, { t: "boxDone", ok: false }); else delete save.box;
+      save = await play(swap ? { t: "boxDone", ok: false } : { t: "boxCancel" });
     }
     clearTimeout(timer);
     boxBusy = false;
@@ -554,10 +554,10 @@
     (save.items || []).forEach((n, i) => opt(`[${i + 1}] ${n.toUpperCase()}`.slice(0, 41), i));
     opt("[N]O THANKS", "none");
   }
-  function bagPick(i) {
-    if (!save || !(save.overflow || []).length) return;
+  async function bagPick(i) {
+    if (!save || !(save.overflow || []).length || waiting) return;
     const box = document.getElementById("found");
-    save = ACT.apply(save, { t: "keep", i: i === "none" ? null : Number(i) });
+    save = await play({ t: "keep", i: i === "none" ? null : Number(i) });
     box.hidden = true; box.dataset.mode = ""; box.querySelector("pre").innerHTML = "";
     persist(); draw();
   }
@@ -710,6 +710,7 @@
     return adminOK = true;
   }
   function sweepCheats() {
+    if (SERVER) return;                                 // (v1.21) on the server, only the admin flag turns the tools on
     if (!save || adminOK || !(save.freeSteps || save.clockOffset)) return;
     if (save.freeSteps) delete save.freeSteps;          // left over from before: switch it off and mark the run
     save.cheated = true; persist();
@@ -728,11 +729,11 @@
   }
 
   // Catch up with the real date (a new day, or a missed deadline), then save.
-  function tick() {
-    if (!save) return;
+  async function tick() {
+    if (!save || waiting) return;
     sweepCheats();
     const before = JSON.stringify(save), log = save.log;
-    save = ACT.apply(save, { t: "tick" });
+    save = await play({ t: "tick" });
     if (JSON.stringify(save) !== before) { remember(log); persist(); }
     endLog();
   }
@@ -757,9 +758,65 @@
       if (!isNaN(server)) SMT.setSkew(server + age * 1000 + 500 - (t0 + Date.now()) / 2);   // the header is whole seconds
     } catch (e) {}
   }
+  // (v1.21) This player's run from the server, if they have one (asking never makes a player or a run). The browser's last
+  // copy (local) gives back the page's own fields when it is the same run.
+  async function serverRun(local) {
+    try {
+      const d = await gameApi("/run", { peek: true });
+      if (!d.run) return null;
+      return adopt(d.run, d.n, local && local.runId === d.run.runId ? local : null);
+    } catch (e) { console.error(e); return null; }
+  }
   // The leaderboard's address (the Cloudflare Worker, see leaderboard/README.md). Empty: every board button stays hidden.
   const ACCOUNT_HOST = location.hostname === "dungeon.88x31.app";   // passkeys belong to 88x31.app, so accounts only work on the game's own address
   const LEADERBOARD_URL = "https://daily-dungeon-board.ddddungeon.workers.dev";
+  // THE RUN ON THE SERVER (v1.21, stage 3 of dungeon-notes/4dungeon-server-move.md). On the game's own address (or a local
+  // wrangler dev), every action goes to the Worker (/api/act), which keeps the run and plays it with the same rules
+  // (act.js). Anywhere else (itch.io, a file) the page plays it itself, as before. Breath is off on the server for now.
+  // The page keeps its own display fields (PAGE_KEEP) across each answer; the rules' queues for the page (OUT_LIST,
+  // OUT_ONE) are handed over once by the server and merged with anything the page hasn't sent yet.
+  const SERVER = ACCOUNT_HOST || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+  const PAGE_KEEP = ["history", "logged", "ecoSeen", "ecoRun", "ecoNews", "ecoEnded", "key", "unsaved", "saved", "endShown", "submitted", "auraBand", "regCopies", "visitDay", "breathNow"];
+  const OUT_LIST = ["finds", "gone", "events"], OUT_ONE = ["tally", "line3", "exchangeOpen"];
+  let runN = 0, waiting = false, chain = Promise.resolve();
+  function adopt(run, n, old) {
+    if (old) {
+      for (const k of PAGE_KEEP) if (old[k] !== undefined) run[k] = old[k];
+      for (const k of OUT_LIST) if (old[k] && old[k].length) run[k] = old[k].concat(run[k] || []).slice(-50);
+      for (const k of OUT_ONE) if (run[k] === undefined && old[k] !== undefined) run[k] = old[k];
+    }
+    runN = n;
+    return run;
+  }
+  async function gameApi(path, body) {
+    let tok = ""; try { tok = localStorage.getItem("dd-token") || ""; } catch (e) {}
+    const r = await fetch("/api" + path, { method: "POST", headers: { "content-type": "application/json", ...(tok ? { authorization: "Bearer " + tok } : {}) }, body: JSON.stringify(body) });
+    let d = null; try { d = await r.json(); } catch (e) {}
+    if (!d) throw new Error("no answer");
+    if (typeof d.token === "string" && d.token) try { localStorage.setItem("dd-token", d.token); } catch (e) {}
+    return d;
+  }
+  // One action on the run: the server's answer (or the page's own, off the game's address). Actions go one at a time.
+  // If the server can't be reached, the run stays as it was and line 2 says so.
+  function play(action) {
+    if (!SERVER) return Promise.resolve(ACT.apply(save, action));
+    const p = chain.then(async () => {
+      waiting = true;
+      try {
+        const fresh = action.t === "reset";
+        const d = await gameApi(fresh ? "/run" : "/act", fresh ? { fresh: true } : { n: runN, action });
+        if (d.same && save) return save;                      // nothing changed (a refused rename, a quiet tick)
+        if (d.run) return adopt(d.run, d.n, save);           // a stale n (409) carries the real run too
+        throw new Error(d.error || "no run");
+      } catch (e) {
+        console.error(e);
+        if (save) save.log = "> The dark doesn't answer. Try again in a moment.";
+        return save;
+      } finally { waiting = false; }
+    });
+    chain = p.catch(() => {});
+    return p;
+  }
   async function start() {
     document.getElementById("ver").textContent = SMT.VERSION;
     await syncTime();
@@ -769,7 +826,8 @@
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.dispatchEvent(new Event("resize")));   // popups are placed by measuring the font
     // The title screen shows first either way (CONTINUE is the explicit resume now); this only decides
     // whether CONTINUE has anything to resume. tick()/draw() wait for that button, same for a fresh save.
-    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 11 && s.party) save = ACT.apply(s, { t: "named" });
+    if (SERVER) save = await serverRun(s);                // (v1.21) the run lives on the server; this browser's copy only keeps the page's own fields
+    else if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 11 && s.party) save = ACT.apply(s, { t: "named" });
     else { if (s) stash("-old"); save = null; }
     sweepCheats();
     showTitle();
@@ -978,17 +1036,17 @@
     logo.hidden = !atTitle;
   }
   // NEW RUN with nothing to lose skips the confirm; CONTINUE only fires with something real to resume.
-  function freshRun() {
-    save = ACT.apply(save, { t: "reset" });
+  async function freshRun() {
+    save = await play({ t: "reset" });
     save.history = [];
     remember(""); persist(); draw();
   }
-  function titleAction(name) {
+  async function titleAction(name) {
     if (!atTitle) return;
     if (name === "title-continue") {
       if (!titleCanContinue()) return;
       leaveTitle();
-      try { tick(); flashStatus(); draw(); encounterBox(); altarBox(); }
+      try { await tick(); flashStatus(); draw(); encounterBox(); altarBox(); }
       catch (err) { console.error(err); try { localStorage.setItem(KEY + "-corrupt", localStorage.getItem(KEY)); } catch (e) {} save = null; freshRun(); }
     } else if (name === "title-new") {
       if (save) resetBox();           // something exists to lose: confirm first (answerConfirm -> act("reset") leaves the title)
@@ -1032,7 +1090,7 @@
     if (save.cheated) { msg.textContent = "THIS RUN USED A TESTING CHEAT, SO IT CAN'T BE POSTED."; return; }
     const field = document.getElementById("postname");     // the post row's name: a rename right before posting
     if (field) {
-      const next = ACT.apply(save, { t: "setName", name: field.value });
+      const next = await play({ t: "setName", name: field.value });
       if (next === save) { msg.textContent = nameProblem(field.value.trim()); field.focus(); return; }
       save = next; persist();
     }
@@ -1204,6 +1262,7 @@
   // or open the page signed in, a cloud run that is further along (later day, then more steps) is offered in place of the local one.
   let cloudTimer = 0, cloudLast = "";
   function cloudPush(leaving) {
+    if (SERVER) return;                              // (v1.21) the run is on the server already
     if (cloudTimer) { clearTimeout(cloudTimer); cloudTimer = 0; }
     if (!save || !signedIn()) return;
     const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) }))));
@@ -1215,6 +1274,10 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") cloudPush(true); });
   window.addEventListener("pagehide", () => cloudPush(true));
   async function cloudPull(say) {
+    if (SERVER) {                                    // (v1.21) signed in on this device: play the account's run from the server
+      const r = await serverRun(save); if (r) { save = r; persist(); if (!atTitle) draw(); }
+      return;
+    }
     if (!signedIn()) return;
     const r = await acctApi("/save"); if (r.error || !r.code) return cloudPush(false);
     let c; try { c = JSON.parse(decodeURIComponent(escape(atob(r.code)))); } catch (e) { return; }
@@ -1362,7 +1425,7 @@
     const r = await acctApi("/send", { itemId, copy });
     if (!r.error && save) {       // it is gone from the run's bag too, without counting as lost
       const name = (save.visitors || {})[itemId + ":" + copy] || ((save.regCopies || []).some(c => c.id === itemId && c.copy === copy) ? RULES.nameOf(itemId) : null);
-      if (name) { save = ACT.apply(save, { t: "takeAway", name }); }
+      if (name) { save = await play({ t: "takeAway", name }); }
       save.regCopies = (save.regCopies || []).filter(c => !(c.id === itemId && c.copy === copy)); persist(); draw();
     }
     if (invReg !== R) return;
@@ -1804,19 +1867,19 @@
     const foot = add("[D]EMONS / [I]TEMS   arrows or click choose   ");
     const cb = document.createElement("span"); cb.className = "btn"; cb.dataset.close = "1"; cb.textContent = "[C]LOSE"; foot.append(cb);
   }
-  function useInv(i, drink) {
+  async function useInv(i, drink) {
     const it = invList[i];
-    if (!it || !save) return;
+    if (!it || !save || waiting) return;
     const log = save.log;
     if (it.ichor && topSel === 1) {          // SILVER: cools the room and clears what clouds KURA
-      save = ACT.apply(save, { t: "useSilver" });
+      save = await play({ t: "useSilver" });
       logGlow = true; remember(log); persist(); draw();
       if (save.encounter) { showInv(false); encounterBox(); return; }
       return showInv(true);
     }
     if (it.ichor && !(save.ichor > 0)) { save.log = "> There's no ICHOR left."; persist(); draw(); return showInv(true); }
     if (it.ichor && !drink) { ichorPick = 0; return showInv(true); }
-    save = it.ichor ? ACT.apply(save, { t: "giveIchor", n: Number(drink) || 0 }) : ACT.apply(save, { t: "useItem", name: it.name });
+    save = await play(it.ichor ? { t: "giveIchor", n: Number(drink) || 0 } : { t: "useItem", name: it.name });
     ichorPick = -1;
     logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
@@ -1827,11 +1890,11 @@
   }
   // Hold Omen / Release Omen's own action, off the header button or the H key -- not routed through
   // useInv/invList/invSel at all now, since it's no longer a numbered item in that list.
-  function holdAction() {
-    if (!save || !holdBtn || holdBtn.cooling) return;   // greyed out during the post-release cooldown: inert
+  async function holdAction() {
+    if (!save || waiting || !holdBtn || holdBtn.cooling) return;   // greyed out during the post-release cooldown: inert
     if (holdBtn.action === "hold") { showInv(false); holdBox(); return; }   // still asks to confirm first, same as STANDBY always did
     const log = save.log;
-    save = ACT.apply(save, { t: "useBankedOmen" });
+    save = await play({ t: "useBankedOmen" });
     logGlow = true; remember(log); persist(); draw();
     if (save.encounter) { showInv(false); encounterBox(); return; }
     showInv(true);
@@ -1995,7 +2058,7 @@
     document.getElementById("found").hidden = true;
     if (blockedRun) { blockedRun = false; encounterBox(true); return; }
     if (afterBreak) { afterBreak = false; if (save && save.encounter) { encounterBox(); return; } showInv(true); return; }
-    if (save && save.roundOver) { delete save.round; delete save.roundOver; persist(); draw(); }
+    if (save && save.roundOver) { delete save.round; delete save.roundOver; persist(); draw(); if (SERVER) play({ t: "roundClear" }); }
     if (queuedNotice) { const q = queuedNotice; queuedNotice = null; noticeBox(q); return; }
     endLog();
   }
@@ -2568,7 +2631,8 @@
   }
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   let auraGo = false;                           // (the same for an AURA read)
-  function act(name) {
+  async function act(name) {
+    if (waiting) return;                             // (v1.21) the server is still answering the last one
     line3Calm = Date.now();                          // line 3 waits a moment after anything she does before it starts a new line
     if (!searchGo && !searchBeat) beatLine1 = null;     // the party's reaction to a search lasts until she does something else
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title
@@ -2595,7 +2659,7 @@
     // (v1.16) TALK with nobody to talk to is the old room read, so it keeps that beat.
     if (name === "word" && save && !save.encounter && !save.dead && !save.question && !(save.party || []).slice(1).some(q => q.hp > 0)) name = "aura";
     if (name === "aura" && save && !auraGo && !save.encounter && !save.dead && !save.question) {
-      auraGo = true; try { act("aura"); } finally { auraGo = false; }
+      auraGo = true; const going = act("aura"); auraGo = false; await going;
       const full = save.log || "", m = /^(> KURA [^.]*?)\.\.\. (.+)$/.exec(full);
       if (!m) return;                                      // out of breath: the refusal is already up
       const head = m[1], rest = m[2];
@@ -2612,7 +2676,7 @@
       return;
     }
     if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.question) {
-      if (RULES.breath(save) < 1) { searchGo = true; try { act("search"); } finally { searchGo = false; } return; }
+      if (RULES.breath(save) < 1) { searchGo = true; const going = act("search"); searchGo = false; await going; return; }
       const was = save.log, can = RULES.available(save), WALL = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
       const lead = save.view && save.view.end === "exchange" ? "> KURA reaches for the screen"
         : can.door[save.facing] ? "> KURA listens at the door" : `> KURA searches the ${WALL[save.facing] || ""} wall`;
@@ -2630,13 +2694,13 @@
         else typeQuiet = false;
       };
       const showHeld = () => { if (heldFound) { const b = heldFound; heldFound = null; if (save && document.getElementById("found").hidden) foundBox(b); } };
-      const step = () => {
+      const step = async () => {
         if (full === null && dots < 3) { dots++; save.log = lead + ".".repeat(dots); draw(); searchBeat = setTimeout(step, DOT_MS); return; }
         if (full === null) {                              // the dots are done: now the search itself
           save.log = was;
           const had = (save.items || []).length;
           searchBeat = null; searchGo = true; holdFound = true;
-          try { act("search"); } finally { searchGo = false; holdFound = false; }
+          try { await act("search"); } finally { searchGo = false; holdFound = false; }
           if (!save || save.dead || save.encounter || save.question || (save.altar && save.altar.open) || !document.getElementById("found").hidden) { showHeld(); typeQuiet = false; return; }
           full = save.log;
           const m = /^> KURA (?:searches|scries) the [^.]+\.+/.exec(full || "");
@@ -2672,7 +2736,7 @@
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
     if ((name === "qyes" || name === "qno") && save) {
       const log = save.log, partyBefore = (save.party || []).map(p => p.name);
-      save = ACT.apply(save, { t: "reply", yes: name === "qyes" });
+      save = await play({ t: "reply", yes: name === "qyes" });
       heldExtra = null;                    // the answer's line goes up at once, not behind the old question
       remember(log); persist(); draw();
       const gone = partyBefore.filter(n => !(save.party || []).some(p => p.name === n));
@@ -2725,7 +2789,7 @@
     if (name === "hold") { if (!okHold) { holdBox(); return; } }
     const log = save.log, steps = save.steps, exBefore = save.extra, ranBefore = !!(save.encounter && save.encounter.ranTried), partyBefore = (save.party || []).map(p => p.name);
     const before = { items: (save.items || []).slice(), silver: save.silver }, hadFight = !!save.encounter, kuraHp = save.party && save.party[0] ? save.party[0].hp : 0;
-    save = ACT.apply(save, ACT.fromName(name));                 // (v1.19) every action goes through the action list (act.js)
+    save = await play(ACT.fromName(name));                     // (v1.21) the server's answer (v1.19: one action list)
     if (save.line3) { line3Next = save.line3; delete save.line3; }   // AURA's own read goes on line 3, next
     if (name === "reset") {
       save.history = [];
