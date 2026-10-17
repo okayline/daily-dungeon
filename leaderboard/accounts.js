@@ -25,20 +25,20 @@ const GAME = "4dungeon", MAX_SAVE = 400000, MAX_FOUND_A_DAY = 300;
 const OUR_ITEMS = new Set(SHARED.filter((i) => !i.retired).map((i) => i.id));   // only 4Dungeon's own items are registered from here
 const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/save", "/found", "/spent", "/inventory", "/send"]);
 
-class Oops extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
+export class Oops extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 const now = () => Math.floor(Date.now() / 1000);
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type, authorization", "access-control-max-age": "86400" };
-const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...CORS } });
+export const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...CORS } });
 const hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
 const sha = async (s) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
 const newToken = () => hex(crypto.getRandomValues(new Uint8Array(32)));
 const readToken = (req) => { const m = (req.headers.get("authorization") || "").match(/^Bearer ([A-Za-z0-9_-]{20,200})$/); return m ? m[1] : null; };
-const originsOf = (env) => String(env.ACCOUNT_ORIGINS || "https://dungeon.88x31.app").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean);
+export const originsOf = (env) => String(env.ACCOUNT_ORIGINS || "https://dungeon.88x31.app").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean);
 const ipOf = (req) => req.headers.get("cf-connecting-ip") || "unknown";
 const ACC = (env) => { if (!env.ACCOUNTS) throw new Oops("Accounts are unavailable right now. Try again in a moment.", 503); return env.ACCOUNTS; };
 const ok = (r) => { if (r && r.error) throw new Oops(r.error, r.status || 400); return r; };
 
-async function limited(env, req, action, limit, secs) {
+export async function limited(env, req, action, limit, secs) {
   const start = Math.floor(now() / secs) * secs, key = action + ":" + (await sha("ip:" + ipOf(req))).slice(0, 32);
   await env.DB.prepare("DELETE FROM acct_limits WHERE window_start < ?").bind(now() - 86400).run();
   const r = await env.DB.prepare("INSERT INTO acct_limits (key, window_start, count) VALUES (?, ?, 1) ON CONFLICT(key, window_start) DO UPDATE SET count = count + 1 RETURNING count").bind(key, start).first();
@@ -58,7 +58,7 @@ export async function playerOf(env, req) {
   if (p) await db.prepare("UPDATE players SET seen_at = ? WHERE id = ?").bind(t, p.id).run();
   return p || null;
 }
-async function makePlayer(env, req, ctx) {
+export async function makePlayer(env, req, ctx) {
   if (!(await limited(env, req, "new-player", 20, 3600))) throw new Oops("Too many new players from here. Try again later.", 429);
   const token = newToken(), t = now();
   const p = await env.DB.prepare("INSERT INTO players (token_hash, created_at, seen_at) VALUES (?, ?, ?) RETURNING *").bind(await sha(token), t, t).first();
@@ -93,7 +93,7 @@ async function enter(env, req, ctx, accountId) {
   ctx.token = token;
 }
 
-const body = async (req) => { let v; try { v = await req.json(); } catch { throw new Oops("That request didn't make sense."); } if (!v || typeof v !== "object" || Array.isArray(v)) throw new Oops("That request didn't make sense."); return v; };
+export const body = async (req) => { let v; try { v = await req.json(); } catch { throw new Oops("That request didn't make sense."); } if (!v || typeof v !== "object" || Array.isArray(v)) throw new Oops("That request didn't make sense."); return v; };
 
 async function account(env, req) {
   const me = await playerOf(env, req);

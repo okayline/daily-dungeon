@@ -137,7 +137,8 @@ CREATE TABLE IF NOT EXISTS players (
   id          INTEGER PRIMARY KEY,
   token_hash  TEXT NOT NULL UNIQUE,
   created_at  INTEGER NOT NULL,
-  seen_at     INTEGER NOT NULL
+  seen_at     INTEGER NOT NULL,
+  admin       INTEGER NOT NULL DEFAULT 0      -- (v1.20) 1 = the webmaster: the admin tools work for this player (set by hand)
 );
 -- other devices a player is logged in on (the first device uses players.token_hash)
 CREATE TABLE IF NOT EXISTS player_sessions (
@@ -164,4 +165,12 @@ CREATE TABLE IF NOT EXISTS acct_limits (
   window_start  INTEGER NOT NULL,
   count         INTEGER NOT NULL,
   PRIMARY KEY (key, window_start)
+);
+
+-- (v1.20) each player's run, kept and played on the server (leaderboard/game.js). n counts the actions taken on it.
+CREATE TABLE IF NOT EXISTS runs (
+  player_id   INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+  state       TEXT NOT NULL,
+  n           INTEGER NOT NULL,
+  updated     INTEGER NOT NULL
 );

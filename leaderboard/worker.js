@@ -10,6 +10,7 @@
 //   GET  /admin/here (header x-admin-key)                      -> every device seen this moon, for the X-mode board (v1.01.1)
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
+import { gameRoute } from "./game.js";
 import { accountsRoute, playerOf } from "./accounts.js";
 const MAX = { floor: 20, days: 400 };
 // Same lunar-epoch math as screen.js's epochIndex -- a whole-number count of real lunar months since
@@ -508,6 +509,9 @@ export default {
     // PLAYER ACCOUNTS (v1.13): /account /codes /load /passkey /logout /save (accounts.js). Login is a bearer token the page keeps.
     const acct = await accountsRoute(req, env, url);
     if (acct) return acct;
+    // (v1.20) THE RUN ON THE SERVER: /run and /act (game.js). Not used by the page yet.
+    const game = await gameRoute(req, env, url);
+    if (game) return game;
 
     if (url.pathname === "/top" && req.method === "GET") {
       const n = Math.max(1, Math.min(50, Number(url.searchParams.get("n")) || 20)), run = url.searchParams.get("run") || "";

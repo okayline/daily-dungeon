@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.20 - The Other Side - Oct 17 2026, 09:30 HST
+
+- **Behind the scenes:** the server can now keep a run and play it with the same rules as the page. The game doesn't use it yet; nothing plays differently.
+
 ## v1.19.1 - Admin Keys - Oct 17 2026, 09:25 HST
 
 - **Fixed:** the testing tools stopped working in v1.19.
