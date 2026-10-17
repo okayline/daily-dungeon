@@ -1,10 +1,11 @@
 name = "daily-dungeon-board"
-main = "worker.js"
+main = "leaderboard/worker.js"
 compatibility_date = "2024-11-01"
 
-# The game's page (repo files minus .assetsignore), so dungeon.88x31.app keeps working; the board is at the workers.dev address.
+# Lives at the repo root so Workers Builds finds it (a build run from the root with no config here uploads the files only,
+# with no Worker code, D1 or bindings). The game's page (repo files minus .assetsignore), so dungeon.88x31.app keeps working; the board is at the workers.dev address.
 [assets]
-directory = ".."
+directory = "."
 
 [[d1_databases]]
 binding = "DB"

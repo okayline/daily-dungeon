@@ -8,7 +8,7 @@ hour per sender, a name check and an origin check.
 
 ```sh
 cd leaderboard
-npx wrangler d1 create daily-dungeon-board        # copy the database_id it prints into wrangler.toml
+npx wrangler d1 create daily-dungeon-board        # copy the database_id it prints into wrangler.toml (repo root)
 npx wrangler d1 execute daily-dungeon-board --remote --file=schema.sql
 npx wrangler deploy                               # prints the Worker's address
 ```

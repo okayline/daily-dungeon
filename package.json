@@ -1,0 +1,1 @@
+{ "name": "daily-dungeon-board", "type": "module", "private": true, "scripts": { "test": "node --test leaderboard/test/*.test.mjs" }, "devDependencies": { "wrangler": "^4.45.0" } }
