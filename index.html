@@ -76,7 +76,7 @@
   .titlelogo { position: absolute; pointer-events: none; font-size: clamp(6px, calc((100vw - 32px) / 49), 22px);
     top: calc(6.5 * 1.05em); height: calc(8 * 1.05em); width: auto; }
   @media (max-width: 700px) { .titlelogo { font-size: calc((100vw - 8px) / 32.5); } }
-  html { touch-action: manipulation; }   /* no double-tap zoom (pinch is off in the viewport tag) */
+  html, body { touch-action: pan-x pan-y; }   /* scrolling only: no pinch zoom, no double-tap zoom ('manipulation' still allowed pinch) */
   @media (max-height: 500px) and (orientation: landscape) {   /* a phone on its side: size the screen by whichever of width and height is smaller, so it never scrolls */
     body { padding: 8px 4px; }
     pre, .titlelogo { font-size: min(calc((100vw - 8px) / 32.5), calc((100vh - 16px) / 35)); }
@@ -2942,6 +2942,7 @@
     const m = SMT.now().getMinutes();
     if (m !== shownMinute && !searchBeat) { shownMinute = m; if (!atTitle) tick(); draw(); }   // on the title, only the title redraws; the run waits for CONTINUE
   }, 1000);
+  document.addEventListener("touchmove", e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });   // two fingers never zoom
   for (const g of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(g, e => e.preventDefault());   // iOS pinch zoom
 </script>
 </body>
