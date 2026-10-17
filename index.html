@@ -163,6 +163,7 @@
 <script src="floor.js"></script>
 <script src="items.js"></script>
 <script src="rules.js"></script>
+<script src="act.js"></script>
 <script>
   var PERIOD_STOP = 1000;   // (v1.08.1) a period is a full one-second stop wherever text types out (var: used before this script finishes running)
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -461,7 +462,7 @@
         if (!d || !Array.isArray(d.items) || !save || save.dead) return;
         for (const it of d.items) if (it.from === "88x31") {
           const before = (save.items || []).length;
-          save = RULES.welcomeVisitor(save, { name: it.name, itemId: it.itemId, copy: it.copy, rarity: it.rarity, note: it.note, align: it.align, nature: it.nature });
+          save = ACT.apply(save, { t: "welcomeVisitor", info: { name: it.name, itemId: it.itemId, copy: it.copy, rarity: it.rarity, note: it.note, align: it.align, nature: it.nature } });
           if ((save.items || []).length > before && !(save.regCopies || []).some(c => c.id === it.itemId && c.copy === it.copy)) save.regCopies = (save.regCopies || []).concat({ id: it.itemId, copy: it.copy }).slice(-100);
         }
         save.visitDay = save.day; persist(); draw();
@@ -482,14 +483,14 @@
       if (swap) {
         const r = await fetch(LEADERBOARD_URL + "/gift", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ k: swap.k, give: swap.give }), signal: ctl.signal });
         const j = r.ok ? await r.json() : null;
-        save = RULES.boxDone(save, !!(j && j.ok), j ? j.got : null);
+        save = ACT.apply(save, { t: "boxDone", ok: !!(j && j.ok), got: j ? j.got : null });
       } else {
         const r = await fetch(LEADERBOARD_URL + "/gift?k=" + encodeURIComponent(save.box.k), { signal: ctl.signal });
         const j = r.ok ? await r.json() : null;
-        if (j) save = RULES.boxFound(save, j.item, j.marks); else delete save.box;
+        if (j) save = ACT.apply(save, { t: "boxFound", item: j.item, marks: j.marks }); else delete save.box;
       }
     } catch (err) {
-      if (swap) save = RULES.boxDone(save, false); else delete save.box;
+      if (swap) save = ACT.apply(save, { t: "boxDone", ok: false }); else delete save.box;
     }
     clearTimeout(timer);
     boxBusy = false;
@@ -556,7 +557,7 @@
   function bagPick(i) {
     if (!save || !(save.overflow || []).length) return;
     const box = document.getElementById("found");
-    save = RULES.keepItem(save, i === "none" ? null : Number(i));
+    save = ACT.apply(save, { t: "keep", i: i === "none" ? null : Number(i) });
     box.hidden = true; box.dataset.mode = ""; box.querySelector("pre").innerHTML = "";
     persist(); draw();
   }
@@ -731,7 +732,7 @@
     if (!save) return;
     sweepCheats();
     const before = JSON.stringify(save), log = save.log;
-    save = RULES.tick(save);
+    save = ACT.apply(save, { t: "tick" });
     if (JSON.stringify(save) !== before) { remember(log); persist(); }
     endLog();
   }
@@ -768,7 +769,7 @@
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.dispatchEvent(new Event("resize")));   // popups are placed by measuring the font
     // The title screen shows first either way (CONTINUE is the explicit resume now); this only decides
     // whether CONTINUE has anything to resume. tick()/draw() wait for that button, same for a fresh save.
-    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 11 && s.party) save = RULES.named(s);
+    if (s && s.dungeon && s.dungeon.floor && s.dungeon.floor.v === 11 && s.party) save = ACT.apply(s, { t: "named" });
     else { if (s) stash("-old"); save = null; }
     sweepCheats();
     showTitle();
@@ -978,7 +979,7 @@
   }
   // NEW RUN with nothing to lose skips the confirm; CONTINUE only fires with something real to resume.
   function freshRun() {
-    save = RULES.reset(save || {});
+    save = ACT.apply(save, { t: "reset" });
     save.history = [];
     remember(""); persist(); draw();
   }
@@ -1031,7 +1032,7 @@
     if (save.cheated) { msg.textContent = "THIS RUN USED A TESTING CHEAT, SO IT CAN'T BE POSTED."; return; }
     const field = document.getElementById("postname");     // the post row's name: a rename right before posting
     if (field) {
-      const next = RULES.setName(save, field.value);
+      const next = ACT.apply(save, { t: "setName", name: field.value });
       if (next === save) { msg.textContent = nameProblem(field.value.trim()); field.focus(); return; }
       save = next; persist();
     }
@@ -1361,7 +1362,7 @@
     const r = await acctApi("/send", { itemId, copy });
     if (!r.error && save) {       // it is gone from the run's bag too, without counting as lost
       const name = (save.visitors || {})[itemId + ":" + copy] || ((save.regCopies || []).some(c => c.id === itemId && c.copy === copy) ? RULES.nameOf(itemId) : null);
-      if (name) { save = RULES.takeAway(save, name); }
+      if (name) { save = ACT.apply(save, { t: "takeAway", name }); }
       save.regCopies = (save.regCopies || []).filter(c => !(c.id === itemId && c.copy === copy)); persist(); draw();
     }
     if (invReg !== R) return;
@@ -1808,14 +1809,14 @@
     if (!it || !save) return;
     const log = save.log;
     if (it.ichor && topSel === 1) {          // SILVER: cools the room and clears what clouds KURA
-      save = RULES.useSilver(save);
+      save = ACT.apply(save, { t: "useSilver" });
       logGlow = true; remember(log); persist(); draw();
       if (save.encounter) { showInv(false); encounterBox(); return; }
       return showInv(true);
     }
     if (it.ichor && !(save.ichor > 0)) { save.log = "> There's no ICHOR left."; persist(); draw(); return showInv(true); }
     if (it.ichor && !drink) { ichorPick = 0; return showInv(true); }
-    save = it.ichor ? RULES.giveIchor(save, Number(drink) || 0) : RULES.useItem(save, it.name);
+    save = it.ichor ? ACT.apply(save, { t: "giveIchor", n: Number(drink) || 0 }) : ACT.apply(save, { t: "useItem", name: it.name });
     ichorPick = -1;
     logGlow = true;            // the result shows on log line 2, in gold, until the next action
     remember(log); persist(); draw();
@@ -1830,7 +1831,7 @@
     if (!save || !holdBtn || holdBtn.cooling) return;   // greyed out during the post-release cooldown: inert
     if (holdBtn.action === "hold") { showInv(false); holdBox(); return; }   // still asks to confirm first, same as STANDBY always did
     const log = save.log;
-    save = RULES.useBankedOmen(save);
+    save = ACT.apply(save, { t: "useBankedOmen" });
     logGlow = true; remember(log); persist(); draw();
     if (save.encounter) { showInv(false); encounterBox(); return; }
     showInv(true);
@@ -2671,7 +2672,7 @@
     if (save && save.encounter && (name === "left" || name === "right" || name === "look")) return;      // no turning around mid-fight
     if ((name === "qyes" || name === "qno") && save) {
       const log = save.log, partyBefore = (save.party || []).map(p => p.name);
-      save = RULES.reply(save, name === "qyes");
+      save = ACT.apply(save, { t: "reply", yes: name === "qyes" });
       heldExtra = null;                    // the answer's line goes up at once, not behind the old question
       remember(log); persist(); draw();
       const gone = partyBefore.filter(n => !(save.party || []).some(p => p.name === n));
@@ -2687,10 +2688,9 @@
     if (name === "run" && save && save.encounter && save.encounter.ranTried) { save.log = "> KURA already tried to run. FIGHT or WORD."; persist(); draw(); encounterBox(); return; }
     if (name === "run" && save && save.encounter) {
       // Running takes any way out, whichever way KURA faces: an open door first, a locked one (it takes the key) if that's all there is.
-      const can = RULES.available(save), out = ["N", "E", "S", "W"].filter(d => can[d]), free = out.filter(d => !can.locked[d]);
-      const pool = free.length ? free : out;
-      if (!pool.length) { save.log = "> There is no way out today. FIGHT or WORD."; persist(); draw(); encounterBox(); return; }
-      name = "go-" + pool[Math.floor(Math.random() * pool.length)];
+      const way = ACT.runWay(save);
+      if (!way) { save.log = "> There is no way out today. FIGHT or WORD."; persist(); draw(); encounterBox(); return; }
+      name = "go-" + way;
     }
     if (name !== "invoke" && name !== "codex") logGlow = false;
     if (name.startsWith("go-") && save) {
@@ -2725,16 +2725,7 @@
     if (name === "hold") { if (!okHold) { holdBox(); return; } }
     const log = save.log, steps = save.steps, exBefore = save.extra, ranBefore = !!(save.encounter && save.encounter.ranTried), partyBefore = (save.party || []).map(p => p.name);
     const before = { items: (save.items || []).slice(), silver: save.silver }, hadFight = !!save.encounter, kuraHp = save.party && save.party[0] ? save.party[0].hp : 0;
-    save = name === "yes" ? RULES.answer(save, true) : name === "no" ? RULES.answer(save, false)
-      : name.startsWith("opick-") ? RULES.offerPick(save, name === "opick-none" ? null : Number(name.slice(6)))
-      : name.startsWith("otrade-") ? RULES.offerTrade(save, name === "otrade-none" ? null : Number(name.slice(7)))
-      : name.startsWith("oleave-") ? RULES.offerLeaveConfirm(save, name === "oleave-yes")
-      : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
-      : name === "altar" ? RULES.altarOpen(save)
-      : name === "altar-next" ? RULES.altarNext(save)
-      : name.startsWith("altar-") ? RULES.altarGive(save, name === "altar-none" ? null : Number(name.slice(6)))
-      : name === "left" ? RULES.turn(save, "L") : name === "right" ? RULES.turn(save, "R") : name === "look" ? RULES.turn(save, "U")
-      : name.startsWith("go-") ? RULES.go(save, name.slice(3)) : RULES[name](save);
+    save = ACT.apply(save, ACT.fromName(name));                 // (v1.19) every action goes through the action list (act.js)
     if (save.line3) { line3Next = save.line3; delete save.line3; }   // AURA's own read goes on line 3, next
     if (name === "reset") {
       save.history = [];

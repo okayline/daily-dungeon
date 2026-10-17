@@ -2,6 +2,11 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.19 - One List - Oct 17 2026, 09:15 HST
+
+- **Behind the scenes:** every action now goes through one list, the first step toward the game running on the server. Nothing plays differently.
+- **Fixed:** talking with nobody left standing beside KURA could lose the run.
+
 ## v1.18 - Automatic Saves - Oct 17 2026, 07:50 HST
 
 - **The cloud save is automatic.** Signed in, your run saves itself (every couple of minutes while you play, and when you leave the page). Signing in on another device brings the run along; if the cloud run is further ahead than the one on a device, you are asked before it replaces it. SAVE RUN and GET RUN are gone.
