@@ -69,20 +69,22 @@ test("peek never makes a player; a no-change action writes nothing; the rules' q
   assert.equal(JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state).finds, undefined);
 });
 
-test("what the rules queue is sent by the server, as the player, and not handed to the page", async () => {
+test("each find in the bag gets its registry copy; a thing gone uses up that copy; the page never sends them", async () => {
   const env = { DB: fakeD1() }, me = browser(env), sent = [];
   env.REGISTRY = {
     async birth(b) { sent.push(["birth", b.itemId]); return { copy: 7, created: true }; },
-    async heldBy() { return [{ itemId: 1, copy: 3 }, { itemId: 1, copy: 5 }]; },
     async spendCopy(b) { sent.push(["spend", b.itemId, b.copy]); return { ok: true }; },
   };
   await me("/run", {});
-  const name = JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state).items?.[0];
-  const st = JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state);
-  st.finds = [{ id: 1, key: "r:1" }]; st.gone = [name || "x"];
-  env.DB.raw.prepare("UPDATE runs SET state = ?").run(JSON.stringify(st));
+  const ACT = (await import("../../act.js")).default, name = ACT.nameOf(1);
+  const put = (f) => { const st = JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state); f(st); env.DB.raw.prepare("UPDATE runs SET state = ?").run(JSON.stringify(st)); };
+  put((st) => { st.finds = [{ id: 1, key: "r:1" }]; });
   const r = await me("/act", { n: 0, action: { t: "turn", dir: "L" } });
   assert.equal(r.status, 200);
-  assert.equal(r.data.run.finds, undefined); assert.equal(r.data.run.gone, undefined);
-  assert.deepEqual(sent[0], ["birth", 1]);
+  assert.equal(r.data.run.finds, undefined);
+  assert.deepEqual(r.data.run.copies[name], [{ k: "r:1", c: 7 }]);
+  put((st) => { st.gone = [name]; });
+  await me("/act", { n: 1, action: { t: "turn", dir: "R" } });
+  assert.deepEqual(sent, [["birth", 1], ["spend", 1, 7]]);
+  assert.equal((JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state).copies || {})[name], undefined);
 });

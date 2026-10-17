@@ -57,7 +57,7 @@ async function run(env, req, ctx) {
 // limit's count; (2) the run saved, and when they were last seen. The rate limit's old rows are swept now and then,
 // not on every move. (Each trip crosses the ocean from Hawaii to the database, so the count of trips is what lags.)
 const ACT_LIMIT = 3600;          // actions an hour per address
-async function act(env, req) {
+async function act(env, req, inner) {
   const b = await body(req), a = b.action;
   if (!a || typeof a !== "object" || typeof a.t !== "string" || !ACT.types.includes(a.t)) throw new Oops("Unknown action.");
   if (a.t === "reset") throw new Oops("Start a new run with /run.");
@@ -78,6 +78,7 @@ async function act(env, req) {
   let st;
   try { st = tidy(ACT.apply(JSON.parse(row.state), a)); }
   catch (e) { console.error(e); throw new Oops("That didn't work.", 400); }
+  const spends = await settleCopies(env, inner, st, a);
   const s = JSON.stringify(kept(st));
   if (s === row.state && !OUTBOX.some((f) => st[f] !== undefined)) return { same: true, n: row.n };
   if (s.length > MAX_RUN) throw new Oops("This run has grown too big to keep.", 413);
@@ -87,7 +88,7 @@ async function act(env, req) {
   ];
   if (Math.random() < 0.01) write.push(env.DB.prepare("DELETE FROM acct_limits WHERE window_start < ?").bind(t - 86400));
   await env.DB.batch(write);
-  return { run: st, n: row.n + 1, out: st, me };
+  return { run: st, n: row.n + 1, out: st, me, spends };
 }
 
 // (v1.22) WHAT THE RULES QUEUED FOR THE OUTSIDE WORLD, sent by the server after it has answered (ctx.waitUntil), through
@@ -95,19 +96,50 @@ async function act(env, req) {
 // copies (/found); items gone from the bag for good are used up there (/spent, the newest copy this player holds of
 // that item); a door's first entry is a tally mark (/tally); the run's moments are rumors (/event). A run that used
 // the testing tools sends no events. Nothing here can fail a move.
-async function sendOut(env, inner, me, st) {
-  const finds = st.finds || [], gone = st.gone || [], events = st.events || [];
-  if (finds.length) await inner("/found", { finds });
-  if (gone.length && env.REGISTRY) {
-    const held = (await env.REGISTRY.heldBy("4dungeon", me.id)) || [], used = new Set(), items = [];
-    for (const name of gone) {
-      const id = ACT.itemId(name), c = held.filter((h) => h.itemId === id && !used.has(id + ":" + h.copy)).sort((a, b) => b.copy - a.copy)[0];
-      if (c) { used.add(id + ":" + c.copy); items.push({ itemId: id, copy: c.copy }); }
-    }
-    if (items.length) await inner("/spent", { items });
-  }
+async function sendOut(env, inner, me, st, spends) {
+  const events = st.events || [];
+  if (spends && spends.length) await inner("/spent", { items: spends });
   if (st.tally) await inner("/tally", st.tally);
   if (!st.cheated && !st.freeSteps) for (const e of events.slice(-4)) await inner("/event", e);
+}
+// (v1.23) EACH THING IN THE BAG IS A NUMBERED COPY. st.copies maps an item's name to the copies the bag holds of it,
+// oldest first: [{ k: the find's key, c: its copy number, or null while the registry hasn't numbered it }]. A find is
+// numbered right away, in the same move (through /found, so its limits hold; a search asks during its dots, so this
+// mostly hides); one the registry couldn't number waits and is asked again on the next move (same key, same copy).
+// A thing gone from the bag for good (st.gone: used up, broken, given, left behind) takes the newest copy of its name,
+// which is used up in the registry after the answer. Things the rules never found (the starting kit) have no copy.
+// MAIL's send-home names its copy (takeAway { name, itemId, copy }), so that copy leaves the bag's list without being
+// used up. Visitors (88x31 buttons) are tracked by the rules themselves (st.visitors) and never appear here.
+async function settleCopies(env, inner, st, a) {
+  const copies = st.copies || {}, spends = [];
+  if (a.t === "takeAway" && Number.isInteger(a.copy)) {
+    const list = copies[a.name] || [], i = list.findIndex((e) => e.c === a.copy);
+    if (i >= 0) list.splice(i, 1);
+    if (!list.length) delete copies[a.name];
+  }
+  const ask = [];
+  for (const f of st.finds || []) {
+    const name = ACT.nameOf(f.id);
+    if (!name) continue;
+    (copies[name] = copies[name] || []).push({ k: f.key, c: null });
+  }
+  for (const [name, list] of Object.entries(copies)) for (const e of list) if (e.c === null && (e.t || 0) < 5) { e.t = (e.t || 0) + 1; ask.push({ id: ACT.itemId(name), key: e.k }); }   // five tries, then it stays unnumbered
+  if (ask.length && inner) {
+    try {
+      const r = await inner("/found", { finds: ask.slice(0, 50) }), d = await r.json();
+      const got = new Map((d.copies || []).map((c) => [c.key, c.copy]));
+      for (const list of Object.values(copies)) for (const e of list) if (e.c === null && got.has(e.k)) { e.c = got.get(e.k); delete e.t; }
+    } catch (e) { console.error("copies", e); }
+  }
+  for (const name of st.gone || []) {
+    const list = copies[name];
+    if (!list || !list.length) continue;
+    const e = list.pop();
+    if (!list.length) delete copies[name];
+    if (e.c !== null) spends.push({ itemId: ACT.itemId(name), copy: e.c });
+  }
+  if (Object.keys(copies).length) st.copies = copies; else delete st.copies;
+  return spends;
 }
 const later = (ctx, job) => { const p = job.catch((e) => console.error("sendOut", e)); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else return p; };
 
@@ -119,9 +151,9 @@ export async function gameRoute(req, env, url, wctx, inner) {
     if (!originsOf(env).includes(from)) throw new Oops("The game runs at dungeon.88x31.app.", 403);
     if (req.method !== "POST") throw new Oops("No such thing.", 404);
     if (!/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
-    const out = url.pathname === "/run" ? await run(env, req, ctx) : await act(env, req);
-    if (out.run && out.out && inner) await later(wctx, sendOut(env, inner, out.me, out.out));
-    if (out.run) { out.run = kept(out.run); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; if (out.out.exchangeOpen) out.run.exchangeOpen = true; } delete out.out; delete out.me; }
+    const out = url.pathname === "/run" ? await run(env, req, ctx) : await act(env, req, inner);
+    if (out.run && out.out && inner) await later(wctx, sendOut(env, inner, out.me, out.out, out.spends));
+    if (out.run) { out.run = kept(out.run); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; if (out.out.exchangeOpen) out.run.exchangeOpen = true; } delete out.out; delete out.me; delete out.spends; }
     if (out.stale) return reply({ run: out.run, n: out.n, error: "The run moved on." }, 409);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {

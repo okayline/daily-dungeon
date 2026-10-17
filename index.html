@@ -1430,7 +1430,7 @@
     const r = await acctApi("/send", { itemId, copy });
     if (!r.error && save) {       // it is gone from the run's bag too, without counting as lost
       const own = RULES.nameOf(itemId), name = (save.visitors || {})[itemId + ":" + copy] || ((save.regCopies || []).some(c => c.id === itemId && c.copy === copy) || (SERVER && own && (save.items || []).includes(own)) ? own : null);
-      if (name) { save = await play({ t: "takeAway", name }); }
+      if (name) { save = await play({ t: "takeAway", name, itemId, copy }); }
       save.regCopies = (save.regCopies || []).filter(c => !(c.id === itemId && c.copy === copy)); persist(); draw();
     }
     if (invReg !== R) return;
