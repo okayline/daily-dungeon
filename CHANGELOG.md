@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.19.1 - Admin Keys - Oct 17 2026, 09:25 HST
+
+- **Fixed:** the testing tools stopped working in v1.19.
+
 ## v1.19 - One List - Oct 17 2026, 09:15 HST
 
 - **Behind the scenes:** every action now goes through one list, the first step toward the game running on the server. Nothing plays differently.

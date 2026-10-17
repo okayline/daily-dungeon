@@ -43,7 +43,11 @@
     reset: st => RULES.reset(st || {}),
     setName: (st, a) => RULES.setName(st, a.name),
     named: st => RULES.named(st),
+    // admin tools (the page asks for the admin key first; on the server these will need the player's admin flag)
+    freesteps: st => RULES.freesteps(st),                     // infinite steps on/off (marks the run)
+    next: st => RULES.next(st),                               // jump the clock a day (marks the run)
   };
+  const ADMIN = new Set(["freesteps", "next"]);
   // Running takes any way out, whichever way KURA faces: an open door first, a locked one (it takes the key) if that's
   // all there is. Null when there is no way out. (Moved here from the page in v1.19, so the server can make the roll.)
   function runWay(st) {
@@ -67,7 +71,7 @@
     if (name.startsWith("go-")) return { t: "go", dir: name.slice(3) };
     return pick("opick-", "offerPick") || pick("otrade-", "offerTrade") || pick("swap-", "swap") || pick("altar-", "altarGive") || { t: name };
   }
-  const api = { apply, fromName, runWay, types: Object.keys(ACTIONS) };
+  const api = { apply, fromName, runWay, ADMIN, types: Object.keys(ACTIONS) };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ACT = api;
 })(this);
