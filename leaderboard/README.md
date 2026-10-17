@@ -24,12 +24,3 @@ If you set this up before v0.73, re-run the schema once to add the newer tables 
 Set a secret key once, then redeploy: `npx wrangler secret put ADMIN_KEY` (type any long password), `npx wrangler deploy`.
 In the game, turn on the X cheat (infinite steps), open the board (B), pick a row with the up/down keys and press D.
 The first time it asks for the key; the page remembers it in that browser.
-
-## Player accounts (v1.13)
-
-Optional. Save codes and passkeys come from the shared Accounts service in dungeon-items (`ACCOUNTS` service binding, entrypoint `Accounts`), game name `4dungeon`. Each player has a cookie (`dd`) and a cloud copy of their run (the PASSWORD text).
-
-- Serve the game and this Worker from `dungeon.88x31.app` (page at `/`, Worker on `dungeon.88x31.app/api/*`). Passkeys and cookies need that one address; on github.io the ACCOUNT button just says so.
-- Run `npx wrangler d1 execute daily-dungeon-board --remote --file=schema.sql` (adds players, player_sessions, cloud_saves, score_players, acct_limits).
-- Add the `ACCOUNTS` service binding in the dashboard if the deploy doesn't take it from `wrangler.toml`.
-- Old addresses (no `/api`) keep working. Tests: `npm test`.
