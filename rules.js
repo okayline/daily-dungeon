@@ -251,8 +251,9 @@
       st.tell = HEAT_TELL[after][kind];
     }
     if (after !== before) { st.statusIn = 0; st.statusKind = "air"; }   // the conditions report updates right away
-    // (v1.12) A room turning hot is the only thing that wears on the party's patience: one point each.
-    if (before < 2 && after >= 2) for (const p of st.party || []) if (p.demon && p.hp > 0) p.patience = Math.max(0, (p.patience ?? PATIENCE) - 1);
+    // (VIBES) A room turning hot is the only thing that touches the party, and it takes nothing away: everyone goes quiet
+    // for the rest of the day (p.hush), and a night's sleep, or a TALK with them, brings them back.
+    if (before < 2 && after >= 2) for (const p of st.party || []) if (p.demon && p.hp > 0) p.hush = true;
   }
   // (v1.12) Dealing with a demon cools the room by a third (fight, WORD, recruit or run).
   function coolOff(st) { const d = st.dungeon; if (d) { const rs = RS(d); rs.heat = Math.floor(rs.heat * 2 / 3); } }
@@ -651,6 +652,7 @@
   function show(st) {
     if (!st.dungeon) return st;
     if (st.dreadCheck) dread(st);
+    st.align = aura(st).dom;                           // (AURA) her colour follows what she carries and who is with her
     const d = st.dungeon, room = d.floor.rooms[d.at];
     // (v1.06) A fight saved mid-question under the old TALK and BEHOLD just carries on from the stance row.
     const e0 = st.encounter;
@@ -883,10 +885,10 @@
     if (st.taint) st.taint = Math.max(0, st.taint - 1);
     // A night's rest gives back some patience.
     // (v1.06: and WORD is fresh again: every member has things to say tomorrow.)
-    st.party = (st.party || []).map(p => p.patience === undefined ? { ...p, chats: 0, words: 0 } : { ...p, chats: 0, words: 0, patience: Math.min(PATIENCE, p.patience + 3) });
+    st.party = (st.party || []).map(p => p.patience === undefined ? { ...p, chats: 0, words: 0 } : { ...p, chats: 0, words: 0 });
     // Members go out in the night and come back with something (v1.06).
     const found = st.dungeon && !st.dead ? nightFinds(st) : null;
-    for (const p of st.party) delete p.buzz;   // an ichor buzz wears off overnight
+    for (const p of st.party) { delete p.buzz; delete p.hush; }   // an ichor buzz wears off overnight, and so does a quiet day
     // A night's rest heals a fifth of everyone's HP (fallen allies too, slowly).
     if (!st.dead) st.party = st.party.map(p => ({ ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 5)) }));
     if (held) {   // standby is a camp: everyone standing is whole again, patience is full, taint is gone, the room cools right down
@@ -2149,29 +2151,30 @@
   const LEAN = { LAW: -1, CHAOS: 1, NEUTRAL: 0, search: -0.03, hot: 0.2, talk: -0.15, fight: 0.3, kill: 0.6,
     pay: -0.4, task: -0.4, offer: 0.4, run: 0.15, findLAW: -0.3, findCHAOS: 0.3, offerLAW: -0.4, drink: 0.8,
     break: 0.15, breakLAW: 0.6, breakCHAOS: -0.4, talkLAW: -0.25, talkCHAOS: 0.25, restore: -0.5 };
+  // (TAGS) Real choices leave a tag on KURA: spared, finished, fought, ran, gave, took, broke, found a relic. The last few
+  // tags lean her colour (LAW for the kind ones, CHAOS for the rough ones), so it drifts back as she acts differently.
+  // Tiny nudges (searching, patient waiting) leave no tag. There is no hidden score any more.
+  const TAG_KEEP = 6;
+  const tagPull = st => { let law = 0, chaos = 0; for (const t of st.tags || []) { const w = Math.abs(LEAN[t] || 0) >= 0.5 ? 2 : 1; if (LEAN[t] < 0) law += w; else if (LEAN[t] > 0) chaos += w; } return { law, chaos }; };
   function lean(st, why, lines) {
     const base = LEAN[why] || 0;
-    if (!base) return;
-    if (Math.abs(base) >= 0.1) st.alignShifts = (st.alignShifts || 0) + 1;      // tiny nudges (patient searching) don't age the weighting
-    const w = Math.max(0.4, 1 - 0.02 * Math.max(0, (st.alignShifts || 0) - 1));
-    st.alignScore = Math.max(-6, Math.min(6, Math.round(((st.alignScore || 0) + base * w) * 1000) / 1000));
-    // Which way this action pulled, for the arrow on the ALIGN tag: <NEU] toward LAW, [NEU> toward CHAOS.
-    // Only real choices show an arrow; tiny nudges (patient searching) move the score quietly.
-    if (Math.abs(base) >= 0.1) st.pull = Math.round(((st.pull || 0) + base * w) * 1000) / 1000;
+    if (Math.abs(base) < 0.1) return;                       // a tiny nudge leaves no tag
+    st.tags = ((st.tags || []).concat(why)).slice(-TAG_KEEP);
+    const tp = tagPull(st);
+    st.alignScore = tp.chaos - tp.law;                      // (kept for the debug line and the altar: the tags' net pull)
+    st.pull = Math.sign(base);                              // the arrow on the colour tag: which way the last choice pulled
     const before = String(st.align || "NEUTRAL").toUpperCase(), s = st.alignScore;
-    let after = before;
-    if (s <= -3) after = "LAW"; else if (s >= 3) after = "CHAOS";
-    else if (Math.abs(s) <= 1) after = "NEUTRAL";
+    const after = aura(st).dom;      // (AURA) her colour: choices (the lean) + what she carries + who walks with her
     let say = null;
     if (after !== before) {
       st.align = after;
       st.alignTold = false;
       say = after === "LAW" ? "The system takes notice. [KPT]" : after === "CHAOS" ? "The old things take notice. [FRL]" : "KURA finds her balance. [STR]";
-    } else if (after === "NEUTRAL" && Math.abs(s) >= 2.4 && !st.alignTold) {
+    } else if (after === "NEUTRAL" && Math.abs(s) >= 3 && !st.alignTold) {
       // A tell just before a flip, once each time she drifts that close.
       st.alignTold = true;
       say = "Something is pulling at you.";
-    } else if (Math.abs(s) < 1.5) st.alignTold = false;
+    } else if (Math.abs(s) < 2) st.alignTold = false;
     if (!say) return;
     if (lines) lines.push(say); else st.tell = "> " + say;
   }
@@ -2200,9 +2203,13 @@
   // machine half; her lean is her natural half. The total says how noticed she is: QUIET, NOTICED or LOUD.
   //   noticed: demons of her strongest pile turn up more, encounters come a little more often, demons remark on her,
   //   and the moon answers more readily when she's loud.
-  const AURA_STR = { COMMON: 1, UNCOMMON: 2, RARE: 3, MYTHIC: 5, MOON: 8 }, AURA_SELF = 2;
+  // (AURA) One hidden number, the volume, and one colour. Volume is what KURA carries (by tier) plus her party; the colour
+  // is whichever of LAW / NEUTRAL / CHAOS has the biggest pile among those same things (a tie reads NEUTRAL). Nothing she
+  // does moves it any more except what she holds and who walks with her. PROTOTYPE, RELIC and ULTRA are for later: an
+  // ultra is extremely loud.
+  const AURA_STR = { COMMON: 1, UNCOMMON: 2, RARE: 3, MYTHIC: 5, MOON: 8, PROTOTYPE: 5, RELIC: 8, ULTRA: 40 }, AURA_SELF = 2, AURA_MEMBER = 3;
   const BANDS = ["QUIET", "NOTICED", "LOUD"];
-  const bandOf = total => (total >= 12 ? 2 : total >= 6 ? 1 : 0);
+  const bandOf = total => (total >= 24 ? 2 : total >= 12 ? 1 : 0);
   // DISGUISE (built, switched off for now): a worn thing changes how demons read KURA's machine half for a few encounters.
   const DISGUISE_ON = false;
   const DISGUISE = { "a cracked hand mirror": "LAW", "a VR visor, lens cracked": "CHAOS", "a moth-eaten glove": "NEUTRAL" };
@@ -2215,10 +2222,14 @@
   }
   const disguised = st => DISGUISE_ON && st.disguise && st.disguise.n > 0;
   function aura(st) {
-    const piles = { LAW: 0, NEUTRAL: 0, CHAOS: 0 }, self = String(st.align || "NEUTRAL").toUpperCase();
-    piles[self] = (piles[self] || 0) + AURA_SELF;
+    const piles = { LAW: 0, NEUTRAL: 0, CHAOS: 0 }, self = "NEUTRAL";
+    piles.NEUTRAL += AURA_SELF;
+    const tp = tagPull(st);      // her recent choices (tags) pull the colour too: 1.5 of pile per point
+    piles.LAW += tp.law * 1.5; piles.CHAOS += tp.chaos * 1.5;
+    for (const p of (st.party || []).slice(1)) if (p.hp > 0) { const a = String(p.align || "NEUTRAL").toUpperCase(); piles[a in piles ? a : "NEUTRAL"] += AURA_MEMBER; }
     for (const it of st.items || []) { const a = itemAlign(it) || "NEUTRAL"; piles[a] += AURA_STR[TIER[it] || "COMMON"]; }
-    const total = piles.LAW + piles.NEUTRAL + piles.CHAOS, top = Math.max(piles.LAW, piles.NEUTRAL, piles.CHAOS);
+    const roomHeat = st.dungeon ? Math.round(RS(st.dungeon).heat * 0.5) : 0;      // (AURA) the room's noise is part of the volume
+    const total = piles.LAW + piles.NEUTRAL + piles.CHAOS + roomHeat, top = Math.max(piles.LAW, piles.NEUTRAL, piles.CHAOS);
     const winners = Object.keys(piles).filter(k => piles[k] === top);
     let dom = winners.length === 1 ? winners[0] : "NEUTRAL";                  // a tie reads HUM
     if (disguised(st)) dom = st.disguise.align;
@@ -2329,7 +2340,7 @@
       { fun: ["Way too loud. The room is waking up for me.", "I'm broadcasting and the room is tuning in."], plain: ["The room is waking, and it's waking toward me.", "My aura fills the room. Something stirs at it."] },
       { fun: ["Everything in here is staring at me.", "Loud me, loud room. Not a vibe."], plain: ["The room leans in. Something down here wants me.", "I'm loud and the room is hungry."] }],
   ];
-  const ROOM_LEAD = ["KURA feels out the room", "KURA tunes into the room", "KURA feels the room", "KURA checks the vibe in here", "KURA takes the room's temperature"];
+  const ROOM_LEAD = ["KURA listens to the air", "KURA pauses and listens", "KURA feels out the room", "KURA tunes into the room", "KURA feels the room", "KURA checks the vibe in here", "KURA takes the room's temperature"];
   // A read is one line 2, like a search: what she does, three dots, what came of it (the page types it out). The
   // lead is picked from the ones that fit the 77 columns with the result (every result fits after "KURA feels").
   const auraLine = (leads, result, also = []) => {
@@ -2629,11 +2640,12 @@
     st = copy(st);
     if (st.dead) { st.extra = OVER; return show(st); }
     const e = st.encounter;
-    if (!e) return wordParty(st);
+    if (!e) return (st.party || []).slice(1).some(p => p.hp > 0) ? wordParty(st) : auraOut(st);   // (TALK) alone, KURA listens to the air
     if (e.stage) return show(st);                        // waiting on a choice already
     act(st, "word:demon");
     e.round++;
     const lines = [];
+    if (!e.read && !UNIQUE[e.base || e.name]) { e.read = true; lines.push(`${THE(e.name)} comes off as ${demonAlignName(e)}.`); }   // (TALK) the read, as a bonus
     st.roundOver = false;
     tally(st, "demonTalks");
     const u = UNIQUE[e.base || e.name];
@@ -2741,7 +2753,7 @@
       return show(st);
     }
     // Who answers: someone wearing thin is likelier; someone talked out, less likely.
-    const weight = p => ((p.patience ?? PATIENCE) <= 2 ? 3 : 1) * ((p.words || 0) >= WORD_YIELD.length ? 0.3 : 1);
+    const weight = p => (p.hush ? 3 : 1) * ((p.words || 0) >= WORD_YIELD.length ? 0.3 : 1);
     let x = Math.random() * friends.reduce((n, p) => n + weight(p), 0), p = friends[0];
     for (const q of friends) if ((x -= weight(q)) < 0) { p = q; break; }
     p.words = (p.words || 0) + 1;
@@ -2752,8 +2764,8 @@
     if (!y) { st.extra = st.talkLine = "> " + lineFor(WORD_SPENT, p); return show(st); }
     const mend = (q, n) => { q.patience = Math.min(PATIENCE + 2, (q.patience ?? PATIENCE) + n); };
     // Wearing thin: a check-in.
-    if ((p.patience ?? PATIENCE) <= 2) {
-      mend(p, Math.max(1, Math.round(3 * y)));
+    if (p.hush) {
+      delete p.hush; mend(p, 1);
       st.log = `> KURA checks in on ${p.name}.`;
       st.extra = st.talkLine = "> " + lineFor(WORD_CHECKIN, p);
       return show(st);
@@ -3291,8 +3303,8 @@
     if (n < 8 || !friends.length || Math.random() >= Math.min(0.5, 0.04 * (n - 7))) return false;
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; return true; }
-    if (p.patience > 1 && banterAsk(st, p)) return true;
-    const lines = p.patience <= 1 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[p.patience] : (LOOPED[p.name] || LOOPED[p.family || "folklore"]);
+    if (!p.hush && banterAsk(st, p)) return true;
+    const lines = p.hush ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[1] : (LOOPED[p.name] || LOOPED[p.family || "folklore"]);
     st.extra = "> " + pick(lines.filter(l => "> " + l.replace(/\{n\}/g, p.name) !== st.extra)).replace(/\{n\}/g, p.name);
     return true;
   }
@@ -3310,8 +3322,8 @@
     if (!friends.length || Math.random() >= Math.min(0.5, 0.03 + 0.02 * w)) { if (st.extra === st.fidgetLine) st.extra = ""; return; }
     const p = pick(friends), log = st.log;
     if (snap(st, p)) { st.log = log; st.fidgetLine = st.extra; return; }   // line 2 keeps the item; line 3 the snap
-    if (p.patience > 2 && banterAsk(st, p)) { st.fidgetLine = st.extra; return; }
-    const lines = p.patience <= 2 ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[p.patience] : FIDDLE;
+    if (!p.hush && banterAsk(st, p)) { st.fidgetLine = st.extra; return; }
+    const lines = p.hush ? (PARTY_TIRED[p.name] || FAMILY_TIRED[p.family || "folklore"])[1] : FIDDLE;
     st.extra = st.fidgetLine = "> " + pick(lines).replace(/\{n\}/g, p.name);
   }
 

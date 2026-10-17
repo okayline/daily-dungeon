@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.15 - Talk - Oct 17 2026, 06:22 HST
+
+- **WORD is TALK.** `[T]` talks. With a party it is a conversation with them; alone, KURA listens to the room or the door she faces. In a fight, talking also tells you how the demon comes off.
+- **[A]URA is gone as a button.** Reading the air is part of talking now.
+- **Your party keeps its good mood.** Nobody loses patience over a hot room any more. They go quiet for the rest of the day, and a chat or a night's sleep brings them back.
+- **KURA's colour comes from what she carries, who walks with her, and her recent choices.** Her last few choices leave a mark on her, so she drifts back if she acts differently. A louder pile of things and company also makes her louder.
+- **Account page.** The copy-and-paste password box is gone; the account page is where save codes, passkeys and the cloud save live. A new save code can be copied or downloaded as a .txt.
+
 ## v1.14 - Shared Things - Oct 17 2026, 04:55 HST
 
 - **Your finds are real now.** Signed in at dungeon.88x31.app, every item you pick up is also kept as a numbered copy in the shared item registry, the same one the other 88x31 games use.

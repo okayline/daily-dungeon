@@ -163,7 +163,7 @@
   // (v1.05.3) An AURA result's color slides with KURA's lean (-6 LAW to +6 CHAOS): violet, through soft pink, to hot pink.
   function auraColor() {
     const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), NEU = hex("#e3a6c4");
-    const t = Math.max(-1, Math.min(1, ((save && save.alignScore) || 0) / 6)), end = hex(t < 0 ? "#a990f5" : "#ff7aa8");
+    const t = save && save.align === "LAW" ? -1 : save && save.align === "CHAOS" ? 1 : 0, end = hex(t < 0 ? "#a990f5" : "#ff7aa8");
     return "#" + NEU.map((v, i) => Math.round(v + (end[i] - v) * Math.abs(t)).toString(16).padStart(2, "0")).join("");
   }
   // (v1.07) THE NIGHT SKY, when KURA looks up: the view's columns (screen rows 6-20) get their stars colored, the
@@ -280,8 +280,7 @@
         const b = (txt, act, ok) => `<span class="btn${ok ? "" : " off"}" data-act="${act}">${txt}</span>`;
         return esc(line)
           .replace("[F]IGHT", '<span class="btn" data-act="fight">[F]IGHT</span>')
-          .replace("[W]ORD", '<span class="btn" data-act="word">[W]ORD</span>')
-          .replace("[A]URA", '<span class="btn" data-act="aura">[A]URA</span>')
+          .replace("[T]ALK", '<span class="btn" data-act="word">[T]ALK</span>')
           .replace("[I]NVOKE", '<span class="btn" data-act="invoke">[I]NVOKE</span>')
           .replace(/\[S\]EARCH|\[S\]CRY/, m => b(m, "search", can.search))
           .replace("[M]OON", b("[M]OON", "look", !!save && !save.encounter && !save.dead))
@@ -369,7 +368,7 @@
     }
     catch (err) {                                  // never freeze on a bad frame: say so, and keep the keys working
       console.error(err);
-      document.getElementById("screen").textContent = "The screen could not be drawn. [R] begins a new run, [P] restores a password.";
+      document.getElementById("screen").textContent = "The screen could not be drawn. [R] begins a new run, [P] opens the account page.";
     }
     // While the infinite-steps cheat is on, the line under the screen shows the room and the counters.
     document.getElementById("cheat").textContent = save.freeSteps ? RULES.debugInfo(save) : "";
@@ -1101,52 +1100,20 @@
     }
   }
 
-  // PASS: the run's password, like old console games: copy it to keep or move the run; paste one to continue it.
-  function backup(prefill) {
-    // The code carries the run and the last 300 log entries, so it stays short enough to copy.
-    // With no run yet (opened from the title screen), there is nothing to copy: only the paste field shows.
-    const code = save ? btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) })))) : "";
-    const box = document.getElementById("found"), pre = box.querySelector("pre");
-    floatBox(box);
-    pre.innerHTML = "";
-    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
-    const field = (v, ro) => { const t = document.createElement("textarea"); t.rows = 3; t.value = v; t.readOnly = !!ro; t.spellcheck = false; t.className = "passfield"; pre.appendChild(t); return t; };
-    const btn = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.pact = a; return e; };
-    add("PASSWORD", "gold"); add(" ");
-    let mine = null;
-    if (save) { add("Copy it to keep this run or move it to another device."); add("It carries your key too: whoever has it has your stash."); mine = field(code, true); add(" "); }
-    add("To continue a run, paste its password here.");
-    const theirs = field(prefill || "", false);
-    const msg = add(" ");
-    const row = document.createElement("div");
-    if (save) row.append(btn("[ COPY ]", "copy"), "   ");
-    row.append(btn("[ LOAD ]", "load"), "   ", btn("[ ACCOUNT ]", "account"), "   ", btn("[ CLOSE ]", "close"));
-    pre.appendChild(row);
-    box.dataset.mode = "pass";
-    box.hidden = false;
-    passAct = a => {
-      if (a === "close") { box.hidden = true; draw(); return; }
-      if (a === "account") return accountBox();
-      if (a === "copy") {
-        if (!mine) return;
-        mine.select();
-        const ok = () => { msg.textContent = "Copied."; }, no = () => { try { document.execCommand("copy"); ok(); } catch (e) { msg.textContent = "Select the text above and copy it."; } };
-        try { navigator.clipboard.writeText(code).then(ok, no); } catch (e) { no(); }
-        return;
-      }
-      const got = theirs.value.trim();
-      if (!got || (code && got === code)) { msg.textContent = got ? "That is this run already." : "Paste a password first."; return; }
-      try {
-        const s = JSON.parse(decodeURIComponent(escape(atob(got))));
-        if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 11) throw new Error("not a run");   // the same shape start() accepts
-        const trial = JSON.parse(JSON.stringify(s)); RULES.tick(trial); SMT.renderScreen(trial, "");      // it must really run, not just parse
-        loadCode = s;
-        // The password carries its run's key (v1.00): another key means another stash and other offers.
-        const otherKey = s.key && s.key !== ecoKey();
-        if (save) askBox("load", "REPLACE THIS RUN?", ["The run in the password takes this one's place."].concat(otherKey ? ["It carries another key: the stash and offers go with it."] : []));
-        else { pending = "load"; answerConfirm(true); }      // nothing to replace: no need to ask
-      } catch (e) { msg.textContent = "That password didn't work. Nothing was changed."; }
-    };
+  // The account page opens from [P] and the header button. (The old copy/paste password box is gone: the cloud save does that.)
+  function backup() { accountBox(); }
+  // Load a run from its code (what GET RUN brings back from the cloud). say(text) reports a problem.
+  function loadRunCode(got, say) {
+    try {
+      const s = JSON.parse(decodeURIComponent(escape(atob(got))));
+      if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 11) throw new Error("not a run");   // the same shape start() accepts
+      const trial = JSON.parse(JSON.stringify(s)); RULES.tick(trial); SMT.renderScreen(trial, "");      // it must really run, not just parse
+      loadCode = s;
+      // The code carries its run's key (v1.00): another key means another stash and other offers.
+      const otherKey = s.key && s.key !== ecoKey();
+      if (save) askBox("load", "REPLACE THIS RUN?", ["The run from the cloud takes this one's place."].concat(otherKey ? ["It carries another key: the stash and offers go with it."] : []));
+      else { pending = "load"; answerConfirm(true); }      // nothing to replace: no need to ask
+    } catch (e) { say("That run didn't work. Nothing was changed."); }
   }
   let passAct = null;
 
@@ -1172,7 +1139,7 @@
     const msg = add(note || " ");
     box.dataset.mode = "pass"; box.hidden = false;
     const row = document.createElement("div");
-    const close = () => { backup(); };
+    const close = () => { box.hidden = true; draw(); };
     if (!ACCOUNT_HOST) {
       msg.textContent = "Accounts work at dungeon.88x31.app. Open the game there to use them.";
       row.append(btn("[ BACK ]", "back"));
@@ -1180,6 +1147,7 @@
       passAct = () => close();
       return;
     }
+    let newCode = "";
     const codeBox = document.createElement("div"); pre.insertBefore(codeBox, msg);
     const draw2 = async () => {
       const a = await api("/account");
@@ -1189,6 +1157,7 @@
       else { line("Signed in. " + (a.codes ? a.codes.length : 0) + " save code(s), " + (a.passkeys ? a.passkeys.length : 0) + " passkey(s)." + (a.saved ? " A run is saved in the cloud." : "")); }
       row.textContent = "";
       row.append(btn("[ NEW SAVE CODE ]", "code"), "   ");
+      if (newCode) row.append(btn("[ COPY CODE ]", "copycode"), "   ", btn("[ DOWNLOAD .TXT ]", "dlcode"), "   ");
       if (window.PublicKeyCredential) row.append(btn("[ ADD PASSKEY ]", "pk"), "   ", btn("[ PASSKEY LOGIN ]", "pklogin"), "   ");
       row.append(btn("[ ENTER CODE ]", "enter"), "   ");
       if (a.player) row.append(btn("[ SAVE RUN ]", "put"), "   ", btn("[ GET RUN ]", "get"), "   ", btn("[ INVENTORY ]", "inv"), "   ", btn("[ SIGN OUT ]", "out"), "   ");
@@ -1198,7 +1167,17 @@
     const say = t => { msg.textContent = t; };
     passAct = async a => {
       if (a === "back" || a === "close") return close();
-      if (a === "code") { const r = await api("/codes", { action: "new" }); if (r.error) say(r.error); else say("Your save code (write it down, it shows once): " + r.code); return draw2(); }
+      if (a === "code") { const r = await api("/codes", { action: "new" }); if (r.error) say(r.error); else { newCode = r.code; say("Your save code (it shows once, so keep it): " + r.code); } return draw2(); }
+      if (a === "copycode") {
+        const ok = () => say("Save code copied."), no = () => say("Select the code above and copy it.");
+        try { navigator.clipboard.writeText(newCode).then(ok, no); } catch (e) { no(); }
+        return;
+      }
+      if (a === "dlcode") {
+        const url = URL.createObjectURL(new Blob(["4Dungeon save code: " + newCode + "\n"], { type: "text/plain" }));
+        const l = document.createElement("a"); l.href = url; l.download = "4dungeon-save-code.txt"; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return say("Save code downloaded.");
+      }
       if (a === "enter") { const c = prompt("Save code"); if (!c) return; const r = await api("/load", { code: c.trim() }); say(r.error || "Signed in."); return draw2(); }
       if (a === "out") { const r = await api("/logout", {}); say(r.error || "Signed out."); return draw2(); }
       if (a === "put") {
@@ -1225,7 +1204,7 @@
         const r = await api("/send", { itemId, copy });
         say(r.error || "Sent to your 88x31."); return passAct("inv");
       }
-      if (a === "get") { const r = await api("/save"); if (r.error) return say(r.error); if (!r.code) return say("No run saved in the cloud yet."); return backup(r.code); }
+      if (a === "get") { const r = await api("/save"); if (r.error) return say(r.error); if (!r.code) return say("No run saved in the cloud yet."); return loadRunCode(r.code, say); }
       try {
         if (a === "pk") {
           const o = await api("/passkey", { action: "register_options" }); if (o.error) return say(o.error);
@@ -1635,9 +1614,8 @@
       ...[["[ ^ ] / up arrow", "walk through the door KURA faces"],
         ["[ < ] [ > ] / arrows", "turn (free)"],
         ["[M]OON", "look up and ask the moon (a breath); again to look level"],
-        ["[F]IGHT  [W]ORD", "deal with a demon; with none, a WORD with the party"],
-        ["[A]URA in a fight", "size up a demon (free, once a round)"],
-        ["[A]URA otherwise", "read the room, or a door (half the breath bar)"],
+        ["[F]IGHT  [T]ALK", "deal with a demon; with none, TALK with the party"],
+        ["[T]ALK alone", "listen to the room, or a door (half the breath bar)"],
         ["[G]IVE", "at a wall terminal: make an offering"],
         ["[I]NVOKE", "the bag: 1-9 or arrows choose, Enter uses"],
         ["[R]UN in a fight", "run through a door (it may block you)"],
@@ -1646,7 +1624,7 @@
         ["[1]  [2]  [ESC]", "take one of two things offered, or leave it"],
         ["[C]ODEX", "every demon and item found, over all runs"],
         ["[L]OG", "the adventure log"],
-        ["[P]ASSWORD", "keep or move this run, or paste one in"],
+        ["[P]ASSWORD", "your account: save codes, passkeys and the cloud save"],
         ...(LEADERBOARD_URL ? [["{{BOARD}}", "the leaderboard (post when a run ends)"]] : []),
         ["[R]ESET", "start a new run"],
         ["[?]", "this page"],
@@ -2059,7 +2037,6 @@
   // A button on the new-demon screen: it counts as [ OK ], then does what it says. Not before the screen has unfolded.
   function introGo(name) {
     if (introTimer || Date.now() - introAt < 400 || !save || !save.encounter) return;
-    if (name === "aura") { if (!RULES.auraUsed(save)) act("aura"); return; }   // reading it isn't fighting it: the read shows in this box
     save.encounter.seen = true; persist();
     act(name);
   }
@@ -2145,7 +2122,7 @@
       // v1.04.1: the stance row instead of [ OK ], so a demon can be read (AURA) before anything else. It shows last,
       // once everything above has unfolded, and nothing works before then (see introGo).
       grp(() => { add(" "); const row = document.createElement("div"); row.className = "brow"; const l = document.createElement("span");
-        l.append(opt("[F]IGHT", "fight"), "   ", opt("[W]ORD", "word"), "   ", (() => { const a = opt("[A]URA", "aura"); if (RULES.auraUsed(save)) a.className += " off"; return a; })(), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
+        l.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "word"), "   ", (() => { const r = opt("[R]UN", "run"); if (!["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off"; return r; })());
         row.append(l); pre.appendChild(row); });
       // Only the first showing unfolds; a redraw shows it whole. Nothing skips it: [ OK ] works once it is on screen.
       if (e.introAt === undefined) e.introAt = save.steps || 0;
@@ -2276,9 +2253,8 @@
           left.append(opt("[N]O", "swap-none"));
         } else {
           // (v1.06) One row, angry or not: WORD to an angry demon shows it what KURA carries. AURA dims once used this round.
-          const au = opt("[A]URA", "aura"); if (RULES.auraUsed(save)) au.className += " off";
           const r = opt("[R]UN", "run"); if (save.encounter.ranTried || !["N", "E", "S", "W"].some(d => RULES.available(save)[d])) r.className += " off";
-          left.append(opt("[F]IGHT", "fight"), "   ", opt("[W]ORD", "word"), "   ", au, "   ", r);
+          left.append(opt("[F]IGHT", "fight"), "   ", opt("[T]ALK", "word"), "   ", r);
         }
       }
       row.append(left);
@@ -2336,7 +2312,7 @@
     // (Nothing the screen already shows beside it: no SILVER, no lean, no bare day and turn.)
     const d = save.dungeon, rooms = (d.state || []).filter(r => r && r.visited).length, pacts = (save.pacts || []).filter(q => q.on);
     const hurt = (save.party || []).filter(q => q.hp > 0 && q.hp < q.hpmax / 2).map(q => q.name), down = (save.party || []).slice(1).filter(q => q.hp <= 0).map(q => q.name);
-    const thin = (save.party || []).slice(1).filter(q => q.hp > 0 && q.patience !== undefined && q.patience <= 2).map(q => q.name);
+    const thin = (save.party || []).slice(1).filter(q => q.hp > 0 && q.hush).map(q => q.name);
     const left = d.deadline !== undefined && save.today ? d.deadline - save.today.date : null, list = a => (a.length > 2 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a.join(" and "));
     own.push(`${n(rooms, "room", "rooms")} of ${lvl} walked so far`);
     if (left !== null) own.push(left <= 0 ? `The dark takes ${lvl} tonight . . .` : `${n(left, "day", "days")} before the dark takes ${lvl} . . .`);
@@ -2344,7 +2320,7 @@
     if (party.length) own.push(`${list(party)} ${party.length === 1 ? "walks" : "walk"} with her`); else own.push("She walks alone . . .");
     if (down.length) own.push(`${list(down)} ${down.length === 1 ? "has" : "have"} fallen and ${down.length === 1 ? "is" : "are"} carried . . .`);
     if (hurt.length) own.push(`${list(hurt)} ${hurt.length === 1 ? "is" : "are"} badly hurt . . .`);
-    if (thin.length) own.push(`${list(thin)} ${thin.length === 1 ? "is" : "are"} running out of patience . . .`);
+    if (thin.length) own.push(`${list(thin)} ${thin.length === 1 ? "has" : "have"} gone quiet . . .`);
     if (pacts.length) own.push(`A pact holds with ${list(pacts.map(q => q.name))}`);
     if (k.met) own.push(`${n(k.met, "demon", "demons")} met this run: ${k.beaten || 0} beaten, ${k.fled || 0} run from`);
     if (k.demonTalks) own.push(`She has stopped to talk with a demon ${n(k.demonTalks, "time", "times")}`);
@@ -2625,7 +2601,6 @@
       : name.startsWith("opick-") ? RULES.offerPick(save, name === "opick-none" ? null : Number(name.slice(6)))
       : name.startsWith("otrade-") ? RULES.offerTrade(save, name === "otrade-none" ? null : Number(name.slice(7)))
       : name.startsWith("oleave-") ? RULES.offerLeaveConfirm(save, name === "oleave-yes")
-      : name === "aura" ? RULES.readAura(save)
       : name.startsWith("swap-") ? RULES.swap(save, name === "swap-none" ? null : Number(name.slice(5)))
       : name === "altar" ? RULES.altarOpen(save)
       : name === "altar-next" ? RULES.altarNext(save)
@@ -2749,7 +2724,7 @@
     const key = e.key.toLowerCase();
     if (e.target && e.target.tagName === "INPUT") return;    // a field's own keys (see nameField)
     const fbox = document.getElementById("found");
-    if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (e.repeat) return; if (key === "enter") introOK(); else { const k = { f: "fight", w: "word", a: "aura", r: "run" }[key]; if (k) introGo(k); } return; }
+    if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (e.repeat) return; if (key === "enter") introOK(); else { const k = { f: "fight", t: "word", r: "run" }[key]; if (k) introGo(k); } return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields
     if (!fbox.hidden && fbox.dataset.mode === "offer") {       // a member's offer: 1 or 2 takes one, Esc leaves it (while swapping: 1-9 gives, Esc goes back)
       e.preventDefault(); if (e.repeat) return;
@@ -2793,7 +2768,7 @@
         else if (st2 === "leave") k = key === "y" || key === "enter" ? "oleave-yes" : "oleave-no";          // only Enter or Y leaves it: anything else is NO
         else if (st2 === "join") k = { y: "yes", enter: "yes", n: "no", escape: "no" }[key];
         else if (st2 === "swap") k = { "2": "swap-1", "3": "swap-2", "4": "swap-3", n: "swap-none", escape: "swap-none" }[key];
-        else k = { f: "fight", w: "word", a: "aura", i: "invoke", r: "run" }[key];
+        else k = { f: "fight", t: "word", i: "invoke", r: "run" }[key];
         if (k) act(k);
       } else if (fbox.dataset.mode === "found" || fbox.dataset.mode === "done") { if (key === "enter") closeFound(); }   // a find only closes on its [ OK ] (Enter or a click), never by a stray key
       else if (key === "enter" || key === " " || key === "escape") closeFound();
@@ -2855,7 +2830,7 @@
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || (save.question.lab && (key === "1" || key === "2")))) { e.preventDefault(); return act(key === "y" || key === "1" ? "qyes" : "qno"); }
-    const k = { "?": "about", c: "codex", f: "fight", w: "word", a: "aura", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
+    const k = { "?": "about", c: "codex", f: "fight", t: "word", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
       s: "search", g: "altar", m: "look", arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") {   // testing cheats, behind the admin key: X toggles infinite steps, Shift+X jumps a day
       e.preventDefault(); if (gating) return;

@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.14";
+  const VERSION = "v1.15";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -416,7 +416,7 @@
     S.push("+" + "-".repeat(78) + "+");
     // Free actions on the left (unlimited, searching included); the day's one step is the [^] button in
     // the 3D view, and HOLD/RELEASE now live in INVOKE with everything else that isn't always available.
-    const free = ` [W]ORD [A]URA [I]NVOKE [S]EARCH [M]OON`;   // [M]OON looks up at her and asks, in one press (v1.06: SCRY is gone); again to look level
+    const free = ` [T]ALK [I]NVOKE [S]EARCH [M]OON`;   // [M]OON looks up at her and asks, in one press (v1.06: SCRY is gone); again to look level
     S.push("|" + free + " ".repeat(78 - free.length) + "|");
     const sys = " [?] [L]OG [R]ESET ";                 // system buttons tucked into the bottom border
     // Save status sits in the bottom border too, so it never takes one of the three log lines.
