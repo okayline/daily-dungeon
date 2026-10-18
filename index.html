@@ -775,6 +775,9 @@
 
   // Catch up with the real date (a new day, or a missed deadline), then save.
   async function tick() {
+    try { return await tickCore(); } finally { if (actDepth === 0 && typeof flushTurn === "function") flushTurn(); }
+  }
+  async function tickCore() {
     if (!save || waiting) return;
     sweepCheats();
     const before = JSON.stringify(save), log = save.log;
@@ -2679,12 +2682,30 @@
     if (others > 0) return pick(["On this level, someone else stops to listen.", "Someone else on this level looks up.", "Far off on this level, a search goes quiet."]);
     return pick(["Somewhere above, the dark shifts.", "The walls settle, a little further off.", "Down here, something old notices."]);
   }
+  const VIEW_ONLY = new Set(["invoke", "exchange", "log", "board", "about", "codex", "backup"]);      // (v1.27) buttons that open a screen and ask the server for nothing
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   let auraGo = false;                           // (the same for an AURA read)
+  // (v1.27) A TURN TAPPED WHILE THE SERVER IS ANSWERING is remembered, one at most, and done as soon as things are quiet: only
+  // if it is still safe (no fight, question, box or open screen, no search under way) and no more than 3 seconds old.
+  const TURNS = new Set(["left", "right"]);
+  let queuedTurn = null, actDepth = 0;
+  function flushTurn() {
+    const q = queuedTurn; queuedTurn = null;
+    if (!q || Date.now() - q.at > 3000 || waiting || searchBeat || atTitle || !save || !save.dungeon || save.dead || save.encounter || save.question || save.raise || (save.altar && save.altar.open)) return;
+    if (!document.getElementById("found").hidden || exOpen() || ["inv", "log", "board", "about", "codex"].some(id => { const e = document.getElementById(id); return e && !e.hidden; })) return;
+    act(q.name);
+  }
   async function act(name) {
+    actDepth++;
+    try { return await actCore(name); } finally { if (--actDepth === 0) flushTurn(); }
+  }
+  async function actCore(name) {
     const early = prefetch && prefetch.name === name && searchGo ? prefetch.p : null;   // (v1.21.1) asked for at the start of the beat
     if (early) prefetch = null;
-    else if (waiting) return;                        // (v1.21) the server is still answering the last one
+    else if (waiting && !VIEW_ONLY.has(name)) {          // (v1.21) the server is still answering the last one. (v1.27) Screens that only show things never wait for it.
+      if (TURNS.has(name) && !queuedTurn && !atTitle) queuedTurn = { name, at: Date.now() };      // a turn tapped meanwhile waits its turn (one only)
+      return;
+    }
     line3Calm = Date.now();                          // line 3 waits a moment after anything she does before it starts a new line
     if (!searchGo && !searchBeat) beatLine1 = null;     // the party's reaction to a search lasts until she does something else
     // The only way act() is ever reached while atTitle is a NEW RUN confirm answered from the title

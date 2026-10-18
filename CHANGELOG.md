@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.27.1 - Quick Turns - Oct 17 2026, 19:20 HST
+
+- **Turning no longer drops taps.** A turn tapped while the game is still answering the last move is remembered and done right after. Buttons that only open a screen never wait.
+
 ## v1.27 - Blessed - Oct 17 2026, 19:05 HST
 
 - **Blessings count.** A thing the moon has blessed is treated as one step rarer wherever that matters.
