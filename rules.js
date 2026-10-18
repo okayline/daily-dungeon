@@ -49,6 +49,8 @@
       st.gainN = (st.gainN || 0) + 1;
       const f = { id: ITEM_ID[it], key: st.runId + ":" + st.gainN, p: moon() };
       if (how) f.h = how;
+      const occ = TIME.occasions ? TIME.occasions(TIME.now()) : [];
+      if (occ.length) f.o = occ;      // (v1.27) a day the real sky makes special
       st.finds = (st.finds || []).concat(f).slice(-50);
     }
     if ((st.items || []).length >= BAG_MAX) { st.overflow = (st.overflow || []).concat(it); return; }
@@ -467,9 +469,9 @@
       case "law": lean(st, "LAW", lines); st.extra = "> The light comes down cold and straight. KURA stands a little stiller."; break;
       case "chaos": lean(st, "CHAOS", lines); st.extra = "> The light comes down crooked and warm. KURA grins, and doesn't know why."; break;
       case "hush": st.hushDay = st.day; st.extra = "> Her light settles over KURA like a sheet. Nothing down here can hear her pockets today."; break;
-      case "item": gain(st, g.item, lines); st.extra = `> A piece of the moon drops into KURA's hands: ${g.item}.`; break;
+      case "item": gain(st, g.item, lines, false, "moon_gift"); st.extra = `> A piece of the moon drops into KURA's hands: ${g.item}.`; break;
       case "gamble":
-        if (Math.random() < 0.5) { gain(st, g.item, lines); st.extra = `> A piece of the moon drops into KURA's hands: ${g.item}.`; }
+        if (Math.random() < 0.5) { gain(st, g.item, lines, false, "moon_gift"); st.extra = `> A piece of the moon drops into KURA's hands: ${g.item}.`; }
         else st.extra = "> " + pick(FIZZLE_MOON);
         break;
     }
@@ -649,14 +651,29 @@
     ITEM_ID[v.name] = v.itemId;
   }
   const isVisitor = (st, name) => !!(st.visitorInfo && st.visitorInfo[name]);
+  // Take bag slot i out and remember which of its name's copies it was (the k-th of that name, oldest first), so the registry
+  // uses up that same copy and the marks stay with the thing that has them.
+  function takeOut(st, i, to) {
+    const name = st.items[i], k = st.items.slice(0, i).filter(n => n === name).length;
+    st.items.splice(i, 1);
+    (st.slots = st.slots || []).push(to ? { n: name, k, to } : { n: name, k });
+    return name;
+  }
   function trackBag(st) {
     for (const v of Object.values(st.visitorInfo || {})) regVisitor(v);
     const cur = st.items || [];
     if (st.itemSnap) {
       const gone = st.itemSnap.slice();
       for (const n of cur) { const i = gone.indexOf(n); if (i >= 0) gone.splice(i, 1); }
-      if (gone.length) st.gone = (st.gone || []).concat(gone.filter(n => ITEM_ID[n] && !isVisitor(st, n))).slice(-50);   // a visitor is never used up: it can change hands and comes home
+      const left = gone.filter(n => ITEM_ID[n] && !isVisitor(st, n));         // a visitor is never used up: it can change hands and comes home
+      if (left.length) {
+        // which copy of that name left: the slot the rules named (takeOut), else the first of its name (what indexOf takes)
+        const got = left.map(n => { const j = (st.slots || []).findIndex(s => s.n === n); return j >= 0 ? st.slots.splice(j, 1)[0] : { k: 0 }; });
+        st.gone = (st.gone || []).concat(left).slice(-50); st.goneAt = (st.goneAt || []).concat(got.map(g => g.k)).slice(-50);
+        st.goneTo = (st.goneTo || []).concat(got.map(g => g.to || "")).slice(-50);      // a friend's pockets keep the copy (and its marks) for later
+      }
     }
+    delete st.slots;
     st.itemSnap = cur.slice();
   }
   // A visiting 88x31 button joins the bag at dawn and whenever the bag is opened (the page asks the registry; a full bag waits).
@@ -952,11 +969,11 @@
   function campJobs(st) {
     const commons = () => (st.items || []).filter(n => TIER[n] === "COMMON");
     if (has(st, "COMPILER") && commons().length >= 2) {
-      const a = commons()[0]; st.items.splice(st.items.indexOf(a), 1);
-      const b = commons()[0]; st.items.splice(st.items.indexOf(b), 1);
-      const it = pick(names("UNCOMMON")); gain(st, it); st.campNote = `COMPILER makes ${it}.`;
+      takeOut(st, st.items.indexOf(commons()[0]));
+      takeOut(st, st.items.indexOf(commons()[0]));
+      const it = pick(names("UNCOMMON")); gain(st, it, undefined, false, "made_compiler"); st.campNote = `COMPILER makes ${it}.`;
     } else if (has(st, "CACHE") && commons().length) {
-      const it = pick(commons()); gain(st, it); st.campNote = `CACHE keeps a copy of ${it}.`;
+      const it = pick(commons()); gain(st, it, undefined, false, "copied_cache"); st.campNote = `CACHE keeps a copy of ${it}.`;
     }
   }
   const inArchive = st => { const d = st.dungeon; return !!(d && d.floor.rooms[d.at] && d.floor.rooms[d.at].kind === "archive"); };
@@ -1656,9 +1673,10 @@
     act(st, "altar");
     const d = st.dungeon, mood = g.item && affinity(TERMINAL, g.item) >= 2 ? "good" : "ok";      // (v1.10: it called worth(), which was removed with Give, so every offering threw and nothing happened)
     let amt;
-    if (g.silver) { st.silver -= g.silver; amt = 0; } else { st.items.splice(st.items.indexOf(g.item), 1); amt = 0; }
+    const gi = g.silver ? -1 : st.items.indexOf(g.item), gtier = gi >= 0 ? slotTier(st, gi) : TIER[g.item] || "COMMON";
+    if (g.silver) { st.silver -= g.silver; amt = 0; } else { takeOut(st, gi); amt = 0; }
     const a = (g.item && itemAlign(g.item)) || "NEUTRAL";      // (v1.10: any item has a leaning here, not only the rare ones, so every offering can do something)
-    const size = g.item ? ALTAR_SIZE[TIER[g.item] || "COMMON"] : 0.5;
+    const size = g.item ? ALTAR_SIZE[gtier] : 0.5;
     amt = a === "LAW" ? -size : a === "CHAOS" ? size : -Math.sign(st.alignScore || 0) * 0.5;
     amt *= { bad: 0.5, ok: 1, good: 1.25 }[mood];
     if (RS(d).altarUses) amt *= 0.5;            // a terminal already fed in this room shifts KURA half as much
@@ -1840,7 +1858,7 @@
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
     for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "hollow", "overflow", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "itemSnap", "gone", "visitors", "visitorInfo", "regCopies", "visitDay", "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "moonNight", "hushDay", "offer", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
+      "itemSnap", "gone", "goneAt", "goneTo", "slots", "pocketed", "visitors", "visitorInfo", "regCopies", "visitDay", "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "moonNight", "hushDay", "offer", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
@@ -1861,10 +1879,10 @@
     });
     // KURA starts with a few pieces of junk and one useful thing.
     const junk = names("COMMON").sort(() => Math.random() - 0.5).slice(0, R(2, 3));
-    for (const it of [...junk, pick(names("UNCOMMON"))]) gain(st, it);
+    for (const it of [...junk, pick(names("UNCOMMON"))]) gain(st, it, undefined, false, "kit");
     // Very rarely, something good is already in the bag: 1 run in 40 a RARE, 1 in 200 a MYTHIC.
     const luck = Math.random(), lucky = luck < 0.005 ? "MYTHIC" : luck < 0.03 ? "RARE" : null;
-    if (lucky) gain(st, pick(names(lucky)));
+    if (lucky) gain(st, pick(names(lucky)), undefined, false, "kit");
     st.stats = {};                                     // the starting bag doesn't count as finds
     const slot = startSlot(st);
     st.climb = 1;
@@ -1896,12 +1914,22 @@
   const PHASE_MARK = ["new", "wax_cres", "first_q", "wax_gib", "full", "wan_gib", "last_q", "wan_cres"];
   const PHASE_WORDS = { new: "a new moon", wax_cres: "a waxing crescent", first_q: "a first quarter", wax_gib: "a waxing gibbous",
     full: "a full moon", wan_gib: "a waning gibbous", last_q: "a last quarter", wan_cres: "a waning crescent" };
-  const DEED_WORDS = { found_wall: "Found in a wall", from_demon: "From a demon", given_member: "A friend's gift", from_stranger: "From a stranger" };
+  const OCC_WORDS = { thirteenth_moon: "the Thirteenth Moon", eclipse_solar: "a solar eclipse", eclipse_lunar: "a lunar eclipse", blue_moon: "a blue moon",
+    supermoon: "a supermoon", solstice: "a solstice", equinox: "an equinox", mirror_day: "a mirror day" };   // rarest first
+  const OCCASIONS = Object.keys(OCC_WORDS);
+  const COPY_WORDS = { first_copy: "The first copy.", hundredth_copy: "The hundredth copy." };
+  const DEED_WORDS = { found_wall: "Found in a wall", from_demon: "From a demon", given_member: "A friend's gift", from_stranger: "From a stranger", made_compiler: "Made by COMPILER", copied_cache: "Copied by CACHE", kit: "Brought along", moon_gift: "A moon gift", found_inside: "Found inside" };
   function markLines(marks) {
     const m = marks || [], out = [];
     const night = m.find(v => PHASE_WORDS[v]), deed = m.find(v => DEED_WORDS[v]), up = m.filter(v => v === "carried_up").length;
-    if (deed || night) out.push((deed ? DEED_WORDS[deed] : "Came to her") + (night ? ` under ${PHASE_WORDS[night]}` : "") + ".");
-    if (up) out.push(up === 1 ? "Carried up a level." : `Carried up ${up} levels.`);
+    const occ = Object.keys(OCC_WORDS).find(v => m.includes(v)), copy = Object.keys(COPY_WORDS).find(v => m.includes(v));
+    if (deed || night) {
+      const base = deed ? DEED_WORDS[deed] : "Came to her", sky = w => base + ` under ${w}.`;
+      out.push(occ && sky(OCC_WORDS[occ]).length <= 41 ? sky(OCC_WORDS[occ]) : night ? sky(PHASE_WORDS[night]) : base + ".");      // a special day, if it fits the line
+    }
+    const climb = up ? (up === 1 ? "Carried up a level." : `Carried up ${up} levels.`) : "";
+    const second = [copy ? COPY_WORDS[copy] : "", climb].filter(Boolean).join(" ");
+    if (second) out.push(second.length <= 41 ? second : climb || second);
     return out;
   }
   // (v1.26) THE MOON'S WISH. Each level belongs to a quarter of the moon (d.quarter), and for that quarter she wants three
@@ -1920,6 +1948,11 @@
     const night = PHASE_MARK[pick(ahead.length ? ahead : [2 * q + 1])], [k, v] = pick(WISH_BASE);
     st.wish = { n: d.quarter, night, deed: pick(WISH_DEEDS), base: { k, v } };
     return st.wish;
+  }
+  // The tier of the copy in bag slot i, counting its blessings: aura, the altar and breaking all read this.
+  function slotTier(st, i) {
+    const name = (st.items || [])[i];
+    return tierWithBlessings(name, copyMarks(copyAt(st, i)));
   }
   // A copy's tier with its blessings: each "blessed" lifts it one step, up to MYTHIC.
   function tierWithBlessings(name, marks) {
@@ -2016,8 +2049,8 @@
     if (!it) return show(st);
     st.overflow.shift(); if (!st.overflow.length) delete st.overflow;
     const old = drop === null || drop === undefined ? null : (st.items || [])[drop];
-    if (!old) { st.gone = (st.gone || []).concat(it).slice(-50); st.log = `> KURA leaves ${it} where it is. The bag is full.`; return show(st); }   // (it was found, but never kept: its copy is used up)
-    st.items.splice(drop, 1);
+    if (!old) { st.gone = (st.gone || []).concat(it).slice(-50); st.goneAt = (st.goneAt || []).concat(-1).slice(-50); st.log = `> KURA leaves ${it} where it is. The bag is full.`; return show(st); }   // (it was found, but never kept: its copy is used up)
+    takeOut(st, drop);
     if (st.wear && !st.items.includes(old)) delete st.wear[old];
     gain(st, it, undefined, true);
     st.log = `> KURA leaves ${old} behind and takes ${it}.`.slice(0, 77);
@@ -2064,7 +2097,7 @@
     if (!info.use && isVisitor(st, name)) { st.log = `> ${name.replace(/^an? /, "The ").replace(/^The /, "The ")} looks back at KURA. A guest.`.slice(0, 77); return show(st); }
     if (!info.use) {
       act(st, `use:${name}`);
-      const the = name.replace(/^an? /, "the "), tier = TIER[name] || "COMMON", nat = natureOf(name), m = moon();
+      const the = name.replace(/^an? /, "the "), tier = slotTier(st, i), nat = natureOf(name), m = moon();
       // Spirit things are more fragile under a full moon and tougher at the new moon.
       const odds = BREAK[tier] * (nat === "spirit" ? (m === 4 ? 1.5 : m === 0 ? 0.5 : 1) : 1);
       st.wear = st.wear || {};
@@ -2083,7 +2116,7 @@
           st.fidgetLine = st.extra;            // so the next quiet try clears it
           return show(st);
         }
-        st.items.splice(i, 1); delete st.wear[name];
+        takeOut(st, i); delete st.wear[name];
         tally(st, "broken"); note(st, "items", name, "broken");
         st.log = `> ${the.replace(/^t/, "T")} comes apart in KURA's hands.`;
         // Breaking is loud: the room heats up, and something may come to see.
@@ -2099,7 +2132,7 @@
         if (st.hollow) delete st.hollow[name];
         if (known !== null ? known : Math.random() < inside) {
           const r = Math.random(), got = pick(names(r < 0.05 ? "MYTHIC" : r < 0.4 ? "RARE" : "COMMON"));
-          gain(st, got);
+          gain(st, got, undefined, false, "found_inside");
           tally(st, "insides");
           st.log += " Something was inside.";
         }
@@ -2129,7 +2162,7 @@
       fidget(st, w);
       return show(st);
     }
-    st.items.splice(i, 1);
+    takeOut(st, i);
     act(st, `use:${name}`);
     info.use(st);
     st.log = `> KURA uses ${name}. ${info.say}`;
@@ -2391,7 +2424,7 @@
     const tp = tagPull(st);      // her recent choices (tags) pull the colour too: 1.5 of pile per point
     piles.LAW += tp.law * 1.5; piles.CHAOS += tp.chaos * 1.5;
     for (const p of (st.party || []).slice(1)) if (p.hp > 0) { const a = String(p.align || "NEUTRAL").toUpperCase(); piles[a in piles ? a : "NEUTRAL"] += AURA_MEMBER; }
-    for (const it of st.items || []) { const a = itemAlign(it) || "NEUTRAL"; piles[a] += AURA_STR[TIER[it] || "COMMON"]; }
+    (st.items || []).forEach((it, i) => { const a = itemAlign(it) || "NEUTRAL"; piles[a] += AURA_STR[slotTier(st, i)]; });      // (v1.27) a blessed copy is louder: it counts one tier up
     const roomHeat = st.dungeon ? Math.round(RS(st.dungeon).heat * 0.5) : 0;      // (AURA) the room's noise is part of the volume
     const total = piles.LAW + piles.NEUTRAL + piles.CHAOS + roomHeat, top = Math.max(piles.LAW, piles.NEUTRAL, piles.CHAOS);
     const winners = Object.keys(piles).filter(k => piles[k] === top);
@@ -2818,11 +2851,13 @@
     if (i >= 0) have.splice(i, 1);
     tally(st, "offered");
     gain(st, it, lines, false, (st.party || []).includes(who) ? "given_member" : "from_demon");
+    const lf = (st.finds || [])[(st.finds || []).length - 1];
+    if (lf && (st.party || []).includes(who)) lf.w = who.name;      // if the pockets hold this very copy, it comes home with its marks
   }
   function handTo(st, who, it, lines) {
     const i = (st.items || []).indexOf(it);
     if (i < 0) return false;
-    st.items.splice(i, 1);
+    takeOut(st, i, (st.party || []).includes(who) ? who.name : undefined);
     if (st.wear && !st.items.includes(it)) delete st.wear[it];
     pockets(st, who).push(it);
     tally(st, "gifts");
@@ -3058,7 +3093,7 @@
     if (!st.offer || !st.offer.box) return show(st);
     if (!pend || !ok) { delete st.offer.wait; st.extra = "> The lid sticks. Try again in a moment."; return show(st); }
     const lines = [];
-    if (pend.give) { const i = (st.items || []).indexOf(pend.give); if (i >= 0) st.items.splice(i, 1); }
+    if (pend.give) { const i = (st.items || []).indexOf(pend.give); if (i >= 0) takeOut(st, i); }
     const took = got && BOX_OK(got) ? got : null;
     if (took) gain(st, took, lines, false, "from_stranger");
     act(st, "offer:box");
@@ -3862,7 +3897,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, PHASE_MARK, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

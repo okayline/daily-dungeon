@@ -118,6 +118,63 @@ test("(v1.25) a find is stamped with its moon and its deed once numbered; a clim
   assert.deepEqual(st.copies[name][0].m, ["full", "found_wall", "carried_up"]);
   assert.deepEqual(marks.map((m) => m.slice(0, 3)), [[3, "night", "full"], [3, "deed", "found_wall"], [3, "deed", "carried_up"]]);
   assert.deepEqual(RULES.markLines(["full", "found_wall", "carried_up"]), ["Found in a wall under a full moon.", "Carried up a level."]);
-  for (const ph of RULES.PHASE_MARK) for (const d of ["found_wall", "from_demon", "given_member", "from_stranger"])
+  for (const ph of RULES.PHASE_MARK) for (const d of ["found_wall", "from_demon", "given_member", "from_stranger", "made_compiler", "copied_cache", "kit", "moon_gift", "found_inside"])
     assert.ok(RULES.markLines([ph, d])[0].length <= 41, "every history fits one line: " + RULES.markLines([ph, d])[0]);
+});
+
+test("(v1.27) the copy that leaves the bag is the one the registry uses up; a blessing makes a copy louder", async () => {
+  const ACT = (await import("../../act.js")).default, RULES = (await import("../../rules.js")).default, name = ACT.nameOf(1);
+  const { settleCopies } = await import("../game.js");
+  // two copies of one thing, the older one blessed: the bag says it was the SECOND one (k = 1) that left
+  const spent = [];
+  const env = { REGISTRY: { async addMark() { return { ok: true }; } } };
+  const st = { copies: { [name]: [{ k: "a", c: 4, m: ["blessed"] }, { k: "b", c: 9 }] }, gone: [name], goneAt: [1] };
+  const out = await settleCopies(env, null, st, { t: "use" }, null, {});
+  assert.deepEqual(out, [{ itemId: 1, copy: 9 }]);
+  assert.deepEqual(st.copies[name], [{ k: "a", c: 4, m: ["blessed"] }]);
+  // no slot named: the newest goes, as before
+  const st2 = { copies: { [name]: [{ k: "a", c: 4 }, { k: "b", c: 9 }] }, gone: [name] };
+  assert.deepEqual(await settleCopies(env, null, st2, { t: "use" }, null, {}), [{ itemId: 1, copy: 9 }]);
+  // the rules: using the second of two names records k = 1 (takeOut), and a blessed copy counts one tier up
+  const tier = RULES.TIER ? RULES.TIER[name] : null;
+  const run = { items: [name], copies: { [name]: [{ k: "a", c: 4, m: ["blessed"] }] } };
+  const plain = { items: [name], copies: { [name]: [{ k: "a", c: 4 }] } };
+  assert.equal(RULES.slotTier(run, 0), { COMMON: "UNCOMMON", UNCOMMON: "RARE", RARE: "MYTHIC", MYTHIC: "MYTHIC", MOON: "MOON" }[RULES.slotTier(plain, 0)]);
+});
+
+test("(v1.27) a thing handed to a friend keeps its copy and marks, and comes home with them", async () => {
+  const ACT = (await import("../../act.js")).default, name = ACT.nameOf(1);
+  const { settleCopies } = await import("../game.js");
+  const env = {}, mine = { k: "a", c: 4, m: ["full", "blessed"] };
+  const st = { copies: { [name]: [mine] }, gone: [name], goneAt: [0], goneTo: ["PIXIE"] };
+  assert.deepEqual(await settleCopies(env, null, st, { t: "give" }, null, {}), []);          // not used up
+  assert.equal(st.copies, undefined);
+  assert.deepEqual(st.pocketed, { PIXIE: [{ n: name, e: mine }] });
+  const back = { pocketed: st.pocketed, finds: [{ id: 1, key: "r:9", h: "given_member", w: "PIXIE" }] };
+  await settleCopies(env, null, back, { t: "ask" }, null, {});
+  assert.deepEqual(back.copies[name], [mine]);                                                // same copy, same marks
+  assert.equal(back.pocketed, undefined);
+});
+
+test("(v1.27) occasions: real days are named, they mark a find, and every history line still fits", async () => {
+  const S = (await import("../../screen.js")).default || (await import("../../screen.js"));
+  const RULES = (await import("../../rules.js")).default, ACT = (await import("../../act.js")).default;
+  const on = (iso) => S.occasions(new Date(iso + "T12:00:00Z"));
+  assert.ok(on("2026-08-12").includes("eclipse_solar"));          // NASA: total solar eclipse
+  assert.ok(on("2026-08-28").includes("eclipse_lunar"));
+  assert.ok(on("2026-05-31").includes("blue_moon"));              // the second full moon of May 2026
+  assert.ok(on("2028-12-31").includes("blue_moon") && on("2028-12-31").includes("thirteenth_moon"));
+  assert.ok(on("2026-12-21").includes("solstice") && on("2026-09-23").includes("equinox") && on("2026-03-20").includes("equinox"));
+  assert.ok(on("2026-07-07").includes("mirror_day") && !on("2026-07-08").includes("mirror_day"));
+  assert.deepEqual(on("2026-10-18").filter((o) => o !== "mirror_day"), []);                     // an ordinary day
+  for (const o of ACT.OCCASIONS) for (const d of ["found_wall", "from_demon", "given_member", "from_stranger", "made_compiler", "copied_cache", "kit", "moon_gift", "found_inside"])
+    for (const first of [[], ["first_copy"], ["hundredth_copy"]])
+      for (const l of RULES.markLines(["full", d, o, ...first, "carried_up", "carried_up", "carried_up"])) assert.ok(l.length <= 41, "fits: " + l);
+  assert.equal(RULES.markLines(["full", "found_wall", "blue_moon"])[0], "Found in a wall under a blue moon.");
+  // the first copy is stamped when numbered
+  const { settleCopies } = await import("../game.js");
+  const marks = [], env = { REGISTRY: { async addMark(m) { marks.push(m.value); return { ok: true, n: 1 }; } } };
+  const name = ACT.nameOf(1), st = { copies: { [name]: [{ k: "r:1", c: null, q: ["full", "eclipse_solar"] }] }, finds: [] };
+  await settleCopies(env, async () => ({ json: async () => ({ copies: [{ key: "r:1", copy: 1 }] }) }), st, { t: "go" }, { id: 5 }, {});
+  assert.deepEqual(marks, ["full", "eclipse_solar", "first_copy"]);
 });

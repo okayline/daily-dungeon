@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.27 - Blessed - Oct 17 2026, 19:05 HST
+
+- **Blessings count.** A thing the moon has blessed is treated as one step rarer wherever that matters.
+- **The right one goes.** With two of a kind in the bag, the one that leaves is the one whose history leaves with it.
+- **Friends keep your things' stories.** Hand something to a friend and it comes back with its history.
+- **More things remember.** What KURA starts with, the moon's gifts, what was hidden inside a thing, and what COMPILER and CACHE make now have a history too.
+- **Special days.** Things found on a blue moon, a supermoon, an eclipse, an equinox or solstice, the Thirteenth Moon, or a mirror day remember it. A first or a hundredth copy remembers that too.
+
 ## v1.26 - Show Her - Oct 17 2026, 18:50 HST
 
 - **The moon wants something.** Each level, look up and she says what she wants. In INVOKE, a + marks anything with something she asked for.

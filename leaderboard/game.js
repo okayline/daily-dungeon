@@ -15,7 +15,7 @@ import { playerOf, makePlayer, Oops, reply, body, originsOf, sha, readToken, ipO
 const MAX_RUN = 400000;
 const now = () => Math.floor(Date.now() / 1000);
 const tidy = (st) => { delete st.breath; return st; };          // breath off: no breath record means a full bar
-const OUTBOX = ["finds", "gone", "events", "tally", "line3", "exchangeOpen"];
+const OUTBOX = ["finds", "gone", "goneAt", "goneTo", "events", "tally", "line3", "exchangeOpen"];
 const kept = (st) => { const k = { ...st }; for (const f of OUTBOX) delete k[f]; return k; };
 // (v1.24) WHAT THE PAGE IS SENT: the run without its secrets. The seeds (which would rebuild the whole floor), which
 // kind of room is behind which door, where the stairs and the locker are, and what each wall hides and how deep. The
@@ -138,9 +138,12 @@ export async function settleCopies(env, inner, st, a, me, old) {
   for (const f of st.finds || []) {
     const name = ACT.nameOf(f.id);
     if (!name) continue;
+    const pk = typeof f.w === "string" && st.pocketed && st.pocketed[f.w], pi = pk ? pk.findIndex((x) => x.n === name) : -1;
+    if (pi >= 0) { (copies[name] = copies[name] || []).push(pk.splice(pi, 1)[0].e); if (!pk.length) delete st.pocketed[f.w]; continue; }   // our own thing, home from a friend's pockets
     const q = [], ph = Number.isInteger(f.p) ? ACT.phaseMark(f.p) : null;
     if (ph) q.push(ph);
     if (typeof f.h === "string") q.push(f.h);
+    for (const o of Array.isArray(f.o) ? f.o : []) if (ACT.OCCASIONS.includes(o)) q.push(o);
     (copies[name] = copies[name] || []).push(q.length ? { k: f.key, c: null, q } : { k: f.key, c: null });
   }
   const up = (st.climb || 1) - ((old && old.climb) || 1);
@@ -150,21 +153,28 @@ export async function settleCopies(env, inner, st, a, me, old) {
     try {
       const r = await inner("/found", { finds: ask.slice(0, 50) }), d = await r.json();
       const got = new Map((d.copies || []).map((c) => [c.key, c.copy]));
-      for (const list of Object.values(copies)) for (const e of list) if (e.c === null && got.has(e.k)) { e.c = got.get(e.k); delete e.t; }
+      for (const list of Object.values(copies)) for (const e of list) if (e.c === null && got.has(e.k)) {
+        e.c = got.get(e.k); delete e.t;
+        if (e.c === 1 || e.c === 100) (e.q = e.q || []).push(e.c === 1 ? "first_copy" : "hundredth_copy");      // a number worth a mark
+      }
     } catch (e) { console.error("copies", e); }
   }
   if (env.REGISTRY && me) await stampMarks(env, me, copies);
-  for (const name of st.gone || []) {
+  const goneAt = st.goneAt || [];
+  for (const [gi, name] of (st.gone || []).entries()) {
     const list = copies[name];
     if (!list || !list.length) continue;
-    const e = list.pop();
+    const k = goneAt[gi], e = Number.isInteger(k) && k >= 0 && k < list.length ? list.splice(k, 1)[0] : list.pop();   // the copy that left; else the newest
     if (!list.length) delete copies[name];
+    const to = (st.goneTo || [])[gi];
+    if (to) { ((st.pocketed = st.pocketed || {})[to] = st.pocketed[to] || []).push({ n: name, e }); continue; }   // in a friend's pockets: not used up
     if (e.c !== null) spends.push({ itemId: ACT.itemId(name), copy: e.c });
   }
+  if (st.pocketed && !Object.keys(st.pocketed).length) delete st.pocketed;
   if (Object.keys(copies).length) st.copies = copies; else delete st.copies;
   return spends;
 }
-const NIGHT = new Set([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ACT.phaseMark(i)));
+const NIGHT = new Set([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ACT.phaseMark(i)).concat(ACT.OCCASIONS));
 async function stampMarks(env, me, copies) {
   for (const [name, list] of Object.entries(copies)) for (const e of list) {
     if (e.c === null || !e.q || !e.q.length) continue;

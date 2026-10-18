@@ -77,7 +77,7 @@
     if (name.startsWith("go-")) return { t: "go", dir: name.slice(3) };
     return pick("opick-", "offerPick") || pick("otrade-", "offerTrade") || pick("swap-", "swap") || pick("altar-", "altarGive") || { t: name };
   }
-  const api = { apply, fromName, runWay, ADMIN, types: Object.keys(ACTIONS), itemId: n => RULES.itemId(n), nameOf: id => RULES.nameOf(id), phaseMark: i => RULES.PHASE_MARK[i] || null };
+  const api = { apply, fromName, runWay, ADMIN, types: Object.keys(ACTIONS), itemId: n => RULES.itemId(n), nameOf: id => RULES.nameOf(id), phaseMark: i => RULES.PHASE_MARK[i] || null, OCCASIONS: RULES.OCCASIONS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ACT = api;
 })(this);
