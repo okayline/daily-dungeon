@@ -170,7 +170,7 @@ async function stampMarks(env, me, copies) {
     if (e.c === null || !e.q || !e.q.length) continue;
     const itemId = ACT.itemId(name), left = [];
     for (const w of e.q) {
-      const value = w.split(":")[0], kind = NIGHT.has(value) ? "night" : "deed";
+      const value = w.split(":")[0], kind = NIGHT.has(value) ? "night" : value === "answered" || value === "blessed" ? "moon" : "deed";
       try {
         const r = await env.REGISTRY.addMark({ itemId, copy: e.c, holder: { game: "4dungeon", playerId: me.id }, kind, value, key: me.id + ":" + e.k + ":" + w });
         if (r && r.ok) (e.m = e.m || []).push(value);

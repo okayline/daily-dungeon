@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.26 - Show Her - Oct 17 2026, 18:50 HST
+
+- **The moon wants something.** Each level, look up and she says what she wants. In INVOKE, a + marks anything with something she asked for.
+- **The stairs are sealed.** They are no longer hidden, but they open only after KURA shows the moon up to two things from her bag (or nothing). She judges what she sees, keeps nothing, and always lets KURA by. Answer her well and your things will remember it.
+- **No more gifts from the moon.** She has stopped offering two things when you look up.
+
 ## v1.25 - Marked - Oct 17 2026, 18:30 HST
 
 - **Things remember.** What KURA finds now keeps a little history of its own: how it came to her, under which moon, and how far she has carried it up. Look in INVOKE.

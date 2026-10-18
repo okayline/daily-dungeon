@@ -430,11 +430,8 @@
   // moon, and now or never (she doesn't wait). Her offers are things no one else deals in: a hunch about a locked
   // door, a breath back, a pull toward LAW or toward CHAOS, a quiet aura for the day, and near full a moon thing.
   // After that she talks a little, and then goes quiet until the next night. Every look costs a breath.
-  const MOON_OFFER = [0, 0.25, 0.45, 0.65, 0.85, 0.65, 0.45, 0.25];
   const MOON_TALKS = 3;                                  // looks a night she answers; after that, only light
   const MOON_DONE = ["The moon is only light now.", "She's said what she'll say tonight.", "The moon has gone quiet. It's late, even for her."];
-  const MOON_OFFERS = { bright: ['A luminous voice from above: "Two things. Pick one. Quickly."', 'A luminous voice from above: "One of these. I don\'t ask twice."'],
-    dim: ['A thin voice from above: "Choose."', 'Something faint, far up: "One. Only one."'] };
   const MOON_GIFT = {
     hunch: k => ({ kind: "hunch", label: "a hunch about a door", say: MOON_SAYS[k] }),
     breath: () => ({ kind: "breath", label: "her light, for breath" }),
@@ -448,35 +445,19 @@
     if (!kinds.length) fl.rooms.forEach((r, i) => { if (r && RS(d, i).visited) for (const j of Object.values(r.doors)) if (shut(j)) kinds.push(fl.kinds[j]); });
     return kinds.length ? pick(kinds) : null;
   }
-  function moonPair(st, m) {
-    const k = moonHunch(st), G = MOON_GIFT, near = m >= 3 && m <= 5, pairs = [];
-    if (k) pairs.push([G.hunch(k), G.breath()]);
-    pairs.push([G.law(), G.chaos()]);
-    pairs.push([G.hush(), G.breath()]);
-    if (near) { const it = pick(MOON_DROPS); pairs.push([G.item(it), G.hush()], [G.item(it), G.breath()]); if (m === 4) pairs.push([G.item(it), G.item(pick(MOON_DROPS.filter(x => x !== it)))]); }
-    const pr = near && Math.random() < (m === 4 ? 0.6 : 0.35) ? pick(pairs.filter(p => p.some(g => g.kind === "item"))) : pick(pairs);
-    // (v1.12) SAFE OR GAMBLE under the moon: fullness / 3 of her offers (a third at the full moon, none at the new moon) put her
-    // sure gift beside a moon thing that only half the time comes through.
-    const fullness = (1 - Math.cos(moon() / 8 * 2 * Math.PI)) / 2;
-    if (Math.random() < fullness / 3) return [G.breath(), { kind: "gamble", label: pick(["a slightly glowy parcel", "a moonlit box, shaken gently", "something silver, wrapped in dusk"]), item: pick(MOON_DROPS) }].sort(() => Math.random() - 0.5);
-    return pr.sort(() => Math.random() - 0.5);
-  }
   function moonLook(st) {
     const m = moon(), sky = moonSky();
     const night = st.moonNight && st.moonNight.day === st.day ? st.moonNight : (st.moonNight = { day: st.day, n: 0 });
     night.n++;
     tally(st, "moonAsked");
     if (night.n > MOON_TALKS) { st.extra = "> " + pick(MOON_DONE); return; }
-    if (night.n === 1 && m !== 0 && Math.random() < Math.min(0.95, MOON_OFFER[m] * (aura(st).band === 2 ? 1.2 : 1))) {     // she notices a loud aura
-      st.offer = { who: "MOON", moon: true, dir: "give", choices: moonPair(st, m) };
-      st.extra = "> " + pick(MOON_OFFERS[sky === "bright" ? "bright" : "dim"]);
-      tally(st, "moonAnswered");
-      return;
-    }
+    // (v1.26) Her offers of two things are gone: she says her wish, plainly. Without one (no level yet), her chatter as before.
+    const wish = wishFor(st);
+    if (wish && sky !== "none") { wish.told = true; st.extra = wishLine(wish); return; }
     // No offer: the first look gets her chatter; the next couple, a word about being asked again.
     st.extra = "> " + pick(night.n === 1 || sky === "none" ? MOON_CHAT[sky] : sky === "bright" ? MOON_AGAIN_SASS.concat(MOON_QUIET_SASS) : MOON_AGAIN.concat(MOON_QUIET));
   }
-  // Taking one of her two things.
+  // Taking one of her two things (an offer left waiting in a run from before v1.26).
   function moonTake(st, g) {
     const lines = [];
     tally(st, "moonTook"); ev(st, "moonpick");
@@ -1331,6 +1312,7 @@
       return show(st);
     }
     const toStairs = !fals && RS(d).found.includes("stairs") && dir === stairsDir(d.floor, d.at);
+    if (toStairs && !st.raiseOk && !st.encounter) { st.facing = dir; st.raise = { dir, picks: [] }; st.log = "> The stairs are sealed. Moonlight pools on the first step."; return show(st); }
     const locked = !toStairs && !fals && isLocked(d, dir);
     if ((locked || fals) && today(st).stepped && !st.freeSteps) {
       st.facing = dir; st.log = "> The door won't unlock. Today's key is spent. Another comes at dawn.";
@@ -1417,6 +1399,7 @@
       : (i === d.floor.lure && !(RS(d, i).found || []).includes("lure"))      // the ? room: something is still tucked away in it
         ? `> KURA goes ${NAME[dir]}. ` + pick(["The room feels like it is holding its breath.", "The air here is keeping something back.", "The walls seem to know a little more than KURA."])
         : `> KURA goes ${NAME[dir]} into ${isNew ? "a new room" : "a cleared room"}.`;
+    if (d.floor.stairs === i && !RS(d, i).found.includes("stairs")) RS(d, i).found.push("stairs");   // (v1.26) the stairs are never hidden: sealed instead
     enterKind(st, i, locked || isNew);
     st.extra = atmosphere(st);
     partyEnter(st);
@@ -1904,7 +1887,8 @@
       const info = ITEM_INFO[name] || { text: "" };
       // (v1.25) marks: one list per copy of this thing, oldest copy first, from the registry (st.copies, kept by the server)
       const marks = ((st.copies || {})[name] || []).map(e => e.m || []);
-      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON", align: itemAlign(name), hollow: st.hollow && name in st.hollow ? st.hollow[name] : undefined, marks };
+      const pips = ((st.copies || {})[name] || [{}]).map(e => wishPip(st, name, copyMarks(e)));
+      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON", align: itemAlign(name), hollow: st.hollow && name in st.hollow ? st.hollow[name] : undefined, marks, pips };
     });
   }
   // (v1.25) A copy's marks for INVOKE, in the world's dry voice: at most two lines of 41 columns (how it came and under
@@ -1920,6 +1904,111 @@
     if (up) out.push(up === 1 ? "Carried up a level." : `Carried up ${up} levels.`);
     return out;
   }
+  // (v1.26) THE MOON'S WISH. Each level belongs to a quarter of the moon (d.quarter), and for that quarter she wants three
+  // things, said plainly: a night (a phase still ahead in that quarter, so it can always be made), a deed (how a thing
+  // came to KURA), and what a thing is (its alignment, its nature, or its tier: COMMON, UNCOMMON or RARE, counting
+  // blessings). Private to the run, rolled once per quarter, never rerolled. She judges only what shows on the things.
+  const WISH_DEEDS = ["found_wall", "from_demon", "given_member", "from_stranger"];
+  const WISH_BASE = [["align", "LAW"], ["align", "NEUTRAL"], ["align", "CHAOS"], ["nature", "tech"], ["nature", "spirit"], ["nature", "both"],
+    ["tier", "COMMON"], ["tier", "UNCOMMON"], ["tier", "RARE"]];
+  function wishFor(st) {
+    const d = st.dungeon;
+    if (!d || d.quarter === undefined) return null;
+    if (st.wish && st.wish.n === d.quarter) return st.wish;
+    const q = TIME.quarter(d.quarter).q, here = TIME.quarterOf(new Date(nowMs(st))).n === d.quarter;
+    const ahead = [2 * q, 2 * q + 1].filter(i => !here || i >= moon());
+    const night = PHASE_MARK[pick(ahead.length ? ahead : [2 * q + 1])], [k, v] = pick(WISH_BASE);
+    st.wish = { n: d.quarter, night, deed: pick(WISH_DEEDS), base: { k, v } };
+    return st.wish;
+  }
+  // A copy's tier with its blessings: each "blessed" lifts it one step, up to MYTHIC.
+  function tierWithBlessings(name, marks) {
+    const b = (marks || []).filter(v => v === "blessed").length, t = TIER[name] || "COMMON", i = ["COMMON", "UNCOMMON", "RARE", "MYTHIC"].indexOf(t);
+    return i < 0 ? t : ["COMMON", "UNCOMMON", "RARE", "MYTHIC"][Math.min(3, i + b)];
+  }
+  // Which of the wish's three parts one copy meets: { night, deed, base }.
+  function wishMeets(wish, name, marks) {
+    const m = marks || [], b = wish.base;
+    const base = b.k === "align" ? itemAlign(name) === b.v : b.k === "nature" ? ITEM_NATURE[name] === b.v : tierWithBlessings(name, m) === b.v;
+    return { night: m.includes(wish.night), deed: m.includes(wish.deed), base: !!base };
+  }
+  // Her judgment of an offering (up to two copies: [{ name, marks }]): a part counts if any offered thing has it.
+  function wishJudge(wish, offered) {
+    const got = { night: false, deed: false, base: false };
+    for (const o of (offered || []).slice(0, 2)) { const m = wishMeets(wish, o.name, o.marks); for (const k in got) got[k] = got[k] || m[k]; }
+    return { ...got, count: Object.values(got).filter(Boolean).length };
+  }
+  // The wish in words: one line of the log (77 columns at most, for every wish), said by the moon.
+  const BASE_WORDS = { align: { LAW: "something lawful", NEUTRAL: "something neutral", CHAOS: "something chaotic" },
+    nature: { tech: "something made", spirit: "something alive", both: "something half alive" },
+    tier: { COMMON: "something common", UNCOMMON: "something uncommon", RARE: "something rare" } };
+  const WISH_DEED_WORDS = { found_wall: "found in a wall", from_demon: "from a demon", given_member: "given by a friend", from_stranger: "from a stranger" };
+  function wishLine(wish) {
+    return wish ? `> She wants ${BASE_WORDS[wish.base.k][wish.base.v]}, ${WISH_DEED_WORDS[wish.deed]}, under ${PHASE_WORDS[wish.night]}.` : "";
+  }
+  // A copy's marks as the rules see them: stamped (m) and still waiting (q, without a carried_up's level).
+  const copyMarks = e => (e ? [...(e.m || []), ...(e.q || []).map(v => String(v).split(":")[0])] : []);
+  // The copy behind bag slot i: the k-th of that name in the bag is the k-th in st.copies (both oldest first).
+  function copyAt(st, i) {
+    const name = (st.items || [])[i]; if (!name) return null;
+    const k = st.items.slice(0, i).filter(n => n === name).length;
+    return ((st.copies || {})[name] || [])[k] || null;
+  }
+  // INVOKE's pip: once she has said her wish, a thing that has any part of it.
+  function wishPip(st, name, marks) {
+    const w = st.wish, d = st.dungeon;
+    if (!w || !w.told || !d || w.n !== d.quarter) return false;
+    const m = wishMeets(w, name, marks); return m.night || m.deed || m.base;
+  }
+  // THE SEALED STAIRS (v1.26). The stairs show without searching, but they open only after KURA shows up to two things
+  // to the moon (or nothing). She judges what shows on them, keeps nothing, and the stairs open whatever she thinks:
+  //   none of her wish: a dry word, no mark.   one or two parts: each thing ANSWERED THE MOON, and she shows the doors
+  //   KURA left on this level.   all three: also BLESSED BY THE MOON on the thing that has the most parts (first raised on a tie).
+  function raisePick(st, i) {
+    st = copy(st);
+    if (!st.raise) return show(st);
+    const p = st.raise.picks, at = p.indexOf(i);
+    if (at >= 0) p.splice(at, 1); else if (Number.isInteger(i) && i >= 0 && i < (st.items || []).length && p.length < 2) p.push(i);
+    return show(st);
+  }
+  function raiseCancel(st) { st = copy(st); delete st.raise; st.log = "> KURA steps back from the stairs."; return show(st); }
+  const LEFT_NAME = k => ((NAMES_BY_KIND[k] || ["Odd room"])[0]).toLowerCase();
+  function raiseGo(st) {
+    st = copy(st);
+    const d = st.dungeon, R0 = st.raise;
+    if (!R0 || !d) return show(st);
+    const wish = wishFor(st), picks = R0.picks.filter(i => (st.items || [])[i]);
+    const offered = picks.map(i => ({ i, name: st.items[i], e: copyAt(st, i) })).map(o => ({ ...o, marks: copyMarks(o.e) }));
+    const j = wish ? wishJudge(wish, offered) : { count: 0 };
+    const lines = [];
+    const stamp = (o, v) => { if (o.e) (o.e.q = o.e.q || []).push(v); };
+    if (!offered.length || !j.count) lines.push(pick(offered.length ? MOON_NO : MOON_NOTHING));
+    else {
+      lines.push(j.count === 3 ? pick(MOON_YES) : pick(MOON_SOME));
+      let best = null;
+      if (j.count === 3) {
+        const score = o => Object.values(wishMeets(wish, o.name, o.marks)).filter(Boolean).length;
+        best = offered.reduce((a, o) => (!a || score(o) > score(a) ? o : a), null);
+        const can = tierWithBlessings(best.name, best.marks) !== "MYTHIC" && ["COMMON", "UNCOMMON", "RARE", "MYTHIC"].includes(TIER[best.name] || "COMMON");
+        if (can) { stamp(best, "blessed"); lines.push(`${best.name} is BLESSED BY THE MOON.`); } else best = null;
+      }
+      for (const o of offered) { stamp(o, "answered"); if (o !== best) lines.push(`${o.name} ANSWERED THE MOON.`); }
+      const left = Object.keys(d.floor.exits || {}).filter(x => d.floor.sealed && d.floor.sealed[x]).map(x => LEFT_NAME(d.floor.kinds[x])).filter(Boolean);
+      const said = [...new Set(left)].map(n => (n.startsWith("the ") ? n : (/^[aeiou]/.test(n) ? "an " : "a ") + n));
+      if (said.length) lines.push("Behind the doors you left: " + said.join(", ") + ".");
+    }
+    tally(st, "moonJudged"); if (j.count === 3) tally(st, "moonBlessed");
+    st.judged = { k: (st.judged ? st.judged.k : 0) + 1, lines };
+    const dir = R0.dir; delete st.raise;
+    st.raiseOk = true;
+    const out = go(st, dir);
+    delete out.raiseOk;
+    return out;
+  }
+  const MOON_NOTHING = ["The moon looks at KURA's empty hands for a while. The stairs open anyway.", "She sees nothing held up. She lets KURA by."];
+  const MOON_NO = ["The moon looks, and says nothing. The stairs open anyway.", "\"Not what I asked for.\" She lets KURA by all the same."];
+  const MOON_SOME = ["The moon looks for a while. \"Close.\"", "\"Some of it,\" she says. \"Some of it.\""];
+  const MOON_YES = ["The moon looks for a long time. \"Yes. That one.\"", "\"There it is,\" she says, very quietly."];
   // A full bag's answer: drop = which thing in the bag to leave (its index), or null to leave the new one where it lay.
   function keepItem(st, drop) {
     st = copy(st);
@@ -3773,7 +3862,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, PHASE_MARK, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, PHASE_MARK, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

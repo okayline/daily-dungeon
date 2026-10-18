@@ -388,6 +388,8 @@
     document.getElementById("cheat").textContent = save.freeSteps ? RULES.debugInfo(save) : "";
     document.getElementById("ver").textContent = SMT.VERSION;
     bagBox();
+    raiseBox();
+    judgedBox();
     offerBox();
     boxTick();
     tallyTick();
@@ -556,6 +558,46 @@
     add(" ");
     (save.items || []).forEach((n, i) => opt(`[${i + 1}] ${n.toUpperCase()}`.slice(0, 41), i));
     opt("[N]O THANKS", "none");
+  }
+  // (v1.26) THE SEALED STAIRS: KURA shows up to two things from the bag to the moon (or nothing). A + marks a thing
+  // with something she wants. Numbers pick (again unpicks), S shows them, Esc steps back.
+  function raiseBox() {
+    const box = document.getElementById("found");
+    const v = save && !save.dead && RULES.raiseView(save);
+    if (!v) { if (box.dataset.mode === "raise") { box.hidden = true; box.dataset.mode = ""; box.querySelector("pre").innerHTML = ""; } return; }
+    if (atTitle || replayTimer || (!box.hidden && box.dataset.mode !== "raise")) return;
+    if (["inv", "log", "board", "codex", "about", "exch"].some(id => { const el = document.getElementById(id); return el && !el.hidden; })) return;
+    const pre = box.querySelector("pre");
+    box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
+    placeInView(box, 17);
+    box.dataset.mode = "raise";
+    pre.innerHTML = "";
+    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
+    const btn = (t, a) => { const b = document.createElement("span"); b.textContent = t; b.className = "btn"; b.dataset.raise = a; return b; };
+    add("THE STAIRS ARE SEALED", "gold");
+    add(" ");
+    v.bag.forEach((it, i) => { const d = add(""), on = v.picks.includes(i);
+      d.append(btn(`${on ? ">" : " "} ${i + 1}  ${it.name}`.slice(0, 40).padEnd(41) + (it.pip ? "+" : " "), String(i))); });
+    if (!v.bag.length) add("  The bag is empty.", "dim");
+    add(" ");
+    const names = v.picks.map(i => v.bag[i] && v.bag[i].name).filter(Boolean);
+    for (const w of wrapText("Your offering: " + (names.length ? names.join(", ") : "nothing") + ".", 44)) add(w, "");
+    add(" ");
+    const f = add(""); f.append("[1-9] pick  ", btn("[S]HOW", "go"), "  ", btn("[ESC] BACK", "back"));
+  }
+  async function raiseAct(a) {
+    if (!save || !save.raise || waiting) return;
+    save = await play(a === "go" ? { t: "raiseGo" } : a === "back" ? { t: "raiseCancel" } : { t: "raisePick", i: Number(a) });
+    persist(); draw();
+  }
+  // Her judgment, once, as a popup to click through.
+  function judgedBox() {
+    const J = save && save.judged, mem = save && (save.logged = save.logged || {});
+    if (!J || !mem || mem.judged === J.k || atTitle || save.raise) return;
+    const box = document.getElementById("found");
+    if (!box.hidden) return;
+    mem.judged = J.k; persist();
+    noticeBox(J.lines);
   }
   async function bagPick(i) {
     if (!save || !(save.overflow || []).length || waiting) return;
@@ -1443,7 +1485,7 @@
     if (!open) { invReg = null; return; }
     placeInView(box);
     visitorTick(true);                                // a visiting button may be waiting: check when the bag opens
-    invList = save ? RULES.inventory(save).flatMap(it => Array.from({ length: it.count }, (_, k) => ({ ...it, count: 1, history: RULES.markLines((it.marks || [])[k]) }))) : [];   // one line per thing (v1.05.1); (v1.25) each with its own copy's history
+    invList = save ? RULES.inventory(save).flatMap(it => Array.from({ length: it.count }, (_, k) => ({ ...it, count: 1, history: RULES.markLines((it.marks || [])[k]), pip: !!(it.pips || [])[k] }))) : [];   // one line per thing (v1.05.1); (v1.25) each with its own copy's history
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
     // (v1.06.1: ICHOR is always shown, even at 0.)
     if (save) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
@@ -1487,7 +1529,7 @@
     // (v1.25) ICHOR and SILVER live on the foot line (not a row of the list), so the chosen thing has room for its history.
     invList.forEach((it, i) => {
       if (it.ichor) return;                                    // ICHOR and SILVER: drawn on the foot line below
-      add(`${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{42}).{4,}$/, "$1..."), "btn", i); });
+      add((`${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{40}).{4,}$/, "$1...")).padEnd(43) + (it.pip ? "+" : ""), "btn", i); });   // (v1.26) + : something the moon wants
     if (empty) add("  1  The bag is empty", "dim");               // (v1.06.1) no row of empty slots when there's nothing in it
     else for (let k = invList.length - ich; k < RULES.BAG_MAX; k++) add(`  ${k + 1}  .`, "dim");
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
@@ -2865,6 +2907,7 @@
   document.getElementById("board").addEventListener("click", () => toggleBoard(false));   // no other interactive bits in here: any click closes
   document.getElementById("found").addEventListener("click", e => {
     if (document.getElementById("found").dataset.mode === "bag") { const b = e.target.closest("[data-bag]"); if (b) bagPick(b.dataset.bag); return; }
+    if (document.getElementById("found").dataset.mode === "raise") { const b = e.target.closest("[data-raise]"); if (b) raiseAct(b.dataset.raise); return; }
     if (document.getElementById("found").dataset.mode === "offer") { const b = e.target.closest("[data-off]"); if (b) act(b.dataset.off); return; }
     if (replayTimer) return replayAdvance ? replayAdvance() : finishReplay();     // a click brings in the next line
     if (e.target.closest("[data-intro]")) return introOK();
@@ -2932,6 +2975,13 @@
       if (v.trade) { if (/^[1-9]$/.test(key) && Number(key) <= v.bag.length) act("otrade-" + (Number(key) - 1)); else if (key === "escape" || key === "b") act("otrade-none"); }
       else if (key === "1" || key === "2") act("opick-" + (Number(key) - 1));
       else if (key === "escape") act("opick-none");
+      return;
+    }
+    if (!fbox.hidden && fbox.dataset.mode === "raise") {       // (v1.26) the sealed stairs: numbers pick, S shows them to her, Esc steps back
+      e.preventDefault(); if (e.repeat) return;
+      if (/^[1-9]$/.test(key) && Number(key) <= (save.items || []).length) raiseAct(String(Number(key) - 1));
+      else if (key === "s" || key === "enter") raiseAct("go");
+      else if (key === "escape") raiseAct("back");
       return;
     }
     if (!fbox.hidden && fbox.dataset.mode === "bag") {         // the full bag's question: a number leaves that thing, N leaves the new one
