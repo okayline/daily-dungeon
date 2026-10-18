@@ -98,3 +98,26 @@ test("the page is never sent the run's secrets (the webmaster is)", async () => 
   env.DB.raw.prepare("UPDATE players SET admin = 1").run();
   assert.ok((await me("/run", { peek: true })).data.run.dungeon.floor.kinds);
 });
+
+test("(v1.25) a find is stamped with its moon and its deed once numbered; a climb adds carried_up; INVOKE reads them", async () => {
+  const env = { DB: fakeD1() }, me = browser(env), marks = [];
+  env.REGISTRY = {
+    async birth() { return { copy: 3, created: true }; },
+    async addMark(m) { marks.push([m.copy, m.kind, m.value, m.key.split(":").slice(1).join(":")]); return { ok: true, n: marks.length, created: true }; },
+  };
+  await me("/run", {});
+  const ACT = (await import("../../act.js")).default, RULES = (await import("../../rules.js")).default, name = ACT.nameOf(1);
+  const put = (f) => { const st = JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state); f(st); env.DB.raw.prepare("UPDATE runs SET state = ?").run(JSON.stringify(st)); };
+  put((st) => { st.finds = [{ id: 1, key: "r:1", p: 4, h: "found_wall" }]; st.items = (st.items || []).concat(name); });
+  const r = await me("/act", { n: 0, action: { t: "turn", dir: "L" } });
+  assert.deepEqual(r.data.run.copies[name].at(-1), { k: "r:1", c: 3, m: ["full", "found_wall"] });
+  // a climb: the run before had climb 1, the run after climb 2 (settleCopies compares the two)
+  const { settleCopies } = await import("../game.js");
+  const st = { climb: 2, copies: { [name]: [{ ...r.data.run.copies[name].at(-1) }] } };
+  await settleCopies(env, null, st, { t: "go" }, { id: 1 }, { climb: 1 });
+  assert.deepEqual(st.copies[name][0].m, ["full", "found_wall", "carried_up"]);
+  assert.deepEqual(marks.map((m) => m.slice(0, 3)), [[3, "night", "full"], [3, "deed", "found_wall"], [3, "deed", "carried_up"]]);
+  assert.deepEqual(RULES.markLines(["full", "found_wall", "carried_up"]), ["Found in a wall under a full moon.", "Carried up a level."]);
+  for (const ph of RULES.PHASE_MARK) for (const d of ["found_wall", "from_demon", "given_member", "from_stranger"])
+    assert.ok(RULES.markLines([ph, d])[0].length <= 41, "every history fits one line: " + RULES.markLines([ph, d])[0]);
+});

@@ -39,13 +39,17 @@
   // THE BAG (v1.05.1) holds 9 things (ICHOR is a count, not a thing). A thing that comes to a full bag waits in
   // st.overflow; the page asks what to leave behind (keepItem). Nothing counts as found until it is kept.
   const BAG_MAX = 9;
-  function gain(st, it, lines, noQueue) {
+  // (v1.25) `how` is the deed a find carries into its history (a mark in the shared registry): found_wall,
+  // from_demon, given_member, from_stranger; null when it is none of those. The moon's phase goes with it (p).
+  function gain(st, it, lines, noQueue, how) {
     // (v1.14) Every item gained is queued for the shared copy registry; the page sends the queue for a signed-in player
     // (registryTick in index.html) and drops it otherwise. The key (run + nth gain) makes a resend never count twice.
     // (noQueue: a thing that waited in the overflow was queued the first time it came; taking it now is not a new find.)
     if (!noQueue && ITEM_ID[it] && st.runId && !(st.visitorInfo && st.visitorInfo[it])) {
       st.gainN = (st.gainN || 0) + 1;
-      st.finds = (st.finds || []).concat({ id: ITEM_ID[it], key: st.runId + ":" + st.gainN }).slice(-50);
+      const f = { id: ITEM_ID[it], key: st.runId + ":" + st.gainN, p: moon() };
+      if (how) f.h = how;
+      st.finds = (st.finds || []).concat(f).slice(-50);
     }
     if ((st.items || []).length >= BAG_MAX) { st.overflow = (st.overflow || []).concat(it); return; }
     st.items = (st.items || []).concat(it);
@@ -993,7 +997,7 @@
       // The ? is a hidden locker: usually a RARE, sometimes MYTHIC; under a full moon, half the time a MOON item.
       case "lure": {
         const it = moon() === 4 && Math.random() < 0.5 ? pick(MOON_DROPS) : pick(names(Math.random() < 0.7 ? "RARE" : "MYTHIC"));
-        gain(st, it); return `A locker holds ${it}.`;
+        gain(st, it, undefined, false, "found_wall"); return `A locker holds ${it}.`;
       }
       case "clue": {                          // a dead end's scrap: what one of the wing's two doors is
         const rm = st.dungeon.floor.rooms[st.dungeon.at], w = st.dungeon.floor.wings[rm.wing];
@@ -1001,7 +1005,7 @@
         return "A scrap of writing, pinned to the wall.";
       }
       case "silver": { const n = R(20, 150) * (inArchive(st) ? 2 : 1); st.silver = silver + n; tally(st, "silverFound", n); return `${n} SILVER, loose in the rubble.`; }
-      case "item": { const it = inArchive(st) ? pick(names(Math.random() < 0.35 ? "RARE" : "UNCOMMON")) : rollItem(st); gain(st, it); return `KURA finds ${it}.`; }
+      case "item": { const it = inArchive(st) ? pick(names(Math.random() < 0.35 ? "RARE" : "UNCOMMON")) : rollItem(st); gain(st, it, undefined, false, "found_wall"); return `KURA finds ${it}.`; }
       case "demon": {
         // A demon appears and stays until it's fought, talked down, or escaped (see the ENCOUNTER section).
         const base = pickDemon(st);
@@ -1269,7 +1273,7 @@
       w.deep.prog = (w.deep.prog || 0) + worth * (tripping(st) ? 3 : 1);
       if (w.deep.prog >= (w.deep.need || 35)) {
         w.deep.found = true; ev(st, "deep");
-        gain(st, w.deep.item);
+        gain(st, w.deep.item, undefined, false, "found_wall");
         st.log = say("Deep in the stone, something gives.");
         st.extra = `> KURA pulls out ${w.deep.item}.`;
         return show(st);
@@ -1898,8 +1902,23 @@
     for (const it of st.items || []) counts[it] = (counts[it] || 0) + 1;
     return Object.keys(counts).sort((x, y) => TIERS.indexOf(TIER[y]) - TIERS.indexOf(TIER[x])).map(name => {
       const info = ITEM_INFO[name] || { text: "" };
-      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON", align: itemAlign(name), hollow: st.hollow && name in st.hollow ? st.hollow[name] : undefined };
+      // (v1.25) marks: one list per copy of this thing, oldest copy first, from the registry (st.copies, kept by the server)
+      const marks = ((st.copies || {})[name] || []).map(e => e.m || []);
+      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON", align: itemAlign(name), hollow: st.hollow && name in st.hollow ? st.hollow[name] : undefined, marks };
     });
+  }
+  // (v1.25) A copy's marks for INVOKE, in the world's dry voice: at most two lines of 41 columns (how it came and under
+  // which moon; how many levels it has been carried up).
+  const PHASE_MARK = ["new", "wax_cres", "first_q", "wax_gib", "full", "wan_gib", "last_q", "wan_cres"];
+  const PHASE_WORDS = { new: "a new moon", wax_cres: "a waxing crescent", first_q: "a first quarter", wax_gib: "a waxing gibbous",
+    full: "a full moon", wan_gib: "a waning gibbous", last_q: "a last quarter", wan_cres: "a waning crescent" };
+  const DEED_WORDS = { found_wall: "Found in a wall", from_demon: "From a demon", given_member: "A friend's gift", from_stranger: "From a stranger" };
+  function markLines(marks) {
+    const m = marks || [], out = [];
+    const night = m.find(v => PHASE_WORDS[v]), deed = m.find(v => DEED_WORDS[v]), up = m.filter(v => v === "carried_up").length;
+    if (deed || night) out.push((deed ? DEED_WORDS[deed] : "Came to her") + (night ? ` under ${PHASE_WORDS[night]}` : "") + ".");
+    if (up) out.push(up === 1 ? "Carried up a level." : `Carried up ${up} levels.`);
+    return out;
   }
   // A full bag's answer: drop = which thing in the bag to leave (its index), or null to leave the new one where it lay.
   function keepItem(st, drop) {
@@ -2082,7 +2101,7 @@
     st.lastLine = lastWords(e, st);                         // shown on the end-of-fight screen, right under the art
     // What a fallen demon leaves (v1.06): one or two things out of its own pockets. Never SILVER, never a moon thing.
     const had = pockets(st, e).slice().sort(() => Math.random() - 0.5);
-    for (const it of had.slice(0, Math.min(had.length, R(1, 2)))) { lines.push(`It drops ${it}.`); gain(st, it, lines); }
+    for (const it of had.slice(0, Math.min(had.length, R(1, 2)))) { lines.push(`It drops ${it}.`); gain(st, it, lines, false, "from_demon"); }
     e.items = [];
     if (has(st, "PATCH")) {                            // PATCH mends the party after a fight
       st.party = st.party.map(p => p.hp > 0 ? { ...p, hp: Math.min(p.hpmax, p.hp + Math.ceil(p.hpmax / 8)) } : p);
@@ -2709,7 +2728,7 @@
     const have = pockets(st, who), i = have.indexOf(it);
     if (i >= 0) have.splice(i, 1);
     tally(st, "offered");
-    gain(st, it, lines);
+    gain(st, it, lines, false, (st.party || []).includes(who) ? "given_member" : "from_demon");
   }
   function handTo(st, who, it, lines) {
     const i = (st.items || []).indexOf(it);
@@ -2952,7 +2971,7 @@
     const lines = [];
     if (pend.give) { const i = (st.items || []).indexOf(pend.give); if (i >= 0) st.items.splice(i, 1); }
     const took = got && BOX_OK(got) ? got : null;
-    if (took) gain(st, took, lines);
+    if (took) gain(st, took, lines, false, "from_stranger");
     act(st, "offer:box");
     tally(st, "traded"); ev(st, "traded");
     const d = st.dungeon; if (d) RS(d, d.at).boxed = true;
@@ -3297,7 +3316,7 @@
         st.log = `> KURA takes what's loose.`; st.extra = st.talkLine = "> A little comes away in her hands. She breathes easier.";
       } else if (Math.random() < 0.5) {
         const lines = [], got = pick(names(Math.random() < 0.25 ? "RARE" : "UNCOMMON"));
-        gain(st, got, lines);
+        gain(st, got, lines, false, "found_wall");
         st.log = `> KURA digs deep.`; st.extra = st.talkLine = `> Something gives. KURA pulls out ${got}.`;
       } else { st.log = `> KURA digs deep.`; st.extra = st.talkLine = "> " + pick(FIZZLE_DIG); }
       tally(st, "answers");
@@ -3754,7 +3773,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, PHASE_MARK, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

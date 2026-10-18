@@ -91,7 +91,7 @@ async function act(env, req, inner) {
   let st;
   try { st = tidy(ACT.apply(JSON.parse(row.state), a)); }
   catch (e) { console.error(e); throw new Oops("That didn't work.", 400); }
-  const spends = await settleCopies(env, inner, st, a);
+  const spends = await settleCopies(env, inner, st, a, me, JSON.parse(row.state));
   const s = JSON.stringify(kept(st));
   if (s === row.state && !OUTBOX.some((f) => st[f] !== undefined)) return { same: true, n: row.n };
   if (s.length > MAX_RUN) throw new Oops("This run has grown too big to keep.", 413);
@@ -123,7 +123,11 @@ async function sendOut(env, inner, me, st, spends) {
 // which is used up in the registry after the answer. Things the rules never found (the starting kit) have no copy.
 // MAIL's send-home names its copy (takeAway { name, itemId, copy }), so that copy leaves the bag's list without being
 // used up. Visitors (88x31 buttons) are tracked by the rules themselves (st.visitors) and never appear here.
-async function settleCopies(env, inner, st, a) {
+// (v1.25) MARKS, a copy's history. A new find waits with the marks it was born with (q: the moon's phase, and how it
+// came: found in a wall, from a demon, from a friend, left by a stranger); climbing a level adds carried_up to every
+// copy in the bag. Once a copy has its number, its waiting marks are stamped in the registry (same key, same mark, so a
+// retry never makes two) and move to m, which INVOKE shows. A mark the registry refuses or can't take keeps waiting.
+export async function settleCopies(env, inner, st, a, me, old) {
   const copies = st.copies || {}, spends = [];
   if (a.t === "takeAway" && Number.isInteger(a.copy)) {
     const list = copies[a.name] || [], i = list.findIndex((e) => e.c === a.copy);
@@ -134,8 +138,13 @@ async function settleCopies(env, inner, st, a) {
   for (const f of st.finds || []) {
     const name = ACT.nameOf(f.id);
     if (!name) continue;
-    (copies[name] = copies[name] || []).push({ k: f.key, c: null });
+    const q = [], ph = Number.isInteger(f.p) ? ACT.phaseMark(f.p) : null;
+    if (ph) q.push(ph);
+    if (typeof f.h === "string") q.push(f.h);
+    (copies[name] = copies[name] || []).push(q.length ? { k: f.key, c: null, q } : { k: f.key, c: null });
   }
+  const up = (st.climb || 1) - ((old && old.climb) || 1);
+  if (up > 0) for (const list of Object.values(copies)) for (const e of list) for (let i = 1; i <= up; i++) (e.q = e.q || []).push("carried_up:" + ((old.climb || 1) + i));
   for (const [name, list] of Object.entries(copies)) for (const e of list) if (e.c === null && (e.t || 0) < 5) { e.t = (e.t || 0) + 1; ask.push({ id: ACT.itemId(name), key: e.k }); }   // five tries, then it stays unnumbered
   if (ask.length && inner) {
     try {
@@ -144,6 +153,7 @@ async function settleCopies(env, inner, st, a) {
       for (const list of Object.values(copies)) for (const e of list) if (e.c === null && got.has(e.k)) { e.c = got.get(e.k); delete e.t; }
     } catch (e) { console.error("copies", e); }
   }
+  if (env.REGISTRY && me) await stampMarks(env, me, copies);
   for (const name of st.gone || []) {
     const list = copies[name];
     if (!list || !list.length) continue;
@@ -153,6 +163,23 @@ async function settleCopies(env, inner, st, a) {
   }
   if (Object.keys(copies).length) st.copies = copies; else delete st.copies;
   return spends;
+}
+const NIGHT = new Set([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ACT.phaseMark(i)));
+async function stampMarks(env, me, copies) {
+  for (const [name, list] of Object.entries(copies)) for (const e of list) {
+    if (e.c === null || !e.q || !e.q.length) continue;
+    const itemId = ACT.itemId(name), left = [];
+    for (const w of e.q) {
+      const value = w.split(":")[0], kind = NIGHT.has(value) ? "night" : "deed";
+      try {
+        const r = await env.REGISTRY.addMark({ itemId, copy: e.c, holder: { game: "4dungeon", playerId: me.id }, kind, value, key: me.id + ":" + e.k + ":" + w });
+        if (r && r.ok) (e.m = e.m || []).push(value);
+        else if (r && r.error && /theirs|used up|No such/.test(r.error)) { /* never going to land: drop it */ }
+        else left.push(w);
+      } catch (err) { console.error("marks", err); left.push(w); }
+    }
+    if (left.length) e.q = left; else delete e.q;
+  }
 }
 const later = (ctx, job) => { const p = job.catch((e) => console.error("sendOut", e)); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else return p; };
 

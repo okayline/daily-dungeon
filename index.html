@@ -1443,7 +1443,7 @@
     if (!open) { invReg = null; return; }
     placeInView(box);
     visitorTick(true);                                // a visiting button may be waiting: check when the bag opens
-    invList = save ? RULES.inventory(save).flatMap(it => Array.from({ length: it.count }, () => ({ ...it, count: 1 }))) : [];   // one line per thing (v1.05.1)
+    invList = save ? RULES.inventory(save).flatMap(it => Array.from({ length: it.count }, (_, k) => ({ ...it, count: 1, history: RULES.markLines((it.marks || [])[k]) }))) : [];   // one line per thing (v1.05.1); (v1.25) each with its own copy's history
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
     // (v1.06.1: ICHOR is always shown, even at 0.)
     if (save) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
@@ -1483,14 +1483,10 @@
     add(au ? head.padEnd(41 - (au.name.length + au.loud.length + 2)) + `${au.name}  ${au.loud}` : head, "");
     const ich = invList.length && invList[0].ichor ? 1 : 0;      // ICHOR is a count, not a thing: it sits above the bag as 0
     const empty = !(save && (save.items || []).length);
-    add(" ");                                                    // (v1.06.1) a little air under the title, above ICHOR
+    add(" ");                                                    // (v1.06.1) a little air under the title
+    // (v1.25) ICHOR and SILVER live on the foot line (not a row of the list), so the chosen thing has room for its history.
     invList.forEach((it, i) => {
-      if (it.ichor) {                                          // ICHOR and SILVER: one line, two buttons
-        const row = document.createElement("div"); row.dataset.i = i;
-        const mk = (t, top) => { const sp = document.createElement("span"); sp.className = "btn"; sp.dataset.top = top; sp.textContent = t; return sp; };
-        row.append(mk(`${i === invSel && topSel === 0 ? ">" : " "} 0  ICHOR  (${save.ichor}/${RULES.FLASK_MAX})`, 0), "   ", mk(`${i === invSel && topSel === 1 ? ">" : " "} SILVER  (${save.silver || 0})`, 1));
-        pre.appendChild(row); return;
-      }
+      if (it.ichor) return;                                    // ICHOR and SILVER: drawn on the foot line below
       add(`${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{42}).{4,}$/, "$1..."), "btn", i); });
     if (empty) add("  1  The bag is empty", "dim");               // (v1.06.1) no row of empty slots when there's nothing in it
     else for (let k = invList.length - ich; k < RULES.BAG_MAX; k++) add(`  ${k + 1}  .`, "dim");
@@ -1502,12 +1498,13 @@
       const tag = it.silver ? `${save.silver || 0} in hand` : it.ichor ? `${save.ichor} in hand` : RULES.itemAlignName(it.name);
       const nm = it.silver ? "SILVER" : it.ichor ? "ICHOR" : it.name, room = 41 - 4 - tag.length - 2;
       const shown = nm.length > room ? nm.slice(0, room - 2) + ".." : nm;
-      const descRows = (it.ichor ? [it.text] : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : [])]).reduce((n, l) => n + wrapText(l, 41).length, 0);
+      const descRows = (it.ichor ? [it.text] : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : []), ...(it.history || [])]).reduce((n, l) => n + wrapText(l, 41).length, 0);
       if (descRows < 2) add(" ");                                // (v1.06.1) a blank line above the chosen thing's rule, given up for a two-line description
       add(`-- ${shown} ${"-".repeat(Math.max(1, 41 - 4 - shown.length - tag.length - 1))} ${tag}`, "dim");
       const lines = it.ichor ? [it.text]
         : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : [])];
       for (const l of lines) for (const w of wrapText(l, 41)) add(w, "");
+      for (const l of it.history || []) for (const w of wrapText(l, 41)) add(w, "dim");   // (v1.25) where this copy has been
     }
     // What happened on the last try to use something (cleared when another item is chosen).
     const btn = (t, k, cls) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = cls || "btn"; sp.dataset[k] = "1"; return sp; };
@@ -1519,7 +1516,12 @@
     const help = add("", "");
     if (empty) help.style.marginTop = "0";                       // (v1.06.1) with nothing in the bag, the foot comes up under the list
     if (holdBtn) { const hl = document.createElement("div"); hl.append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : ""))); help.append(hl); }
-    help.append("[1-9] use  ", btn("MAIL", "reg"), "  ", btn("[C]LOSE", "close"));   // (v1.06.1: a number uses it straight away; 0 is ICHOR when there is some; arrows and Enter still work)
+    // (v1.25) The foot: ICHOR and SILVER (0 is ICHOR; arrows and Enter still work; a number uses a thing straight away), then [M]AIL and [C]LOSE.
+    if (ich) {
+      const mk = (t, top) => { const sp = document.createElement("span"); sp.className = "btn"; sp.dataset.top = top; sp.dataset.i = 0; sp.textContent = t; return sp; };
+      help.append(mk(`${invSel === 0 && topSel === 0 ? ">" : " "}ICHOR ${save.ichor}/${RULES.FLASK_MAX}`, 0), " ", mk(`${invSel === 0 && topSel === 1 ? ">" : " "}SILVER ${save.silver || 0}`, 1), "  ");
+    }
+    help.append(btn("[M]AIL", "reg"), " ", btn("[C]LOSE", "close"));
   }
   // THE EXCHANGE WINDOW (v1.00): opened from the screen in a dead end's wall; one window over the view like INVOKE. Four tabs:
   //   MARKET - public offers (others' only). ENTER takes one; one that asks for something takes a matching thing of yours.
@@ -2898,7 +2900,7 @@
     if (invReg) { const ra = e.target.closest("[data-regact]"); if (ra) regAct(ra.dataset.regact); return; }
     if (e.target.closest("[data-reg]")) { invReg = { page: 0, items: null, msg: "", err: "", loading: false }; return showInv(true); }
     const tp = e.target.closest("[data-top]");
-    if (tp && ichorPick < 0) { const t = Number(tp.dataset.top); if (invSel === 0 && topSel === t) return useInv(0); invSel = 0; topSel = t; return showInv(true); }
+    if (tp && ichorPick < 0) { const t = Number(tp.dataset.top); invSel = 0; topSel = t; showInv(true); return useInv(0); }   // (v1.25) one click uses it
     if (e.target.closest("[data-use]")) return useInv(invSel);
     if (e.target.closest("[data-close]")) { showInv(false); if (save && save.encounter) encounterBox(); return; }
     if (e.target.closest("[data-codex]")) { showInv(false); codexSel = -1; return showCodex(true); }
@@ -2987,7 +2989,7 @@
     }
     if (exOpen()) { if (document.activeElement && document.activeElement.id === "excode") return; return exKey(e, key); }
     if (!document.getElementById("inv").hidden) {
-      if (invReg) { e.preventDefault(); if (key === "escape" || key === "c" || key === "i" || key === "backspace") { invReg = null; showInv(true); } return; }
+      if (invReg) { e.preventDefault(); if (key === "escape" || key === "c" || key === "i" || key === "m" || key === "backspace") { invReg = null; showInv(true); } return; }
       if (ichorPick >= 0) {
         e.preventDefault();
         const n = save.party.length;
@@ -2999,6 +3001,7 @@
       }
       if (key === "i" || key === "c" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
       else if (key === "h") { e.preventDefault(); holdAction(); }
+      else if (key === "m") { e.preventDefault(); invReg = { page: 0, items: null, msg: "", err: "", loading: false }; showInv(true); }
       else if ((key === "arrowleft" || key === "arrowright") && invSel === 0 && invList.length && invList[0].ichor) { e.preventDefault(); topSel = key === "arrowright" ? 1 : 0; showInv(true); }
       else if (/^[0-9]$/.test(key)) { e.preventDefault(); if (key === "0") topSel = 0; const ich = invList.length && invList[0].ichor ? 1 : 0, n = Number(key);   // 0 is ICHOR, 1-9 the bag
         if (n === 0 ? ich : n <= invList.length - ich) { invSel = n === 0 ? 0 : n - 1 + ich; showInv(true); useInv(invSel); } }   // (v1.06.1) pressing the number uses it

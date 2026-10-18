@@ -2,6 +2,11 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.25 - Marked - Oct 17 2026, 18:30 HST
+
+- **Things remember.** What KURA finds now keeps a little history of its own: how it came to her, under which moon, and how far she has carried it up. Look in INVOKE.
+- **A tidier bag.** ICHOR and SILVER sit on the bottom line of INVOKE now, one click to use, and MAIL has its own key, [M].
+
 ## v1.24 - Behind Closed Doors - Oct 17 2026, 10:50 HST
 
 - **What's behind the doors stays behind them.** The server keeps what each door and wall hides to itself and only sends your browser what's on screen.
