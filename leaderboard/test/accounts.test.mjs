@@ -73,9 +73,6 @@ function browser(env, { ip = "203.0.113.1", origin = ORIGIN } = {}) {
   };
   return me;
 }
-// a run as the page's PASSWORD makes it (base64 of JSON), only what the Worker checks for
-const passwordOf = (extra = {}) => Buffer.from(JSON.stringify({ dungeon: { floor: { v: 11 } }, party: [], key: "k".repeat(48), ...extra })).toString("base64");
-
 test("a save code makes a player and account; another browser logs in with it and is the same player", async () => {
   const env = makeEnv(), a = browser(env, { ip: "203.0.113.1" }), b = browser(env, { ip: "203.0.113.2" });
   const { data } = await a("/api/codes", { action: "new" });
@@ -87,23 +84,6 @@ test("a save code makes a player and account; another browser logs in with it an
   assert.equal(acct.player, true); assert.equal(acct.codes.length, 1); assert.equal(acct.devices, 2);
   assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM players").get().n, 1);
   assert.equal(env.ACCOUNTS.links.get("1|4dungeon"), 1);
-});
-
-test("the run saves to the cloud and a second device gets it; bad runs are refused; logged-out callers get nothing", async () => {
-  const env = makeEnv(), a = browser(env, { ip: "203.0.113.3" }), b = browser(env, { ip: "203.0.113.4" });
-  assert.equal((await a("/api/save")).status, 401);
-  const { data } = await a("/api/codes", { action: "new" });
-  assert.deepEqual((await a("/api/save")).data, { code: null, saved: null });
-  const code = passwordOf();
-  assert.equal((await a("/api/save", { code })).status, 200);
-  await b("/api/load", { code: data.code });
-  assert.equal((await b("/api/save")).data.code, code);
-  assert.equal((await a("/api/account")).data.saved > 0, true);
-  const code2 = passwordOf({ steps: 9 });
-  await a("/api/save", { code: code2 });                                  // the newest write wins
-  assert.equal((await b("/api/save")).data.code, code2);
-  for (const bad of ["", "not base64!!", Buffer.from("{}").toString("base64"), Buffer.from("nope").toString("base64"), "A".repeat(400001)]) assert.equal((await a("/api/save", { code: bad })).status, 400);
-  assert.equal(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM cloud_saves").get().n, 1);
 });
 
 test("a post from a logged-in player is remembered as theirs; the old address (no /api) still works for the board", async () => {

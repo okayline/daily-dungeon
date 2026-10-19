@@ -3,27 +3,25 @@
 //
 // Save codes and passkeys belong to the shared Accounts service (the dungeon-items Worker, binding ACCOUNTS; see its
 // ACCOUNTS.md), the same one the other 88x31 games use: one passkey for every game. This file keeps 4Dungeon's own
-// side: its players (a login token), the player an account has here (game name "4dungeon"), and the cloud-saved run.
+// side: its players (a login token) and the player an account has here (game name "4dungeon").
 //
 // The page (dungeon.88x31.app) calls this Worker on its own address (workers.dev), so there's no cookie: a login is a random
 // token the page keeps in localStorage and sends as "Authorization: Bearer <token>" (only its hash is stored). Answers that
 // log in carry {token}; logout answers {token: ""}. Only pages in ACCOUNT_ORIGINS may use these routes, and that page's
 // origin is what the shared service checks passkeys against (RP ID 88x31.app).
-//   GET  /account                       who you are here: save codes, passkeys, whether a run is saved
+//   GET  /account                       who you are here: save codes and passkeys
 //   POST /codes {action: "new"|"remove", id}   make a save code (shown once) or forget one
 //   POST /load {code}                   log this browser in as the player a save code belongs to
 //   POST /passkey {action: register_options|register|login_options|login|remove}
 //   POST /logout                        this browser forgets its player (needs a code or passkey first)
-//   GET  /save                          the run saved to the cloud: {code, saved} or {code: null}
-//   POST /save {code}                   save the run (its PASSWORD text) to the cloud
 //   POST /found {finds: [{id, key}]}    (v1.14) register gained items as numbered copies in the shared registry
 //   POST /spent {items: [{itemId, copy}]}  (v1.15) copies that left a run's bag for good (broken, given, traded): used up in the registry
 //   GET  /inventory                     (v1.14) the copies you hold in 4Dungeon: your finds, and 88x31 buttons visiting
 //   POST /send {itemId, copy}           (v1.14) send one to your 88x31 (a button goes home; a dungeon item visits)
 import SHARED from "../items.js";
-const GAME = "4dungeon", MAX_SAVE = 400000, MAX_FOUND_A_DAY = 300;
+const GAME = "4dungeon", MAX_FOUND_A_DAY = 300;
 const OUR_ITEMS = new Set(SHARED.filter((i) => !i.retired).map((i) => i.id));   // only 4Dungeon's own items are registered from here
-const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/save", "/found", "/spent", "/inventory", "/send"]);
+const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/found", "/spent", "/inventory", "/send"]);
 
 export class Oops extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 const now = () => Math.floor(Date.now() / 1000);
@@ -79,7 +77,7 @@ async function accountFor(env, me, make = false) {
 }
 
 // Log this browser in as the account's player here: the one it already has, else this browser's own player (if it has
-// no account yet), else a new one. Its cloud-saved run comes with it.
+// no account yet), else a new one.
 async function enter(env, req, ctx, accountId) {
   const acc = ACC(env);
   let { playerId } = await acc.playerFor(accountId, GAME);
@@ -97,12 +95,11 @@ export const body = async (req) => { let v; try { v = await req.json(); } catch 
 
 async function account(env, req) {
   const me = await playerOf(env, req);
-  if (!me) return { player: false, codes: [], passkeys: [], devices: 0, saved: null };
+  if (!me) return { player: false, codes: [], passkeys: [], devices: 0 };
   const id = await accountFor(env, me);
   const ways = id ? ok(await ACC(env).info(id)) : { codes: [], passkeys: [] };
   const devices = 1 + (await env.DB.prepare("SELECT COUNT(*) AS n FROM player_sessions WHERE player_id = ?").bind(me.id).first()).n;
-  const s = await env.DB.prepare("SELECT saved FROM cloud_saves WHERE player_id = ?").bind(me.id).first();
-  return { player: true, codes: ways.codes, passkeys: ways.passkeys, devices, saved: s ? s.saved : null };
+  return { player: true, codes: ways.codes, passkeys: ways.passkeys, devices };
 }
 
 async function codes(env, req, ctx) {
@@ -160,24 +157,6 @@ async function logout(env, req, ctx) {
   return { ok: true };
 }
 
-// The run's PASSWORD text (base64 JSON, made by the page). Only checked for size and shape: the game's rules run in the
-// browser, so the server can't judge a run, only keep it. One cloud save per player; the newest write wins.
-async function saveRun(env, req, method) {
-  const me = await mustPlayer(env, req);
-  if (method === "GET") {
-    const s = await env.DB.prepare("SELECT code, saved FROM cloud_saves WHERE player_id = ?").bind(me.id).first();
-    return s ? { code: s.code, saved: s.saved } : { code: null, saved: null };
-  }
-  if (!(await limited(env, req, "cloud-save", 120, 3600))) throw new Oops("Saving too often. Try again in a bit.", 429);
-  const code = String((await body(req)).code || "");
-  if (!code || code.length > MAX_SAVE || !/^[A-Za-z0-9+/=]+$/.test(code)) throw new Oops("That doesn't look like a run.");
-  let run; try { run = JSON.parse(decodeURIComponent(escape(atob(code)))); } catch { throw new Oops("That doesn't look like a run."); }
-  if (!run || !run.dungeon || !run.party) throw new Oops("That doesn't look like a run.");
-  const t = now();
-  await env.DB.prepare("INSERT INTO cloud_saves (player_id, code, saved) VALUES (?, ?, ?) ON CONFLICT(player_id) DO UPDATE SET code = excluded.code, saved = excluded.saved").bind(me.id, code, t).run();
-  return { ok: true, saved: t };
-}
-
 // Returns a Response for an account route, or null when the path isn't one (the caller carries on with the board).
 export async function accountsRoute(req, env, url) {
   if (!SAVE_ROUTES.has(url.pathname)) return null;
@@ -187,14 +166,13 @@ export async function accountsRoute(req, env, url) {
     if (!originsOf(env).includes(from)) throw new Oops("Accounts work at dungeon.88x31.app. Open the game there to use them.", 403);
     if (req.method === "POST" && !/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const p = url.pathname, m = req.method;
-    if (p !== "/save" && p !== "/found" && p !== "/spent" && p !== "/inventory") ACC(env);   // no accounts service, no players made
+    if (p !== "/found" && p !== "/spent" && p !== "/inventory") ACC(env);   // no accounts service, no players made
     let out;
     if (p === "/account" && m === "GET") out = await account(env, req);
     else if (p === "/codes" && m === "POST") out = await codes(env, req, ctx);
     else if (p === "/load" && m === "POST") out = await load(env, req, ctx);
     else if (p === "/passkey" && m === "POST") out = await passkey(env, req, ctx);
     else if (p === "/logout" && m === "POST") out = await logout(env, req, ctx);
-    else if (p === "/save" && (m === "GET" || m === "POST")) out = await saveRun(env, req, m);
     else if (p === "/found" && m === "POST") out = await found(env, req);
     else if (p === "/spent" && m === "POST") out = await spent(env, req);
     else if (p === "/inventory" && m === "GET") out = await inventory(env, req);

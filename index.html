@@ -766,7 +766,6 @@
       delete save.unsaved;
       save.saved = hstDate();
       localStorage.setItem(KEY, JSON.stringify(save));
-      cloudSoon();
     } catch (e) {
       save.unsaved = true;   // private window or storage blocked: play still works, it just won't last
     }
@@ -1278,24 +1277,11 @@
     }
   }
 
-  // The account page opens from [P] and the header button. (The old copy/paste password box is gone: the cloud save does that.)
+  // The account page opens from [P] and the header button.
   function backup() { accountBox(); }
-  // Load a run from its code (what GET RUN brings back from the cloud). say(text) reports a problem.
-  function loadRunCode(got, say) {
-    try {
-      const s = JSON.parse(decodeURIComponent(escape(atob(got))));
-      if (!s.dungeon || !s.party || !s.dungeon.floor || s.dungeon.floor.v !== 11) throw new Error("not a run");   // the same shape start() accepts
-      const trial = JSON.parse(JSON.stringify(s)); RULES.tick(trial); SMT.renderScreen(trial, "");      // it must really run, not just parse
-      loadCode = s;
-      // The code carries its run's key (v1.00): another key means another stash and other offers.
-      const otherKey = s.key && s.key !== ecoKey();
-      if (save) askBox("load", "REPLACE THIS RUN?", ["The run from the cloud takes this one's place."].concat(otherKey ? ["It carries another key: the stash and offers go with it."] : []));
-      else { pending = "load"; answerConfirm(true); }      // nothing to replace: no need to ask
-    } catch (e) { say("That run didn't work. Nothing was changed."); }
-  }
   let passAct = null;
 
-  // The account server, shared by the account page, the bag's INVENTORY and the cloud save. The login is a token kept in localStorage ("dd-token"), sent as a bearer header.
+  // The account server, shared by the account page and the bag's INVENTORY. The login is a token kept in localStorage ("dd-token"), sent as a bearer header.
   const acctApi = async (path, body, keep) => {
     let tok = ""; try { tok = localStorage.getItem("dd-token") || ""; } catch (e) {}
     const headers = tok ? { authorization: "Bearer " + tok } : {};
@@ -1307,33 +1293,9 @@
     } catch (e) { return { error: "Can't reach the server." }; }
   };
   const signedIn = () => { if (!ACCOUNT_HOST) return false; try { return !!localStorage.getItem("dd-token"); } catch (e) { return false; } };
-  // THE CLOUD SAVE (v1.17): signed in, the run follows you by itself. The browser's own storage is still the working copy (instant, works
-  // offline); the cloud copy is sent at most once every two minutes while you play, and when the page is left. When you sign in on a device,
-  // or open the page signed in, a cloud run that is further along (later day, then more steps) is offered in place of the local one.
-  let cloudTimer = 0, cloudLast = "";
-  function cloudPush(leaving) {
-    if (SERVER) return;                              // (v1.21) the run is on the server already
-    if (cloudTimer) { clearTimeout(cloudTimer); cloudTimer = 0; }
-    if (!save || !signedIn()) return;
-    const code = btoa(unescape(encodeURIComponent(JSON.stringify({ ...save, history: (save.history || []).slice(-300) }))));
-    if (code === cloudLast) return;
-    cloudLast = code;
-    acctApi("/save", { code }, leaving).then(r => { if (r && r.error) cloudLast = ""; });
-  }
-  function cloudSoon() { if (!cloudTimer && signedIn()) cloudTimer = setTimeout(() => cloudPush(false), 120000); }
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") cloudPush(true); });
-  window.addEventListener("pagehide", () => cloudPush(true));
-  async function cloudPull(say) {
-    if (SERVER) {                                    // (v1.21) signed in on this device: play the account's run from the server
-      const r = await serverRun(save); if (r) { save = r; persist(); if (!atTitle) draw(); }
-      return;
-    }
-    if (!signedIn()) return;
-    const r = await acctApi("/save"); if (r.error || !r.code) return cloudPush(false);
-    let c; try { c = JSON.parse(decodeURIComponent(escape(atob(r.code)))); } catch (e) { return; }
-    const cd = c.day || 0, ld = save ? save.day || 0 : 0;
-    if (!save || cd > ld || (cd === ld && (c.steps || 0) > (save.steps || 0))) return loadRunCode(r.code, say || (() => {}));
-    cloudPush(false);                               // this device is ahead (or level): the cloud takes it
+  // After signing in (or opening the page signed in), play the account's run from the server.
+  async function reloadRun() {
+    const r = await serverRun(save); if (r) { save = r; persist(); if (!atTitle) draw(); }
   }
 
   // ACCOUNT: a save code or passkey (the shared 88x31 accounts) so the run follows you across devices. Optional.
@@ -1364,7 +1326,7 @@
       codeBox.textContent = "";
       const line = t => { const d = document.createElement("div"); d.textContent = t; codeBox.appendChild(d); };
       if (a.error) { line(a.error); } else if (!a.player) { line("Not signed in. Playing without an account is fine."); }
-      else { line("Signed in. " + (a.codes ? a.codes.length : 0) + " save code(s), " + (a.passkeys ? a.passkeys.length : 0) + " passkey(s)." + (a.saved ? " Your run saves to the cloud by itself." : "")); }
+      else { line("Signed in. " + (a.codes ? a.codes.length : 0) + " save code(s), " + (a.passkeys ? a.passkeys.length : 0) + " passkey(s)."); }
       row.textContent = "";
       const line2 = (...b) => { const d = document.createElement("div"); d.className = "brow2"; d.append(...b); row.appendChild(d); };
       line2(btn("[ NEW SAVE CODE ]", "code"), btn("[ ENTER CODE ]", "enter"));
@@ -1387,7 +1349,7 @@
         const l = document.createElement("a"); l.href = url; l.download = "4dungeon-save-code.txt"; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
         return say("Save code downloaded.");
       }
-      if (a === "enter") { const c = prompt("Save code"); if (!c) return; const r = await api("/load", { code: c.trim() }); say(r.error || "Signed in."); await draw2(); if (!r.error) cloudPull(say); return; }
+      if (a === "enter") { const c = prompt("Save code"); if (!c) return; const r = await api("/load", { code: c.trim() }); say(r.error || "Signed in."); await draw2(); if (!r.error) reloadRun(); return; }
       if (a === "out") { const r = await api("/logout", {}); say(r.error || "Signed out."); return draw2(); }
       try {
         if (a === "pk") {
@@ -1400,7 +1362,7 @@
           const o = await api("/passkey", { action: "login_options" }); if (o.error) return say(o.error);
           const cred = await navigator.credentials.get({ publicKey: { ...o, challenge: unb64(o.challenge) } });
           const r = await api("/passkey", { action: "login", credential: { id: cred.id, response: { clientDataJSON: b64(cred.response.clientDataJSON), authenticatorData: b64(cred.response.authenticatorData), signature: b64(cred.response.signature) } } });
-          say(r.error || "Signed in."); await draw2(); if (!r.error) cloudPull(say); return;
+          say(r.error || "Signed in."); await draw2(); if (!r.error) reloadRun(); return;
         }
       } catch (e) { say("That didn't work or was cancelled."); }
     };
@@ -1862,7 +1824,7 @@
         ["[1]  [2]  [ESC]", "take one of two things offered, or leave it"],
         ["[C]ODEX", "every demon and item found, over all runs"],
         ["[L]OG", "the adventure log"],
-        ["[P]ASSWORD", "your account: save codes, passkeys and the cloud save"],
+        ["[P]ASSWORD", "your account: save codes and passkeys"],
         ...(LEADERBOARD_URL ? [["{{BOARD}}", "the leaderboard (post when a run ends)"]] : []),
         ["[R]ESET", "start a new run"],
         ["[?]", "this page"],
@@ -1977,8 +1939,8 @@
     box.dataset.mode = "confirm";
     box.hidden = false;
   }
-  // STANDBY, a new run and loading a password all ask in the game too (no browser dialogs).
-  let pending = null, holdOK = false, resetOK = false, loadCode = null;
+  // Holding the omen and a new run ask in the game too (no browser dialogs).
+  let pending = null, holdOK = false, resetOK = false;
   function askBox(kind, title, lines) {
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     floatBox(box);
@@ -2001,16 +1963,6 @@
     if (pending) {
       const kind = pending; pending = null;
       document.getElementById("found").hidden = true;
-      if (kind === "load") {
-        if (yes && loadCode) {
-          if (atTitle) leaveTitle();          // a password loaded from the title screen goes straight into that run
-          save = loadCode; loadCode = null; tick();
-          if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
-          heldExtra = null; disarm(); logGlow = false; invSel = 0;
-          persist(); draw(); restoreBoxes();
-        } else { loadCode = null; draw(); restoreBoxes(); }
-        return;
-      }
       if (yes) { if (kind === "hold") holdOK = true; else resetOK = true; act(kind); }
       else if (atTitle) drawTitle();          // NEW RUN asked from the title screen, then declined: back to the title
       else { draw(); restoreBoxes(); }
@@ -3113,7 +3065,7 @@
     if (k) { e.preventDefault(); RULES.holding(e.repeat); try { act(k); } finally { RULES.holding(false); } }
   });
 
-  Promise.resolve(start()).then(() => cloudPull());
+  Promise.resolve(start()).then(() => reloadRun());
   // Live clock: redraw the moment the minute turns over (the colon blinks on its own),
   // and catch up with the real date so midnight brings the new day.
   let shownMinute = SMT.now().getMinutes();

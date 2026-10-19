@@ -148,18 +148,12 @@ CREATE TABLE IF NOT EXISTS player_sessions (
   seen_at     INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS player_sessions_player ON player_sessions (player_id);
--- the run saved to the cloud: the page's PASSWORD text, one per player, the newest write wins
-CREATE TABLE IF NOT EXISTS cloud_saves (
-  player_id   INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
-  code        TEXT NOT NULL,
-  saved       INTEGER NOT NULL
-);
 -- which player posted which run to the board (never shown; the board stays anonymous)
 CREATE TABLE IF NOT EXISTS score_players (
   run         TEXT PRIMARY KEY,
   player_id   INTEGER NOT NULL
 );
--- slows down making players and cloud saves
+-- slows down making players
 CREATE TABLE IF NOT EXISTS acct_limits (
   key           TEXT NOT NULL,
   window_start  INTEGER NOT NULL,

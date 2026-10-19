@@ -27,9 +27,9 @@ The first time it asks for the key; the page remembers it in that browser.
 
 ## Player accounts (v1.13)
 
-Optional. Save codes and passkeys come from the shared Accounts service in dungeon-items (`ACCOUNTS` service binding, entrypoint `Accounts`), game name `4dungeon`. Each player has a cookie (`dd`) and a cloud copy of their run (the PASSWORD text).
+Optional. Save codes and passkeys come from the shared Accounts service in dungeon-items (`ACCOUNTS` service binding, entrypoint `Accounts`), game name `4dungeon`. Each player has a login token kept by the page; the run itself lives on the server (`runs`).
 
 - Serve the game and this Worker from `dungeon.88x31.app` (page at `/`, Worker on `dungeon.88x31.app/api/*`). Passkeys and cookies need that one address; on github.io the ACCOUNT button just says so.
-- Run `npx wrangler d1 execute daily-dungeon-board --remote --file=schema.sql` (adds players, player_sessions, cloud_saves, score_players, acct_limits).
+- Run `npx wrangler d1 execute daily-dungeon-board --remote --file=schema.sql` (adds players, player_sessions, score_players, acct_limits).
 - Add the `ACCOUNTS` service binding in the dashboard if the deploy doesn't take it from `wrangler.toml`.
 - Old addresses (no `/api`) keep working. Tests: `npm test`.

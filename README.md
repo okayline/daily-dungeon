@@ -25,7 +25,7 @@ An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Te
 - **Aura.** What you carry, who walks with you and what you've done lately make you louder, and give you a colour. Demons, the dungeon, and the moon can tell.
 - **The Omen.** Once a day the moon whispers her Omen, and it tilts what the day brings.
 - **The Board.** Post a finished run to the leaderboard. Your run starts under a placeholder name; type your own when you post.
-- **Saves.** Your run lives in your browser. The account page ([P]) keeps a save code, passkeys and a cloud save to move it to another device.
+- **Saves.** Your run lives on the server. The account page ([P]) keeps a save code and passkeys so you can pick it up on another device.
 
 ## Files
 
