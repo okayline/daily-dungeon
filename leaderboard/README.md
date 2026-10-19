@@ -1,7 +1,6 @@
 # Leaderboard (Cloudflare Worker + D1)
 
-Ranked by deepest floor, then most days survived, then earliest. TURNS are shown on the board but never ranked. One entry per run. Scores are not provable (the game
-saves in the player's browser), so the Worker only blocks casual junk: value limits, one entry per run, five posts an
+Ranked by deepest floor, then most days survived, then earliest. TURNS are shown on the board but never ranked. One entry per run. Scores are not provable (the page sends the numbers, and `POST /score` doesn't check them against the run the server keeps), so the Worker only blocks casual junk: value limits, one entry per run, five posts an
 hour per sender, a name check and an origin check.
 
 ## Set it up (about four commands)
