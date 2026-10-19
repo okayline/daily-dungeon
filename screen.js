@@ -64,12 +64,6 @@
         const T = [".---------.", "| > _     |", "|  :: ::  |", "'---------'", "   [===]"], y0 = Math.max(t + 1, bm - 8);
         T.forEach((ln, j) => [...ln].forEach((ch, k) => { if (ch !== " ") put(cx - 5 + k, y0 + j, ch); }));
       }
-      if (end === "exchange") {            // the exchange's screen (v1.00): a size up from the altar's. Its five inner rows are
-        // drawn as U+2800 (a blank that is never typed anywhere else); the page swaps them for the moving market.
-        const W = 25, x0 = cx - 13, B = "\u2800".repeat(W);
-        const E = ["." + "-".repeat(W) + ".", "|" + B + "|", "|" + B + "|", "|" + B + "|", "|" + B + "|", "|" + B + "|", "'" + "-".repeat(W) + "'", "       [===]   [===]"];
-        E.forEach((ln, j) => [...ln].forEach((ch, k) => { if (ch !== " ") put(x0 + k, t + j, ch); }));
-      }
       if (end === "stairs") {
         for (let j = 0; j < 4; j++) {
           const y = bm - 4 + j, w = 2 + j * 2;

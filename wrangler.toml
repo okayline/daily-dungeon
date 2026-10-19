@@ -16,9 +16,6 @@ database_id = "a6dedccb-27e0-4988-84ea-64c7cd71c0ee"
 # The pages allowed to post scores (reads are open to anyone). The game's real address, no trailing slash;
 # several are fine, comma-separated. Blank means any page. If posting says "not allowed", the game shows the address it came from.
 ALLOW_ORIGIN = "https://okayline.github.io,https://html-classic.itch.zone,https://dungeon.88x31.app"
-# The exchange (v1.00): "1" puts the bots' trades in the live market with everyone's; "0" keeps them to
-# themselves (only the admin key sees them). Anonymous either way.
-BOTS_PUBLIC = "1"
 # Optional: comma-separated words a name may not contain (lowercase).
 BLOCKLIST = ""
 # Pages that may use player accounts (save codes, passkeys, cloud save), comma-separated. Must be https and under 88x31.app

@@ -616,8 +616,6 @@
     relay: ["Tone room", "Static room", "Dish room"], vault: ["Heavy room", "Sealed room", "Hushed room"],
     forge: ["Ash room", "Solder room", "Soot room"], altar: ["The altar"],
     archive: ["Drive room", "Rack room", "Spin room"], hall: ["Passageway", "Conduit", "Crawlway", "Corridor", "Walkway", "Service way"], dead: ["Beacon", "Lamp room", "Uplink", "Waystation", "Signal room", "Comms nook"],
-    // Since v1.00 every dead end (with no other kind) holds the exchange's screen, and is named for it.
-    exchange: ["Exchange", "Xchange", "Trade floor", "Market end", "Ticker room", "Trading gap", "Swap room"],
     plain: ["Dusty room", "Damp room", "Grey room", "Tiled room", "Mossy room", "Sooty room", "Round room", "Echo room", "Salt room",
       "Rusty room", "Hollow room", "Side room", "Back room", "Big room", "Small room", "Odd room", "Wet room", "Dry room", "Low room",
       "High room", "Lamp room", "Bent room", "Split room", "Dim room", "Old room", "Plain room", "Faded room", "Chalky room", "Bleak room",
@@ -627,11 +625,11 @@
     if (i === 0) return "The way in";
     if (allRooms(d)[i] && allRooms(d)[i].found.includes("stairs")) return "Stairs up";
     const rs = RS(d, i);
-    const rm = d.floor.rooms[i], exch = EXCHANGE_ON && rm.dead && !rm.kind;
+    const rm = d.floor.rooms[i];
     const oldDead = rm.dead && !rm.kind && (rs.name === "Dead end" || rs.name === "Sealed end");   // named before the signal-room names: takes a new one
-    if (rs.name && !oldDead && !(exch && NAMES_BY_KIND.dead.includes(rs.name))) return rs.name;    // (a dead end named before v1.00 takes an exchange name)
+    if (rs.name && !oldDead) return rs.name;
     const used = new Set(allRooms(d).map(x => x.name).filter(Boolean));
-    const lists = [NAMES_BY_KIND[rm.kind || (rm.hall ? "hall" : exch ? "exchange" : rm.dead ? "dead" : "plain")] || NAMES_BY_KIND.plain, NAMES_BY_KIND.plain];
+    const lists = [NAMES_BY_KIND[rm.kind || (rm.hall ? "hall" : rm.dead ? "dead" : "plain")] || NAMES_BY_KIND.plain, NAMES_BY_KIND.plain];
     const h = Math.abs(Math.imul((d.floor.seed | 0) ^ Math.imul(i + 1, 0x9e3779b1), 0x85ebca6b) >>> 7);
     for (const list of lists) {
       for (let t = 0; t < list.length; t++) { const n = list[(h + t) % list.length]; if (!used.has(n)) return (rs.name = n); }
@@ -753,7 +751,7 @@
     const stairsAhead = RS(d).found.includes("stairs") && st.facing === stairsDir(d.floor, d.at);
     st.view = {
       left: [!door(LEFT[st.facing]), true], right: [!door(RIGHT[st.facing]), true],
-      end: stairsAhead ? "stairs" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : facingExchange(st) ? "exchange" : "wall",
+      end: stairsAhead ? "stairs" : door(st.facing) ? "door" : facingAltar(st) ? "terminal" : "wall",
       lock: stairsAhead ? null : isSealed(d, st.facing) ? "x" : looksLocked(d, st.facing) ? "+" : null,    // the knob: + asks for the key, x is sealed
     };
     return st;
@@ -1142,8 +1140,8 @@
     if (rs.walls) return rs.walls;
     const room = d.floor.rooms[i];
     // The terminal's wall can't be searched for hidden things (it wakes the terminal instead), so nothing hides there.
-    const altar = room.kind === "altar" ? altarDir(d.floor, i) : null, exch = exchDir(d.floor, i);
-    const free = CW.filter(x => !doorWall(room, x) && x !== altar && x !== exch);
+    const altar = room.kind === "altar" ? altarDir(d.floor, i) : null;
+    const free = CW.filter(x => !doorWall(room, x) && x !== altar);
     const w = { taken: {} };
     free.forEach(x => { w[x] = []; w.taken[x] = 0; });
     const sd = stairsDir(d.floor, i);
@@ -1173,12 +1171,6 @@
     if (st.dead) { st.extra = OVER; return show(st); }
     if (st.encounter) { st.log = `> The ${st.encounter.name} is still here. FIGHT, TALK, or run through a door.`; return show(st); }
     if (!ensureFloor(st)) return show(st);
-    if (facingExchange(st)) {                             // the exchange's screen: free (even out of breath), and the page opens the window
-      act(st, "exchange:open");
-      st.log = "> KURA touches the screen. The market wakes.";
-      st.exchangeOpen = true;
-      return show(st);
-    }
     if (breathNow(st, true) < 1) { if (!/breath|needs a moment/.test(st.log || "")) tally(st, "breathOut"); nudgeBreath(st); st.log = "> " + pick(["KURA is out of breath.", "KURA needs a moment.", "Not yet. KURA catches her breath."].filter(l => "> " + l !== st.log)); return show(st); }
     delete st.look;                                       // (v1.06) looking up, SEARCH just looks back down at the wall
     spendBreath(st);
@@ -1623,27 +1615,6 @@
     return ALTAR_TALK[i];
   }
   const facingAltar = st => !!(st.dungeon && altarDir(st.dungeon.floor, st.dungeon.at) === st.facing);
-  // THE EXCHANGE (v1.00): every dead end has a screen set into one wall (never a door wall, never the stairs wall),
-  // where players trade. Searching that wall wakes it, free of breath; the page opens the exchange window.
-  // A dead end whose walls were laid out before v1.00 may still hide something behind that wall: until it is found,
-  // the wall searches like any other, and the screen only shows once the wall is bare.
-  // v1.04: the exchange is parked. Its screens are hidden and dead ends are plain again; the Worker keeps everything.
-  const EXCHANGE_ON = false;
-  function exchDir(fl, i) {
-    if (!EXCHANGE_ON) return null;
-    const room = fl.rooms[i];
-    if (!room || !room.dead || room.kind) return null;
-    const free = CW.filter(x => !doorWall(room, x) && !(fl.stairs === i && x === stairsDir(fl, i)));
-    return free.length ? free[(fl.seed + i * 13) % free.length] : null;
-  }
-  function exchHere(d, i) {
-    const x = exchDir(d.floor, i);
-    if (!x) return null;
-    const rs = RS(d, i), w = rs.walls;
-    if (w && w[x] && (w.taken[x] || 0) < w[x].length) return null;
-    return x;
-  }
-  const facingExchange = st => !!(st.dungeon && !st.look && exchHere(st.dungeon, st.dungeon.at) === st.facing);
   function altarUsed(st) { const d = st.dungeon; return !!(d && RS(d).altarDay === st.day); }
   function altarGifts(st) {
     const n = 20 * floorNum(st), out = [{ silver: n, ok: (st.silver ?? 0) >= n, label: `${n} SILVER` }];
@@ -3897,7 +3868,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), EXCHANGE_ON, lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

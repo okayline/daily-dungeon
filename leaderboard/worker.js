@@ -93,7 +93,7 @@ async function tallyStats(db, b, turns, who) {
 // each tag are kept. Forging one is cheap and harmless: nothing ranks on these or rewards them.
 const EVENT_KINDS = ["den", "bay", "relay", "vault", "forge", "altar", "archive", "void", "hall", "dead", "plain"];
 const EVENT_TAGS = ["out", "refused", "asked", "restored", "trickster", "altar", "joined", "silent", "deep", "left", "fall", "words", "traded", "parted", "moonpick"];
-async function titleFeed(db, botsLive) {
+async function titleFeed(db) {
   const epoch = epochIndex(), counts = {}, tally = { LAW: 0, CHAOS: 0 };
   const quiet = async (fn, fallback) => { try { return await fn(); } catch (e) { return fallback; } };   // a table missing on an old database just leaves its part empty
   for (const r of await quiet(async () => (await db.prepare(`SELECT key, count FROM counters WHERE period = ?1 LIMIT 400`).bind(epoch).all()).results, [])) counts[r.key] = r.count;
@@ -122,8 +122,7 @@ async function titleFeed(db, botsLive) {
   }
   if (events.length < 40) for (const r of await quiet(async () => (await db.prepare(`SELECT type AS t, v, made FROM events ORDER BY id DESC LIMIT ?1`).bind(40 - events.length).all()).results, [])) events.push(r);
   here.now = await liveNow(db);
-  const market = await quiet(() => marketFeed(db, botsLive), { open: [], traded: [], count: 0 });
-  return { market, epoch, law: tally.LAW, chaos: tally.CHAOS, counts, lastFall: (last && last.made) || null, lastOut: (out && out.made) || null, deepest: (top && top.floor) || null, events, here, names, deadliest };
+  return { epoch, law: tally.LAW, chaos: tally.CHAOS, counts, lastFall: (last && last.made) || null, lastOut: (out && out.made) || null, deepest: (top && top.floor) || null, events, here, names, deadliest };
 }
 const cors = () => ({ "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   "access-control-allow-headers": "content-type, authorization, x-admin-key, x-key", "access-control-max-age": "86400" });
@@ -137,279 +136,6 @@ async function rankOf(db, row) {
   const r = await db.prepare(`SELECT COUNT(*) AS n FROM scores WHERE ${NOT_BOT} AND (floor > ?1 OR (floor = ?1 AND days > ?2) OR (floor = ?1 AND days = ?2 AND made < ?3))`)
     .bind(row.floor, row.days, row.made).first();
   return r.n + 1;
-}
-
-// ============================================================================================================
-// THE EXCHANGE (v1.00): the player economy. Only RARE, MYTHIC and MOON things are tradeable; silver isn't.
-//
-// WHO: a long secret key the page keeps (and every run's password carries), sent as the x-key header. The Worker
-// keeps only its SHA-256 (the owner id), never the key. A key starting "bot" is a bot's: bots' offers are seen and
-// taken only with the admin key (x-admin-key), and bots never see or take anyone else's.
-//
-// WHAT COUNTS: a thing only exists here if the Worker witnessed its find as it happened (POST /eco/find), within
-// limits it keeps itself: so many finds a day per key and per sender, and MOON things only while the moon is near
-// full. The page's save can be edited all it likes; nothing in it reaches this ledger.
-//
-// WHERE A THING IS (state):
-//   bag    - in a living run's bag (RARE, MYTHIC). Dies with the run.
-//   stash  - a MOON thing kept by the key, across runs. A MOON find goes straight here.
-//   escrow - held by an open offer.
-//   gone   - taken out of the economy: a MOON thing moved from the stash into a run (a one-way door), or a bag
-//            thing the page says is no longer in the bag.
-//   dead   - its run ended.
-// A key has one run at a time. A request from a new run retires the old one (its bag things die, its offers end,
-// a MOON thing in an offer goes back to the stash); a retired run can't come back.
-//
-// OFFERS: one thing, asking for nothing (a gift), any thing of a tier, or one named thing. A short code
-// (ABC-DEF2). Public offers show in the market and the title's feed; private ones only by code. At most 3 open
-// per key. Every offer closes, strictly, when the moon's quarter ends; the thing goes back to its owner (to the
-// stash for MOON, to the run's bag if that run still lives, else it dies with the run).
-// MOON CAP: a run may take in one MOON thing per quarter from outside (bought, or from the stash when someone else
-// found it). Finding is never capped by it.
-//
-//   POST /eco/find      {run, name}                 -> {ok, id, name, stash} | {ok:false, why}   (name: the Worker's pick)
-//   POST /eco/mine      {run, bag:[names]}          -> {stash, bag, offers, fresh, moonCap, quarterEnd}
-//   GET  /eco/market                                -> {offers:[{code, name, tier, wants, bot?}]}
-//   GET  /eco/peek?code=                            -> {offer} | {gone: why}
-//   POST /eco/offer     {run, item, wants, public}  -> {code}
-//   POST /eco/cancel    {run, code}                 -> {ok, back}
-//   POST /eco/take      {run, code, pay}            -> {ok, got, stash}
-//   POST /eco/withdraw  {run, item}                 -> {ok, name}
-//   POST /eco/end       {run}                       -> {ok}     (the run is over: retire it now)
-// ============================================================================================================
-const ECO_CATALOG = {
-  RARE: ["a rune scratched into a circuit board", "a salt-crusted network cable", "a candle stub in a soda can", "a charm bracelet of old keycards",
-    "a rosary of fiber optic beads", "a sealed jar, humming faintly", "a SIM card in red thread", "a graffiti-stained saint's medal",
-    "a bullet casing on a leather cord", "a keycard, one corner burned", "an old COMP chip", "a black pearl"],
-  MYTHIC: ["a jar of grave salt", "a wax seal, unbroken", "a chipped bone die", "a sealed reliquary", "a ring of red gold", "a sword in a rotted sheath"],
-  MOON: ["a moonstone", "a shard of pale moonlight", "a fang still warm", "a silver-veined horn"],
-};
-const ECO_TIER = {}; for (const t in ECO_CATALOG) for (const n of ECO_CATALOG[t]) ECO_TIER[n] = t;
-// Finds a day (UTC): per key, and per sender across every key it uses (so a pile of fresh keys doesn't multiply them).
-// v1.01: tighter, and MOON finds also have a cap for the whole lunar month.
-const ECO_DAILY = { RARE: 3, MYTHIC: 2, MOON: 1 }, ECO_DAILY_SENDER = { RARE: 6, MYTHIC: 3, MOON: 2 };
-const ECO_MOON_MONTH = 2, ECO_MOON_MONTH_SENDER = 3;
-const ECO_NEW_KEYS_A_DAY = 5, ECO_OPEN_OFFERS = 3;
-// The moon's quarters and phases: the same math as screen.js (quarterOf, moonIndex).
-const ECO_QLEN = EPOCH_SYN / 4 * 86400000;
-const ecoQuarter = (t = Date.now()) => Math.floor((t - EPOCH_REF) / ECO_QLEN);
-const ecoQuarterEnd = q => Math.floor((EPOCH_REF + (q + 1) * ECO_QLEN) / 1000);
-const ecoMoonIndex = (t = Date.now()) => { let age = ((t - EPOCH_REF) / 86400000) % EPOCH_SYN; if (age < 0) age += EPOCH_SYN; return Math.floor(age / EPOCH_SYN * 8 + 0.5) % 8; };
-const ECO_MOON_PHASES = [3, 4, 5];       // MOON things only drop from waxing gibbous to waning gibbous (rules.js)
-const fullHash = async s => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))].map(b => b.toString(16).padStart(2, "0")).join("");
-const ECO_CODE_ABC = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-const ecoCode = () => { const r = crypto.getRandomValues(new Uint8Array(6)); const c = [...r].map(b => ECO_CODE_ABC[b % ECO_CODE_ABC.length]).join(""); return c.slice(0, 3) + "-" + c.slice(3); };
-const ecoNorm = c => { const x = String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); return x.slice(0, 3) + "-" + x.slice(3, 6); };
-const ecoWantsOk = w => w === "" || /^tier:(RARE|MYTHIC|MOON)$/.test(w) || (w.startsWith("name:") && !!ECO_TIER[w.slice(5)]);
-const ecoMatches = (w, it) => w === "" || (w.startsWith("tier:") && it.tier === w.slice(5)) || (w.startsWith("name:") && it.name === w.slice(5));
-
-// Retire a run: its bag things die, its open offers end (a MOON thing in one goes back to the stash).
-async function ecoRetire(db, owner, run) {
-  if (!run) return;
-  const now = Math.floor(Date.now() / 1000);
-  await db.batch([
-    db.prepare(`INSERT OR IGNORE INTO eco_retired (run, at) VALUES (?1, ?2)`).bind(run, now),
-    db.prepare(`UPDATE eco_items SET state = 'stash', run = NULL WHERE owner = ?1 AND state = 'escrow' AND tier = 'MOON' AND id IN (SELECT item FROM eco_offers WHERE owner = ?1 AND run = ?2 AND state = 'open')`).bind(owner, run),
-    db.prepare(`UPDATE eco_items SET state = 'dead' WHERE owner = ?1 AND run = ?2 AND state IN ('bag', 'escrow')`).bind(owner, run),
-    db.prepare(`UPDATE eco_offers SET state = 'dead', done = ?3 WHERE owner = ?1 AND run = ?2 AND state = 'open'`).bind(owner, run, now),
-  ]);
-}
-// Offers past their quarter: closed, and the thing goes back (stash for MOON; the run's bag if the run lives, as
-// a delivery the page picks up; otherwise it dies with the run).
-async function ecoSettle(db, owner, liveRun) {
-  const q = ecoQuarter(), now = Math.floor(Date.now() / 1000);
-  const old = (await db.prepare(`SELECT o.id, o.run, i.id AS item, i.tier FROM eco_offers o JOIN eco_items i ON i.id = o.item WHERE o.owner = ?1 AND o.state = 'open' AND o.quarter < ?2 LIMIT 20`).bind(owner, q).all()).results;
-  if (!old.length) return;
-  const ops = [];
-  for (const o of old) {
-    ops.push(db.prepare(`UPDATE eco_offers SET state = 'closed', done = ?2 WHERE id = ?1 AND state = 'open'`).bind(o.id, now));
-    if (o.tier === "MOON") ops.push(db.prepare(`UPDATE eco_items SET state = 'stash', run = NULL WHERE id = ?1 AND state = 'escrow'`).bind(o.item));
-    else if (o.run && o.run === liveRun) ops.push(db.prepare(`UPDATE eco_items SET state = 'bag', fresh = 1 WHERE id = ?1 AND state = 'escrow'`).bind(o.item));
-    else ops.push(db.prepare(`UPDATE eco_items SET state = 'dead' WHERE id = ?1 AND state = 'escrow'`).bind(o.item));
-  }
-  await db.batch(ops);
-}
-async function economy(req, env, url, pageOk, from) {
-  const db = env.DB, path = url.pathname.slice(5), now = Math.floor(Date.now() / 1000), q = ecoQuarter();
-  const admin = !!env.ADMIN_KEY && req.headers.get("x-admin-key") === env.ADMIN_KEY;
-  // BOTS_PUBLIC = "1" (wrangler.toml): the bots trade in the live market, with players, like anyone (it's all
-  // anonymous). Anything else: bots trade only with bots, and only the admin sees their offers.
-  const botsLive = String(env.BOTS_PUBLIC || "") === "1";
-  if (!pageOk) return json({ error: "origin", seen: from }, 403);
-  // The market and a code's offer can be read by anyone (no key needed). Bot offers only with the admin key.
-  const offerOut = o => ({ code: o.code, name: o.name, tier: o.tier, wants: o.wants, ...(o.bot ? { bot: true } : {}) });
-  if (path === "market" && req.method === "GET") {
-    // With the bots live, everyone sees everyone's. Otherwise players see players', the admin everyone's, a bot only bots'.
-    const asBot = (req.headers.get("x-key") || "").startsWith("bot");
-    const rows = (await db.prepare(`SELECT o.code, o.wants, o.bot, i.name, i.tier FROM eco_offers o JOIN eco_items i ON i.id = o.item
-      WHERE o.state = 'open' AND o.quarter = ?1 AND o.public = 1 ${botsLive ? "" : asBot ? "AND o.bot = 1" : admin ? "" : "AND o.bot = 0"} ORDER BY o.id DESC LIMIT 40`).bind(q).all()).results;
-    return json({ offers: rows.map(offerOut), quarterEnd: ecoQuarterEnd(q) });
-  }
-  if (path === "peek" && req.method === "GET") {
-    const o = await db.prepare(`SELECT o.code, o.wants, o.bot, o.state, o.quarter, i.name, i.tier FROM eco_offers o JOIN eco_items i ON i.id = o.item WHERE o.code = ?1`).bind(ecoNorm(url.searchParams.get("code"))).first();
-    if (!o || (o.bot && !admin && !botsLive)) return json({ gone: "No offer has that code." });
-    if (o.state === "taken") return json({ gone: "Someone already took it." });
-    if (o.state === "dead") return json({ gone: "The run that made it has ended. The offer went with it." });
-    if (o.state !== "open" || o.quarter < q) return json({ gone: "That offer closed when the quarter ended." });
-    return json({ offer: offerOut(o) });
-  }
-  // Everything else needs the key, and the run it comes from.
-  const key = req.headers.get("x-key") || "";
-  if (!/^[a-z0-9]{32,80}$/.test(key)) return json({ error: "key" }, 400);
-  let b = {}; if (req.method === "POST") { try { b = await req.json(); } catch (e) { return json({ error: "json" }, 400); } }
-  const run = String(b.run || "");
-  if (!/^[a-z0-9]{8,40}$/.test(run)) return json({ error: "run" }, 400);
-  const owner = await fullHash(key + ":daily-dungeon-exchange"), bot = key.startsWith("bot") ? 1 : 0;
-  const who = await hash((req.headers.get("cf-connecting-ip") || "?") + "daily-dungeon");
-  let me = await db.prepare(`SELECT owner, run, bot, moon_q FROM eco_owners WHERE owner = ?1`).bind(owner).first();
-  if (await db.prepare(`SELECT run FROM eco_retired WHERE run = ?1`).bind(run).first()) return json({ error: "ended", why: "This run has ended. The exchange only deals with a living run." }, 409);
-  if (!me) {
-    if (!bot) {
-      const fresh = await db.prepare(`SELECT COUNT(*) AS n FROM eco_owners WHERE who = ?1 AND made > ?2`).bind(who, now - 86400).first();
-      if (fresh.n >= ECO_NEW_KEYS_A_DAY) return json({ error: "slow down" }, 429);
-    }
-    await db.prepare(`INSERT OR IGNORE INTO eco_owners (owner, run, bot, made, who) VALUES (?1, ?2, ?3, ?4, ?5)`).bind(owner, run, bot, now, who).run();
-    me = { owner, run, bot, moon_q: null };
-  } else if (me.run !== run) {
-    await ecoRetire(db, owner, me.run);
-    await db.prepare(`UPDATE eco_owners SET run = ?2 WHERE owner = ?1`).bind(owner, run).run();
-    me.run = run;
-  }
-  if (path === "end" && req.method === "POST") { await ecoRetire(db, owner, run); return json({ ok: true }); }
-  await ecoSettle(db, owner, run);
-
-  // A FIND, witnessed as it happens. The page says what it found; the Worker keeps the limits, and (v1.01) rolls its
-  // own dice for WHICH thing of that tier it is, so nobody can ask for a particular one. The page renames its copy.
-  if (path === "find" && req.method === "POST") {
-    const claimed = String(b.name || ""), tier = ECO_TIER[claimed];
-    if (!tier) return json({ ok: false, why: "not tradeable" });
-    const pool = ECO_CATALOG[tier], name = pool[crypto.getRandomValues(new Uint32Array(1))[0] % pool.length];
-    if (tier === "MOON" && !ECO_MOON_PHASES.includes(ecoMoonIndex())) return json({ ok: false, why: "moon" });
-    const day = now - (now % 86400);
-    const mine = await db.prepare(`SELECT COUNT(*) AS n FROM eco_items WHERE finder = ?1 AND tier = ?2 AND made >= ?3`).bind(owner, tier, day).first();
-    if (mine.n >= ECO_DAILY[tier]) return json({ ok: false, why: "enough today" });
-    if (!bot) {
-      const sender = await db.prepare(`SELECT COUNT(*) AS n FROM eco_items WHERE who = ?1 AND tier = ?2 AND made >= ?3`).bind(who, tier, day).first();
-      if (sender.n >= ECO_DAILY_SENDER[tier]) return json({ ok: false, why: "enough today" });
-    }
-    if (tier === "MOON") {
-      const month = epochStart();
-      const kept = await db.prepare(`SELECT COUNT(*) AS n FROM eco_items WHERE finder = ?1 AND tier = 'MOON' AND made >= ?2`).bind(owner, month).first();
-      if (kept.n >= ECO_MOON_MONTH) return json({ ok: false, why: "enough this moon" });
-      if (!bot) {
-        const sent = await db.prepare(`SELECT COUNT(*) AS n FROM eco_items WHERE who = ?1 AND tier = 'MOON' AND made >= ?2`).bind(who, month).first();
-        if (sent.n >= ECO_MOON_MONTH_SENDER) return json({ ok: false, why: "enough this moon" });
-      }
-    }
-    const stash = tier === "MOON";
-    const r = await db.prepare(`INSERT INTO eco_items (owner, run, name, tier, state, finder, who, made) VALUES (?1, ?2, ?3, ?4, ?5, ?1, ?6, ?7)`)
-      .bind(owner, stash ? null : run, name, tier, stash ? "stash" : "bag", who, now).run();
-    // Now and then, clear out things long gone (kept a while so the day's limits can count them).
-    if (Math.random() < 0.02) await db.prepare(`DELETE FROM eco_items WHERE state IN ('gone', 'dead') AND made < ?1`).bind(now - 60 * 86400).run();
-    return json({ ok: true, id: r.meta.last_row_id, name, stash });
-  }
-
-  // WHAT'S MINE: the stash, this run's tradeable bag things, my open offers, things delivered to this run since
-  // last time (a swap paid to me, an offer that came back), and whether the quarter's MOON intake is used.
-  // The page sends its bag's names: a bag thing the bag no longer holds (given away, broken) leaves the economy.
-  if (path === "mine" && req.method === "POST") {
-    const bag = Array.isArray(b.bag) ? b.bag.map(String).slice(0, 200) : null;
-    let rows = (await db.prepare(`SELECT id, name, tier, state, fresh FROM eco_items WHERE owner = ?1 AND (state = 'stash' OR (run = ?2 AND state = 'bag')) ORDER BY id LIMIT 200`).bind(owner, run).all()).results;
-    const fresh = rows.filter(r => r.state === "bag" && r.fresh);
-    if (fresh.length) await db.prepare(`UPDATE eco_items SET fresh = 0 WHERE owner = ?1 AND run = ?2 AND fresh = 1`).bind(owner, run).run();
-    if (bag) {
-      const count = {}; for (const n of bag) count[n] = (count[n] || 0) + 1;
-      const lost = [];
-      for (const r of rows) if (r.state === "bag" && !r.fresh) { if (count[r.name] > 0) count[r.name]--; else lost.push(r.id); }
-      if (lost.length) {
-        await db.prepare(`UPDATE eco_items SET state = 'gone' WHERE owner = ?1 AND state = 'bag' AND id IN (${lost.map(() => "?").join(",")})`).bind(owner, ...lost).run();
-        rows = rows.filter(r => !lost.includes(r.id));
-      }
-    }
-    const offers = (await db.prepare(`SELECT o.code, o.wants, o.public, i.name, i.tier FROM eco_offers o JOIN eco_items i ON i.id = o.item WHERE o.owner = ?1 AND o.state = 'open' AND o.quarter = ?2 ORDER BY o.id`).bind(owner, q).all()).results;
-    // What happened to my offers lately (taken, and by what), so the page can say so once.
-    const news = (await db.prepare(`SELECT o.code, i.name, p.name AS paid FROM eco_offers o JOIN eco_items i ON i.id = o.item LEFT JOIN eco_items p ON p.id = o.paid WHERE o.owner = ?1 AND o.state = 'taken' AND o.done > ?2 ORDER BY o.id DESC LIMIT 10`).bind(owner, Number(b.since) || 0).all()).results;
-    return json({ stash: rows.filter(r => r.state === "stash").map(r => ({ id: r.id, name: r.name })), bag: rows.filter(r => r.state === "bag").map(r => ({ id: r.id, name: r.name, tier: r.tier })),
-      fresh: fresh.map(r => ({ id: r.id, name: r.name })), offers: offers.map(o => ({ code: o.code, name: o.name, tier: o.tier, wants: o.wants, public: !!o.public })),
-      news, now, moonCap: me.moon_q === q, quarterEnd: ecoQuarterEnd(q) });
-  }
-
-  // MAKE AN OFFER: one of my bag things (this run) or a stash thing goes into escrow.
-  if (path === "offer" && req.method === "POST") {
-    const id = Number(b.item), wants = String(b.wants || ""), pub = b.public ? 1 : 0;
-    if (!Number.isInteger(id) || !ecoWantsOk(wants)) return json({ error: "invalid" }, 400);
-    const open = await db.prepare(`SELECT COUNT(*) AS n FROM eco_offers WHERE owner = ?1 AND state = 'open' AND quarter = ?2`).bind(owner, q).first();
-    if (open.n >= ECO_OPEN_OFFERS) return json({ error: "full", why: `At most ${ECO_OPEN_OFFERS} offers at once.` }, 409);
-    const moved = await db.prepare(`UPDATE eco_items SET state = 'escrow' WHERE id = ?1 AND owner = ?2 AND (state = 'stash' OR (state = 'bag' AND run = ?3))`).bind(id, owner, run).run();
-    if (!moved.meta.changes) return json({ error: "not yours", why: "That isn't yours to offer." }, 409);
-    for (let tries = 0; tries < 5; tries++) {
-      const code = ecoCode();
-      try {
-        await db.prepare(`INSERT INTO eco_offers (code, owner, run, item, wants, public, bot, quarter, made, state) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'open')`).bind(code, owner, run, id, wants, pub, bot, q, now).run();
-        return json({ ok: true, code, quarterEnd: ecoQuarterEnd(q) });
-      } catch (e) { /* a code already in use: try another */ }
-    }
-    await db.prepare(`UPDATE eco_items SET state = (CASE WHEN tier = 'MOON' THEN 'stash' ELSE 'bag' END) WHERE id = ?1 AND state = 'escrow'`).bind(id).run();
-    return json({ error: "busy" }, 503);
-  }
-
-  // CANCEL: the thing comes back (MOON to the stash, the rest to this run's bag).
-  if (path === "cancel" && req.method === "POST") {
-    const o = await db.prepare(`SELECT o.id, o.item, i.name, i.tier FROM eco_offers o JOIN eco_items i ON i.id = o.item WHERE o.code = ?1 AND o.owner = ?2 AND o.state = 'open'`).bind(ecoNorm(b.code), owner).first();
-    if (!o) return json({ error: "gone", why: "That offer isn't open." }, 409);
-    const c = await db.prepare(`UPDATE eco_offers SET state = 'cancelled', done = ?2 WHERE id = ?1 AND state = 'open'`).bind(o.id, now).run();
-    if (!c.meta.changes) return json({ error: "gone", why: "That offer isn't open." }, 409);
-    const stash = o.tier === "MOON";
-    await db.prepare(`UPDATE eco_items SET state = ?2, run = ?3, fresh = 0 WHERE id = ?1`).bind(o.item, stash ? "stash" : "bag", stash ? null : run).run();
-    return json({ ok: true, back: { id: o.item, name: o.name, stash } });
-  }
-
-  // TAKE AN OFFER: pay with a matching thing if it asks for one. What I get: MOON to my stash, the rest into this
-  // run's bag (returned here, so the page adds it). What I paid goes to the offer's maker the same way (to their
-  // run's bag as a delivery, or their stash).
-  if (path === "take" && req.method === "POST") {
-    const code = ecoNorm(b.code);
-    const o = await db.prepare(`SELECT o.*, i.name, i.tier FROM eco_offers o JOIN eco_items i ON i.id = o.item WHERE o.code = ?1`).bind(code).first();
-    if (!o || o.state !== "open" || o.quarter !== q || (!botsLive && ((o.bot && !admin) || (bot && !o.bot)))) return json({ error: "gone", why: "That offer isn't open." }, 409);
-    if (o.owner === owner) return json({ error: "own", why: "That's your own offer." }, 409);
-    let pay = null;
-    if (o.wants) {
-      pay = await db.prepare(`SELECT id, name, tier FROM eco_items WHERE id = ?1 AND owner = ?2 AND (state = 'stash' OR (state = 'bag' AND run = ?3))`).bind(Number(b.pay), owner, run).first();
-      if (!pay || !ecoMatches(o.wants, pay)) return json({ error: "pay", why: "It asks for something else." }, 409);
-    }
-    const t = await db.prepare(`UPDATE eco_offers SET state = 'taken', taker = ?2, paid = ?3, done = ?4 WHERE id = ?1 AND state = 'open'`).bind(o.id, owner, pay ? pay.id : null, now).run();
-    if (!t.meta.changes) return json({ error: "gone", why: "Someone took it first." }, 409);
-    const gotStash = o.tier === "MOON", ops = [
-      db.prepare(`UPDATE eco_items SET owner = ?2, state = ?3, run = ?4, fresh = 0 WHERE id = ?1`).bind(o.item, owner, gotStash ? "stash" : "bag", gotStash ? null : run),
-    ];
-    if (pay) {
-      const toStash = pay.tier === "MOON";
-      ops.push(db.prepare(`UPDATE eco_items SET owner = ?2, state = ?3, run = ?4, fresh = ?5 WHERE id = ?1`).bind(pay.id, o.owner, toStash ? "stash" : "bag", toStash ? null : o.run, toStash ? 0 : 1));
-    }
-    await db.batch(ops);
-    return json({ ok: true, got: { id: o.item, name: o.name, tier: o.tier }, stash: gotStash, paid: pay ? pay.name : null });
-  }
-
-  // TAKE A MOON THING INTO THE RUN: it leaves the economy for good. One a quarter, unless I found it myself.
-  if (path === "withdraw" && req.method === "POST") {
-    const it = await db.prepare(`SELECT id, name, finder FROM eco_items WHERE id = ?1 AND owner = ?2 AND state = 'stash'`).bind(Number(b.item), owner).first();
-    if (!it) return json({ error: "gone", why: "That isn't in your stash." }, 409);
-    const capped = it.finder !== owner;
-    if (capped && me.moon_q === q) return json({ error: "cap", why: "One MOON thing from outside a quarter. This quarter's is used." }, 409);
-    const ops = [db.prepare(`UPDATE eco_items SET state = 'gone', run = ?2 WHERE id = ?1 AND state = 'stash'`).bind(it.id, run)];
-    if (capped) ops.push(db.prepare(`UPDATE eco_owners SET moon_q = ?2 WHERE owner = ?1`).bind(owner, q));
-    await db.batch(ops);
-    return json({ ok: true, name: it.name, capped });
-  }
-  return json({ error: "not found" }, 404);
-}
-// The title feed's market cards: the newest public offers and the latest trades, nobody named, no bots.
-async function marketFeed(db, botsLive) {
-  const q = ecoQuarter(), nb = botsLive ? "" : "AND o.bot = 0";
-  const open = (await db.prepare(`SELECT o.code, o.wants, i.name FROM eco_offers o JOIN eco_items i ON i.id = o.item WHERE o.state = 'open' AND o.quarter = ?1 AND o.public = 1 ${nb} ORDER BY o.id DESC LIMIT 3`).bind(q).all()).results;
-  const traded = (await db.prepare(`SELECT i.name, p.name AS paid FROM eco_offers o JOIN eco_items i ON i.id = o.item LEFT JOIN eco_items p ON p.id = o.paid WHERE o.state = 'taken' AND o.public = 1 ${nb} AND o.quarter = ?1 ORDER BY o.done DESC LIMIT 3`).bind(q).all()).results;
-  const count = (await db.prepare(`SELECT COUNT(*) AS n FROM eco_offers o WHERE o.state = 'open' AND o.quarter = ?1 AND o.public = 1 ${nb}`).bind(q).first()).n;
-  return { open, traded, count };
 }
 
 // THE GIFT BOX (v1.10): one small box per wing, level and day, holding one thing. GET /gift?k= looks inside;
@@ -499,7 +225,7 @@ async function giftBox(req, env, pageOk, from, allow) {
 const WORKER = {
   async fetch(req, env, ctx) {
     const url = new URL(req.url), allow = "*";
-    // On the game's own address the Worker answers under /api/ (dungeon.88x31.app/api/score, /api/eco/..., /api/account):
+    // On the game's own address the Worker answers under /api/ (dungeon.88x31.app/api/score, /api/account):
     // the same routes as ever, with that prefix taken off. The old workers.dev address keeps working unchanged.
     if (url.pathname.startsWith("/api/")) url.pathname = url.pathname.slice(4);
     // ALLOW_ORIGIN: the pages allowed to post or delete, comma-separated (blank: any page). Everyone may read the board.
@@ -548,7 +274,7 @@ const WORKER = {
     }
 
     // One read for the whole title screen: season, totals, deepest floor, and the latest ambient events.
-    if (url.pathname === "/feed" && req.method === "GET") return json(await titleFeed(env.DB, String(env.BOTS_PUBLIC || "") === "1"), 200, allow);
+    if (url.pathname === "/feed" && req.method === "GET") return json(await titleFeed(env.DB), 200, allow);
 
     // "Someone is here": { id: a random id the game made, level }. One row a device, overwritten; `at` is when it was
     // last seen. Built to take a ping every few minutes (live presence) without costing much of D1's free tier:
@@ -669,8 +395,6 @@ const WORKER = {
     // THE GIFT BOX (v1.10): /gift (see giftBox() above).
     if (url.pathname === "/gift") return giftBox(req, env, pageOk, from, allow);
     if (url.pathname === "/tally") return tallyDoor(req, env, pageOk, from, allow);
-    // THE EXCHANGE: everything under /eco/ (see economy() above).
-    if (url.pathname.startsWith("/eco/")) return economy(req, env, url, pageOk, from);
     return json({ error: "not found" }, 404, allow);
   },
 };

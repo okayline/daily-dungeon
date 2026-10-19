@@ -119,8 +119,7 @@
   .foundbox.fight pre { padding: 0 2ch; }   /* the fight box's text sits in from the edge */
   .foundbox.inframe .brow { display: flex; justify-content: space-between; }
   .foundbox .artframe { color: var(--trail); }
-  .exframe { color: var(--trail); }
-  .bdot { transform: scale(1.5); transform-origin: 50% 70%; }   /* the breath dots over the bar (v1.01.1): a little bigger, in place */   /* the exchange window's screen frame (v1.00) */
+  .bdot { transform: scale(1.5); transform-origin: 50% 70%; }   /* the breath dots over the bar (v1.01.1): a little bigger, in place */
   .foundbox .arrow { color: var(--bright); text-shadow: 0 0 6px var(--bright); }
   /* Rarity colors, Diablo-style. */
   .lit { color: var(--moon); text-shadow: 0 0 6px var(--moon); animation: breathe 4s ease-in-out infinite; }
@@ -151,7 +150,6 @@
   <div class="frame"><pre id="screen">LOADING...</pre><img id="logo" class="titlelogo" src="title-logo.png" alt="Daily Digital Demon Dungeon" hidden>
     <div id="log" class="logview" role="dialog" aria-modal="true" aria-label="Adventure log" hidden><pre></pre></div>
     <div id="inv" class="viewpop" role="dialog" aria-modal="true" aria-label="Invoke: your bag" hidden><pre></pre></div>
-    <div id="exch" class="viewpop" role="dialog" aria-modal="true" aria-label="Exchange: trading with other players" hidden><pre></pre></div>
     <div id="codex" class="logview" role="dialog" aria-modal="true" aria-label="Codex" hidden><pre></pre></div>
     <div id="board" class="logview" role="dialog" aria-modal="true" aria-label="Leaderboard" hidden><pre></pre></div>
     <div id="about" class="logview" role="dialog" aria-modal="true" aria-label="About" hidden><pre></pre></div>
@@ -311,9 +309,6 @@
       const sl = skyLeft(line, i); if (sl) return sl + esc(line.slice(49));      // (v1.07) the night sky's rows
       return esc(line);
     }).join("\n")
-      // The exchange's screen in the room view (v1.00): its cells are drawn as U+2800; each row of them becomes a
-      // span the market timer fills (see exTick), top row first.
-      .replace(/\u2800+/g, m => `<span class="exq">${" ".repeat(m.length)}</span>`)
       // The ALIGN arrow (which way the last action pulled KURA) glows white.
       .replace(/&lt;( ?\[(?:KPT|STR|FRL)\])/, '<span class="pull">&lt;</span>$1')
       .replace(/(\[(?:KPT|STR|FRL)\] ?)&gt;/, '$1<span class="pull">&gt;</span>');
@@ -378,7 +373,6 @@
       if (Date.now() < squeezeUntil) save.squeeze = true;      // (only for this frame: never saved)
       const html = colorize(SMT.renderScreen(save, beatLine1 || extraToShow())); delete save.squeeze;
       document.getElementById("screen").innerHTML = html;
-      exTick(true);                                // the exchange's screen, if she faces one, fills in at once
     }
     catch (err) {                                  // never freeze on a bad frame: say so, and keep the keys working
       console.error(err);
@@ -509,7 +503,7 @@
     const v = save && !save.encounter && !save.dead && save.offer ? RULES.offerView(save) : null;
     if (!v) { if (box.dataset.mode === "offer") { box.hidden = true; box.dataset.mode = ""; box.querySelector("pre").innerHTML = ""; } return; }
     if (atTitle || replayTimer || (!box.hidden && box.dataset.mode !== "offer")) return;
-    if (["inv", "log", "board", "codex", "about", "exch"].some(id => { const el = document.getElementById(id); return el && !el.hidden; })) return;
+    if (["inv", "log", "board", "codex", "about"].some(id => { const el = document.getElementById(id); return el && !el.hidden; })) return;
     const pre = box.querySelector("pre");
     box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
     placeInView(box, v.moon ? 8 : 15);
@@ -545,7 +539,7 @@
   function bagBox() {
     const box = document.getElementById("found");
     if (atTitle || !save || save.dead || !(save.overflow || []).length || !box.hidden || replayTimer) return;
-    if (["inv", "log", "board", "codex", "about", "exch"].some(id => { const el = document.getElementById(id); return el && !el.hidden; })) return;
+    if (["inv", "log", "board", "codex", "about"].some(id => { const el = document.getElementById(id); return el && !el.hidden; })) return;
     const pre = box.querySelector("pre"), it = save.overflow[0];
     box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
     placeInView(box, 15);
@@ -566,7 +560,7 @@
     const v = save && !save.dead && RULES.raiseView(save);
     if (!v) { if (box.dataset.mode === "raise") { box.hidden = true; box.dataset.mode = ""; box.querySelector("pre").innerHTML = ""; } return; }
     if (atTitle || replayTimer || (!box.hidden && box.dataset.mode !== "raise")) return;
-    if (["inv", "log", "board", "codex", "about", "exch"].some(id => { const el = document.getElementById(id); return el && !el.hidden; })) return;
+    if (["inv", "log", "board", "codex", "about"].some(id => { const el = document.getElementById(id); return el && !el.hidden; })) return;
     const pre = box.querySelector("pre");
     box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
     placeInView(box, 17);
@@ -667,65 +661,7 @@
       lastLive = t; sendHere();
     } catch (e) {}
   }
-  // THE EXCHANGE (v1.00): trading RARE, MYTHIC and MOON things with other players (the Worker's /eco/, see worker.js).
-  // THE KEY is the player's economy identity: a long random key kept in this browser ("ddd.key") and copied into every
-  // run, so the run's password carries it. Loading a password with another key switches this browser to that key.
-  // FINDS: when a RARE, MYTHIC or MOON thing lands in the bag, the Worker is told at once and decides whether it
-  // counts (its own daily limits; MOON only near full moon). A MOON thing it counts goes to the stash right away
-  // and leaves the bag. Nothing here is sent from a run that used the testing tools.
-  const ECO_TIERS = ["RARE", "MYTHIC", "MOON"];
-  const ecoTradeable = n => ECO_TIERS.includes(RULES.tierOf(n));
-  function ecoKey() {
-    let k = null; try { k = localStorage.getItem("ddd.key"); } catch (e) {}
-    if (!k || !/^[a-z0-9]{32,80}$/.test(k)) {
-      k = Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, "0")).join("");
-      try { localStorage.setItem("ddd.key", k); } catch (e) {}
-    }
-    return k;
-  }
-  const ecoOk = () => !!(LEADERBOARD_URL && save && save.dungeon && !save.dead && !save.freeSteps && !save.cheated && save.runId);
-  async function ecoFetch(path, body) {
-    const h = { "content-type": "application/json", "x-key": (save && save.key) || ecoKey() };
-    if (adminOK) { try { const a = localStorage.getItem("dd-admin"); if (a) h["x-admin-key"] = a; } catch (e) {} }
-    const r = await fetch(LEADERBOARD_URL + "/eco/" + path, body ? { method: "POST", headers: h, body: JSON.stringify({ run: save && save.runId, ...body }) } : { headers: h });
-    let d = null; try { d = await r.json(); } catch (e) {}
-    return d || { error: "net" };
-  }
-  // A thing given to the bag by the exchange (bought, sent back, taken from the stash): never reported as a find.
-  function ecoGive(name) { save.items = save.items || []; save.items.push(name); (save.ecoSeen = save.ecoSeen || []).push(name); }
-  function ecoTake(name) { const i = (save.items || []).indexOf(name); if (i >= 0) save.items.splice(i, 1); const j = (save.ecoSeen || []).indexOf(name); if (j >= 0) save.ecoSeen.splice(j, 1); }
-  // Run on every save: keep the key in the run, notice new tradeable things, and tell the Worker when the run ends.
-  function ecoScan() {
-    if (!save || !save.dungeon) return;
-    const dev = ecoKey();
-    if (!save.key) save.key = dev;
-    else if (save.key !== dev) { try { localStorage.setItem("ddd.key", save.key); } catch (e) {} }   // a loaded password's key becomes this browser's
-    const mine = (save.items || []).filter(ecoTradeable);
-    if (save.ecoRun !== save.runId) { save.ecoRun = save.runId; save.ecoSeen = mine.slice(); return; }   // a new run counts from what it starts with
-    const left = (save.ecoSeen || []).slice(), fresh = [];
-    for (const n of mine) { const i = left.indexOf(n); if (i >= 0) left.splice(i, 1); else fresh.push(n); }
-    save.ecoSeen = mine.slice();
-    if (save.dead && !save.ecoEnded && LEADERBOARD_URL && !save.cheated && !save.freeSteps) { save.ecoEnded = true; ecoFetch("end", {}).catch(() => {}); }
-    if (!ecoOk() || !RULES.EXCHANGE_ON) return;      // v1.04: the exchange is parked; finds stay in the bag
-    // v1.01: the Worker rolls its own dice for WHICH thing of that tier it is. If it picked another, the bag's copy
-    // (and the log line that named it) takes the Worker's name. The found box waits a moment for this (foundBox).
-    for (const n of fresh) ecoWait.push(ecoFetch("find", { name: n }).then(d => {
-      if (!d || !d.ok || !save) return;
-      const got = d.name || n;
-      if (d.stash) {
-        ecoTake(n); ecoStashed.push(got);
-        save.log = `> ${got.charAt(0).toUpperCase() + got.slice(1)} goes to the stash. The exchange screens keep it.`;
-      } else if (got !== n) {
-        const i = save.items.lastIndexOf(n); if (i >= 0) save.items[i] = got;
-        const j = (save.ecoSeen || []).lastIndexOf(n); if (j >= 0) save.ecoSeen[j] = got;
-        if (save.log) save.log = save.log.split(n).join(got);
-      }
-      persist(); draw();
-    }).catch(() => {}));
-  }
-  let ecoWait = [], ecoStashed = [];
   function flushEvents() {
-    ecoScan();
     pingHere();
     if (!save || !save.events || !save.events.length) return;
     const list = save.events; delete save.events;
@@ -825,8 +761,8 @@
   // The page keeps its own display fields (PAGE_KEEP) across each answer; the rules' queues for the page (OUT_LIST,
   // OUT_ONE) are handed over once by the server and merged with anything the page hasn't sent yet.
   const SERVER = ACCOUNT_HOST || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  const PAGE_KEEP = ["history", "logged", "ecoSeen", "ecoRun", "ecoNews", "ecoEnded", "key", "unsaved", "saved", "endShown", "submitted", "auraBand", "regCopies", "visitDay", "breathNow"];
-  const OUT_LIST = ["finds", "gone", "events"], OUT_ONE = ["tally", "line3", "exchangeOpen"];
+  const PAGE_KEEP = ["history", "logged", "key", "unsaved", "saved", "endShown", "submitted", "auraBand", "regCopies", "visitDay", "breathNow"];
+  const OUT_LIST = ["finds", "gone", "events"], OUT_ONE = ["tally", "line3"];
   let runN = 0, waiting = false, chain = Promise.resolve(), prefetch = null;
   function adopt(run, n, old) {
     if (old) {
@@ -921,17 +857,8 @@
     return out;
   }
   // Numbers and rumors share the feed: never more than two of one kind in a row while both last.
-  // The exchange in the feed (v1.00): the newest public offers and the latest trades, nobody named, no bots.
-  function marketCards() {
-    const m = titleStats && titleStats.market, out = [];
-    if (!m || !RULES.EXCHANGE_ON) return out;          // parked since v1.04
-    const asks = w => (!w ? "free" : w.startsWith("tier:") ? "for any " + w.slice(5) : "for " + w.slice(5));
-    for (const o of m.open || []) out.push(`MARKET: ${o.name}, ${asks(o.wants)}. Code ${o.code}`);
-    for (const t of m.traded || []) out.push(t.paid ? `Traded: ${t.name}, for ${t.paid}` : `Given away: ${t.name}`);
-    return out;
-  }
   function buildTitleCards() {
-    const nums = numberCards(), rum = [...marketCards(), ...rumorCards()], cards = [];
+    const nums = numberCards(), rum = [...rumorCards()], cards = [];
     worldLines = rum.slice();           // the rumors (what other players' runs left behind) also ride the in-game ticker
     while (nums.length || rum.length) { cards.push(...nums.splice(0, rum.length ? 2 : nums.length)); if (rum.length) cards.push(rum.shift()); }
     return cards;
@@ -1399,7 +1326,6 @@
   }
   window.addEventListener("resize", () => {
     const b = document.getElementById("inv"); if (!b.hidden) placeInView(b);
-    const x = document.getElementById("exch"); if (!x.hidden) placeInView(x);
     const f = document.getElementById("found"); if (!f.hidden && f.classList.contains("inframe")) placeInView(f, 15);
   });
   // INVENTORY inside the bag: what the shared item list says you hold in 4Dungeon (finds registered while signed in, and 88x31 buttons visiting).
@@ -1529,257 +1455,6 @@
       help.append(mk(`${invSel === 0 && topSel === 0 ? ">" : " "}ICHOR ${save.ichor}/${RULES.FLASK_MAX}`, 0), " ", mk(`${invSel === 0 && topSel === 1 ? ">" : " "}SILVER ${save.silver || 0}`, 1), "  ");
     }
     help.append(btn("[M]AIL", "reg"), " ", btn("[C]LOSE", "close"));
-  }
-  // THE EXCHANGE WINDOW (v1.00): opened from the screen in a dead end's wall; one window over the view like INVOKE. Four tabs:
-  //   MARKET - public offers (others' only). ENTER takes one; one that asks for something takes a matching thing of yours.
-  //   YOURS  - your open offers (ENTER cancels one) and MAKE AN OFFER: a thing, what it asks for, public or private.
-  //   STASH  - MOON things kept between runs. ENTER takes one into this run, and it leaves the stash for good.
-  //   CODE   - type an offer's code to see it and take it.
-  // Every offer closes when the moon's quarter ends. Only RARE, MYTHIC and MOON things trade; silver doesn't.
-  // In the admin's hands (X here asks for the admin key, without the testing cheats), the bots' offers show too, marked *.
-  const ECO_NAMES = {
-    RARE: ["a rune scratched into a circuit board", "a salt-crusted network cable", "a candle stub in a soda can", "a charm bracelet of old keycards",
-      "a rosary of fiber optic beads", "a sealed jar, humming faintly", "a SIM card in red thread", "a graffiti-stained saint's medal",
-      "a bullet casing on a leather cord", "a keycard, one corner burned", "an old COMP chip", "a black pearl"],
-    MYTHIC: ["a jar of grave salt", "a wax seal, unbroken", "a chipped bone die", "a sealed reliquary", "a ring of red gold", "a sword in a rotted sheath"],
-    MOON: ["a moonstone", "a shard of pale moonlight", "a fang still warm", "a silver-veined horn"],
-  };
-  const EX_TABS = ["MARKET", "YOURS", "STASH", "CODE"], EX_W = 43;
-  const EX_WANTS = ["", "tier:RARE", "tier:MYTHIC", "tier:MOON", ...ECO_TIERS.flatMap(t => ECO_NAMES[t].map(n => "name:" + n))];
-  const wantsText = w => (!w ? "nothing (a gift)" : w.startsWith("tier:") ? "any " + w.slice(5) : w.slice(5));
-  const exFit = (t, w = EX_W) => (t.length > w ? t.slice(0, w - 3) + "..." : t);
-  let ex = { tab: 0, sel: 0, step: null, busy: false, msg: "", market: null, mine: null, make: null, peek: null, pay: 0, code: "" };
-  const exOpen = () => !document.getElementById("exch").hidden;
-  function exClosedWhy() {
-    if (!LEADERBOARD_URL) return "The exchange isn't set up on this page.";
-    if (!save || !save.dungeon) return "Begin a run first.";
-    if (save.dead) return "This run is over. The exchange deals with the living.";
-    if (save.freeSteps || save.cheated) return "This run used the testing tools. The exchange is closed to it.";
-    if (save.encounter) return "Not with a demon in the room.";
-    return null;
-  }
-  // Fresh from the Worker: my things and offers, and the market. Things sent to this run since last time come into
-  // the bag here, and news of my offers being taken is said once.
-  async function exRefresh() {
-    if (exClosedWhy()) return showExchange(true);
-    ex.busy = true; showExchange(true);
-    try {
-      const bag = (save.items || []).filter(ecoTradeable);
-      const [mine, market] = await Promise.all([ecoFetch("mine", { bag, since: save.ecoNews || 0 }), ecoFetch("market")]);
-      if (mine.error) { ex.msg = mine.why || (mine.error === "net" ? "The exchange can't be reached." : "The exchange said no."); ex.mine = null; }
-      else {
-        ex.mine = mine;
-        for (const f of mine.fresh || []) ecoGive(f.name);
-        const news = (mine.news || []).map(n => `Your offer ${n.code} was taken${n.paid ? ", for " + n.paid : ""}.`);
-        if ((mine.fresh || []).length || news.length) { save.ecoNews = mine.now; persist(); draw(); }
-        if (news.length) ex.msg = news.join(" ");
-      }
-      ex.market = market.error ? null : market;
-    } catch (e) { ex.msg = "The exchange can't be reached."; }
-    ex.loaded = true;
-    ex.busy = false; showExchange(true);
-  }
-  // Things of mine that can go into an offer or pay for one: this run's tradeable bag things, and the stash.
-  const exHoldings = () => ex.mine ? [...ex.mine.bag.map(x => ({ ...x, from: "bag" })), ...ex.mine.stash.map(x => ({ ...x, tier: "MOON", from: "stash" }))] : [];
-  const exMatches = (w, it) => !w || (w.startsWith("tier:") && it.tier === w.slice(5)) || (w.startsWith("name:") && it.name === w.slice(5));
-  function exRows() {
-    const myCodes = new Set(((ex.mine && ex.mine.offers) || []).map(o => o.code));
-    if (EX_TABS[ex.tab] === "MARKET") return ((ex.market && ex.market.offers) || []).filter(o => !myCodes.has(o.code)).map(o => ({ o, text: `${o.bot ? "*" : " "}${o.name}  for ${wantsText(o.wants)}` }));
-    if (EX_TABS[ex.tab] === "YOURS") return [{ make: true, text: " MAKE AN OFFER" }, ...((ex.mine && ex.mine.offers) || []).map(o => ({ o, text: ` ${o.code} ${o.name}  for ${wantsText(o.wants)}${o.public ? "" : " (private)"}` }))];
-    if (EX_TABS[ex.tab] === "STASH") return ((ex.mine && ex.mine.stash) || []).map(s => ({ s, text: " " + s.name }));
-    return [];
-  }
-  // THE MARKET LINE (v1.00): a random walk, one step every few beats, drawn as a line chart (_ flat, / up, \ down).
-  // It is decoration, not prices: the same line runs on the dead end's screen and across the top of the window.
-  // The ticker over it in the window carries the market's offers, right to left, a letter at a time.
-  const EXW = { v: [], tick: 0, tape: 0 };
-  for (let i = 0, c = 2; i < 60; i++) EXW.v.push(c = exStep(c));
-  function exStep(c) { const r = Math.random(); return Math.max(0, Math.min(3, c + (r < 0.38 ? 1 : r < 0.76 ? -1 : 0))); }
-  function exChart(w, h) {
-    const rows = Array.from({ length: h }, () => Array(w).fill(" ")), s = EXW.v.slice(-w).map(x => Math.min(h - 1, x)), at = x => h - 1 - x;
-    for (let i = 0; i < w; i++) { const a = i ? s[i - 1] : s[i], b = s[i]; if (b > a) rows[at(a)][i] = "/"; else if (b < a) rows[at(b)][i] = "\\"; else rows[at(b)][i] = "_"; }
-    return rows.map(r => r.join(""));
-  }
-  const exCount = () => (ex.market && ex.market.offers ? ex.market.offers.length : titleStats && titleStats.market ? (titleStats.market.count ?? (titleStats.market.open || []).length) : 0);
-  function exTape() {
-    const offers = (ex.market && ex.market.offers) || (titleStats && titleStats.market && titleStats.market.open) || [];
-    const text = offers.length ? offers.map(o => `${o.name} ${!o.wants ? "FREE" : "FOR " + wantsText(o.wants)}`.toUpperCase()).join("   *   ") : "NOTHING ON OFFER";
-    return text + "   *   ";
-  }
-  // Every 110 ms: the walk steps every third beat, the ticker every second. paintOnly: repaint without stepping.
-  function exTick(paintOnly) {
-    if (!RULES.EXCHANGE_ON) return;                   // (v1.21.1) parked: no need to tick its chart ten times a second
-    if (!paintOnly) { EXW.tick++; if (EXW.tick % 3 === 0) { EXW.v.push(exStep(EXW.v[EXW.v.length - 1])); EXW.v.shift(); } if (EXW.tick % 2 === 0) EXW.tape++; }
-    // The arrow follows the line's trend, not each step: it looks again about every 1.5 seconds (14 beats), comparing
-    // now with six steps back, and keeps its way on a tie.
-    if (EXW.up === undefined || (!paintOnly && EXW.tick % 14 === 0)) { const a = EXW.v[EXW.v.length - 1], b = EXW.v[EXW.v.length - 7]; if (a !== b || EXW.up === undefined) EXW.up = a >= b; }
-    const wall = document.querySelectorAll("#screen .exq");
-    if (wall.length >= 5) {
-      const W = wall[0].textContent.length, n = exCount(), up = EXW.up;
-      const tail = `${n} ON OFFER`;
-      wall[0].textContent = (`EXCHANGE ${up ? "^" : "v"}`.padEnd(W - tail.length) + tail).slice(0, W);
-      exChart(W, 4).forEach((r, j) => { wall[j + 1].textContent = r; });
-    }
-    const tk = document.getElementById("exTk");
-    if (tk && exOpen()) {
-      const W = tk.textContent.length, L = W - 1, tape = " ".repeat(L) + exTape(), i = EXW.tape % tape.length;
-      tk.textContent = " " + (tape + tape).slice(i, i + L);
-      exChart(W, 3).forEach((r, j) => { const el = document.getElementById("exC" + j); if (el) el.textContent = r; });
-    }
-  }
-  setInterval(() => exTick(false), 110);
-  function showExchange(open) {
-    const box = document.getElementById("exch");
-    box.hidden = !open;
-    if (!open) { ex.step = null; ex.peek = null; return; }
-    placeInView(box);
-    const pre = box.querySelector("pre");
-    pre.innerHTML = "";
-    const add = (txt, cls, data) => { const d = document.createElement("div"); d.textContent = txt; if (cls) d.className = cls; if (data) Object.assign(d.dataset, data); pre.appendChild(d); return d; };
-    const btn = (t, k, v) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = "btn"; sp.dataset[k] = v; return sp; };
-    // Longer text wraps at a space to the window's width.
-    const say = t => { let rest = String(t); while (rest.length > EX_W) { const cut = rest.lastIndexOf(" ", EX_W); const at = cut > 0 ? cut : EX_W; add(rest.slice(0, at)); rest = rest.slice(at).trimStart(); } add(rest); };
-    const note = () => { if (ex.msg) { add(" "); say(ex.msg); } };
-    // Header: the name, the quarter's end, and the tabs.
-    const end = ex.mine && ex.mine.quarterEnd ? Math.max(0, Math.ceil((ex.mine.quarterEnd - Date.now() / 1000) / 86400)) : null;
-    // "Offers close end of quarter (5d)": the days left, when they fit on the line.
-    const close = [end === null ? null : `Offers close end of quarter (${end}d)`, "Offers close end of quarter"].find(t => t && 8 + 2 + t.length <= EX_W);
-    add("EXCHANGE".padEnd(EX_W - close.length) + close);
-    // The screen: a ticker of what's on offer, right to left, over the moving market line (exTick fills both).
-    const SW = EX_W - 4, scrRow = id => { const d = add("  |", "exframe"); const sp = document.createElement("span"); sp.id = id; sp.className = ""; sp.style.color = "var(--fg)"; sp.textContent = " ".repeat(SW); d.append(sp, "|"); };
-    add("  ." + "-".repeat(SW) + ".", "exframe");
-    scrRow("exTk"); scrRow("exC0"); scrRow("exC1"); scrRow("exC2");
-    add("  '" + "-".repeat(SW) + "'", "exframe");
-    exTick(true);
-    const tabs = add("", "");
-    EX_TABS.forEach((t, i) => { tabs.append(btn(i === ex.tab ? `[${t}]` : ` ${t} `, "tab", i), " "); });
-    add(" ");
-    const why = exClosedWhy();
-    const foot = (...parts) => { const f = add("", ""); parts.forEach(p => f.append(typeof p === "string" ? p : btn(p[0], "x", p[1]))); };
-    if (why) { say(why); add(" "); foot(["[ESC] leave", "close"]); return; }
-    // A step in progress takes the whole window.
-    if (ex.step === "take" && ex.peek) {
-      const o = ex.peek, payWith = o.wants ? exHoldings().filter(it => exMatches(o.wants, it)) : [];
-      add(exFit("TAKE  " + o.name)); add(exFit("ASKS  " + wantsText(o.wants)));
-      if (o.wants) add(payWith.length ? exFit(`GIVE  ${payWith[ex.pay % payWith.length].name}${payWith.length > 1 ? "  (</> other)" : ""}`) : "You have nothing it asks for.");
-      add(" "); add(o.name && RULES.tierOf(o.name) === "MOON" ? "A MOON thing goes to your stash." : "It goes into the bag.");
-      note();
-      foot(...(!o.wants || payWith.length ? [["[ENTER] take", "go"], "  "] : []), ["[ESC] back", "back"]);
-      return;
-    }
-    if (ex.step === "make-item") {
-      const h = exHoldings();
-      add("OFFER WHICH THING?");
-      if (!h.length) say("Nothing tradeable here. RARE and better only, found while the exchange could see.");
-      h.forEach((it, i) => add(exFit(`${i === ex.sel ? ">" : " "} ${it.name}${it.from === "stash" ? " (stash)" : ""}`), "btn", { i }));
-      add(" "); foot(["[ENTER] choose", "go"], "  ", ["[ESC] back", "back"]);
-      return;
-    }
-    if (ex.step === "make-ask") {
-      const m = ex.make;
-      add(exFit("OFFER  " + m.item.name)); add(" ");
-      add(exFit(`ASKS FOR  < ${wantsText(EX_WANTS[m.want])} >`), "btn", { x: "want" });
-      add(`SHOWN     ${m.pub ? "in the market (public)" : "by code only (private)"}`, "btn", { x: "pub" });
-      add(" "); add("</> what it asks for   [P] public or private");
-      note();
-      foot(["[ENTER] offer", "go"], "  ", ["[ESC] back", "back"]);
-      return;
-    }
-    if (ex.step === "cancel" || ex.step === "withdraw") {
-      const r = exRows()[ex.sel] || {};
-      if (ex.step === "cancel") { add(exFit(`CANCEL ${r.o.code}?`)); add(exFit(r.o.name + (RULES.tierOf(r.o.name) === "MOON" ? " goes back to the stash." : " comes back to the bag."))); }
-      else {
-        say(`Take ${r.s.name} into this run?`); say("It leaves the stash, and the exchange, for good.");
-        if (ex.mine && ex.mine.moonCap) say("This quarter's one from someone else is used. One you found yourself still comes.");
-        else say("One found by someone else counts as this quarter's one.");
-      }
-      note();
-      add(" "); foot(["[ENTER] yes", "go"], "  ", ["[ESC] back", "back"]);
-      return;
-    }
-    // A tab.
-    const rows = exRows(), tab = EX_TABS[ex.tab];
-    if (tab === "CODE") {
-      add("Type an offer's code:");
-      const inp = document.createElement("input"); inp.className = "nameinput"; inp.maxLength = 8; inp.value = ex.code; inp.spellcheck = false; inp.id = "excode";
-      inp.addEventListener("input", () => { ex.code = inp.value; });
-      inp.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") exAct("go"); else if (e.key === "Escape") { inp.blur(); exAct("back"); } });
-      const row = add("", ""); row.append(inp);
-      note();
-      add(" "); foot(["[ENTER] look", "go"], "  ", ["[ESC] leave", "close"]);
-      setTimeout(() => { const i = document.getElementById("excode"); if (i) i.focus(); }, 0);
-      return;
-    }
-    ex.sel = Math.max(0, Math.min(ex.sel, rows.length - 1));
-    if (!ex.loaded) add("...");                     // the first answer from the market hasn't come yet
-    else if (!rows.length) say(tab === "MARKET" ? "Nothing on offer right now." : "Special things go here.");
-    if (ex.loaded) rows.slice(0, 9).forEach((r, i) => add(exFit((i === ex.sel ? ">" : " ") + r.text), "btn", { i }));
-    note();
-    add(" ");
-    foot("</> tabs  ", ["[ENTER]", "go"], "  ", ["[ESC] leave", "close"]);
-  }
-  // What ENTER (or a click) does where the window is.
-  async function exAct(a) {
-    if (ex.busy) return;
-    const rows = exRows(), r = rows[ex.sel], tab = EX_TABS[ex.tab];
-    if (a === "close") return showExchange(false);
-    if (a === "back") { ex.step = null; ex.peek = null; ex.msg = ""; return showExchange(true); }
-    if (a !== "go") return;
-    ex.msg = "";
-    const run = async (path, body, done) => { ex.busy = true; showExchange(true); let d; try { d = await ecoFetch(path, body); } catch (e) { d = { error: "net" }; } ex.busy = false;
-      if (d.error || d.ok === false) { ex.msg = d.error === "cap" ? "This quarter's one from someone else is used." : d.why || (d.error === "net" ? "The exchange can't be reached." : "The exchange said no."); return showExchange(true); }
-      done(d); persist(); draw(); ex.step = null; ex.peek = null; await exRefresh(); };
-    if (ex.step === "take") {
-      const o = ex.peek, payWith = o.wants ? exHoldings().filter(it => exMatches(o.wants, it)) : [], pay = payWith.length ? payWith[ex.pay % payWith.length] : null;
-      if (o.wants && !pay) return;
-      return run("take", { code: o.code, pay: pay && pay.id }, d => {
-        if (!d.stash) ecoGive(d.got.name);
-        if (pay && pay.from === "bag") ecoTake(pay.name);
-        ex.msg = cap(d.stash ? `${d.got.name} goes to your stash.` : `${d.got.name} is in the bag.`);
-      });
-    }
-    if (ex.step === "make-item") { const it = exHoldings()[ex.sel]; if (!it) return; ex.make = { item: it, want: 0, pub: true }; ex.step = "make-ask"; return showExchange(true); }
-    if (ex.step === "make-ask") {
-      const m = ex.make;
-      return run("offer", { item: m.item.id, wants: EX_WANTS[m.want], public: m.pub }, d => {
-        if (m.item.from === "bag") ecoTake(m.item.name);
-        ex.tab = 1; ex.msg = `Offered. Its code is ${d.code}. It closes when the quarter ends.`;
-      });
-    }
-    if (ex.step === "cancel") return run("cancel", { code: r.o.code }, d => { if (!d.back.stash) ecoGive(d.back.name); ex.msg = cap(`${d.back.name} is back.`); });
-    if (ex.step === "withdraw") return run("withdraw", { item: r.s.id }, d => { ecoGive(d.name); ex.msg = cap(`${d.name} is in the bag now.`); });
-    if (tab === "CODE") {
-      const code = ex.code.trim(); if (!code) return;
-      ex.busy = true; showExchange(true);
-      let d; try { const res = await fetch(LEADERBOARD_URL + "/eco/peek?code=" + encodeURIComponent(code), { headers: adminOK ? { "x-admin-key": localStorage.getItem("dd-admin") || "" } : {} }); d = await res.json(); } catch (e) { d = { gone: "The exchange can't be reached." }; }
-      ex.busy = false;
-      if (d.offer) { ex.peek = d.offer; ex.pay = 0; ex.step = "take"; } else ex.msg = d.gone || "No offer has that code.";
-      return showExchange(true);
-    }
-    if (!r) return;
-    if (tab === "MARKET") { ex.peek = r.o; ex.pay = 0; ex.step = "take"; return showExchange(true); }
-    if (tab === "YOURS") {
-      if (r.make) { if (((ex.mine && ex.mine.offers) || []).length >= 3) { ex.msg = "At most 3 offers at once."; return showExchange(true); } ex.step = "make-item"; ex.sel = 0; return showExchange(true); }
-      ex.step = "cancel"; return showExchange(true);
-    }
-    if (tab === "STASH") { ex.step = "withdraw"; return showExchange(true); }
-  }
-  function exKey(e, key) {
-    e.preventDefault();
-    if (key === "e" || key === "c" || (key === "escape" && !ex.step)) return showExchange(false);
-    if (key === "escape") return exAct("back");
-    if (key === "enter") return exAct("go");
-    if (key === "x" && !adminOK) { adminGate().then(ok => { if (ok) exRefresh(); }); return; }   // the admin: see the bots' offers (no testing cheats)
-    if (ex.step === "make-ask") {
-      if (key === "arrowleft" || key === "arrowright") ex.make.want = (ex.make.want + (key === "arrowright" ? 1 : EX_WANTS.length - 1)) % EX_WANTS.length;
-      else if (key === "p") ex.make.pub = !ex.make.pub;
-      return showExchange(true);
-    }
-    if (ex.step === "take") { if (key === "arrowleft" || key === "arrowright") ex.pay++; return showExchange(true); }
-    if (ex.step) { if (key === "arrowdown" || key === "arrowup") ex.sel += key === "arrowdown" ? 1 : -1; ex.sel = Math.max(0, ex.sel); return showExchange(true); }
-    if (key === "arrowleft" || key === "arrowright") { ex.tab = (ex.tab + (key === "arrowright" ? 1 : EX_TABS.length - 1)) % EX_TABS.length; ex.sel = 0; ex.msg = ""; return showExchange(true); }
-    if (key === "arrowdown" || key === "arrowup") { ex.sel += key === "arrowdown" ? 1 : -1; return showExchange(true); }
-    if (/^[1-9]$/.test(key)) { ex.sel = Number(key) - 1; return showExchange(true); }
   }
   // ABOUT: the build, what the game is, a few numbers from this run and the codex.
   // (The full stats only show at the end of a run.)
@@ -1975,16 +1650,11 @@
   }
   // When a search turns something up, a box says what it was and waits for Enter, Space, Esc or a
   // click, so a quick run of searches can't skip past it. Holding A won't dismiss it.
-  // v1.01: while the exchange is deciding a find (above, ecoScan), the box waits for it, at most 1.2 seconds, so it
-  // shows the thing KURA really got; a MOON thing kept for the stash is listed as such.
   // (v1.01.1) While a search's result is still being typed, its box waits: the beat keeps it and opens it at the end.
   let holdFound = false, heldFound = null;
   function foundBox(before) {
     if (holdFound) { heldFound = before; return; }
-    if (!ecoWait.length) return foundBoxNow(before);
-    const w = ecoWait.splice(0);
-    Promise.race([Promise.all(w), new Promise(r => setTimeout(r, 1200))])
-      .then(() => { if (save && document.getElementById("found").hidden) foundBoxNow(before); });
+    foundBoxNow(before);
   }
   function foundBoxNow(before) {
     if (!save) return;
@@ -1992,7 +1662,6 @@
     const silver = (save.silver || 0) - (before.silver || 0);
     const lines = [];
     for (const it of newItems) lines.push({ text: it, tier: RULES.tierOf(it) });
-    for (const it of ecoStashed.splice(0)) lines.push({ text: it + " (kept in the stash)", tier: "MOON" });
     // v1.01.1: the box is for good finds only (a RARE, MYTHIC or MOON thing, or the stairs). Anything less (a common
     // or uncommon thing, loose SILVER) is told on line 2 and goes into the bag without one.
     const good = lines.some(l => typeof l === "object" && ["RARE", "MYTHIC", "MOON"].includes(l.tier)) || /Stairs lead up/.test(save.log || "");
@@ -2634,7 +2303,7 @@
     if (others > 0) return pick(["On this level, someone else stops to listen.", "Someone else on this level looks up.", "Far off on this level, a search goes quiet."]);
     return pick(["Somewhere above, the dark shifts.", "The walls settle, a little further off.", "Down here, something old notices."]);
   }
-  const VIEW_ONLY = new Set(["invoke", "exchange", "log", "board", "about", "codex", "backup"]);      // (v1.27) buttons that open a screen and ask the server for nothing
+  const VIEW_ONLY = new Set(["invoke", "log", "board", "about", "codex", "backup"]);      // (v1.27) buttons that open a screen and ask the server for nothing
   let searchGo = false;                         // (a search being run by the block below, so it isn't caught twice)
   let auraGo = false;                           // (the same for an AURA read)
   // (v1.27) A TURN TAPPED WHILE THE SERVER IS ANSWERING is remembered, one at most, and done as soon as things are quiet: only
@@ -2644,7 +2313,7 @@
   function flushTurn() {
     const q = queuedTurn; queuedTurn = null;
     if (!q || Date.now() - q.at > 3000 || waiting || searchBeat || atTitle || !save || !save.dungeon || save.dead || save.encounter || save.question || save.raise || (save.altar && save.altar.open)) return;
-    if (!document.getElementById("found").hidden || exOpen() || ["inv", "log", "board", "about", "codex"].some(id => { const e = document.getElementById(id); return e && !e.hidden; })) return;
+    if (!document.getElementById("found").hidden || ["inv", "log", "board", "about", "codex"].some(id => { const e = document.getElementById(id); return e && !e.hidden; })) return;
     act(q.name);
   }
   async function act(name) {
@@ -2703,8 +2372,7 @@
     if (name === "search" && save && !searchGo && !save.encounter && !save.dead && !save.question) {
       if (RULES.breath(save) < 1) { searchGo = true; const going = act("search"); searchGo = false; await going; return; }
       const was = save.log, can = RULES.available(save), WALL = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
-      const lead = save.view && save.view.end === "exchange" ? "> KURA reaches for the screen"
-        : can.door[save.facing] ? "> KURA listens at the door" : `> KURA searches the ${WALL[save.facing] || ""} wall`;
+      const lead = can.door[save.facing] ? "> KURA listens at the door" : `> KURA searches the ${WALL[save.facing] || ""} wall`;
       // v1.01.1: THE RESULT HAS WEIGHT. The dots run longer the better the find (a RARE thing or the stairs three more,
       // a MYTHIC or MOON thing five), then the result is typed out a letter at a time, a sentence at a time with a
       // beat between. A real find's box waits until the typing is done.
@@ -2795,15 +2463,9 @@
     if (name === "invoke") {
       const closing = !document.getElementById("inv").hidden;
       if (save && save.encounter && !closing) document.getElementById("found").hidden = true;   // the fight box comes back after
-      if (!closing) showExchange(false);
       showInv(!closing);
       if (closing && save && save.encounter) encounterBox();   // closing the bag from the menu brings the fight box back too
       return;
-    }
-    if (name === "exchange") {
-      if (exOpen()) return showExchange(false);
-      showInv(false); ex.step = null; ex.msg = ""; ex.sel = 0;
-      return exRefresh();
     }
     if (name === "log") return toggleLog();
     if (name === "board") return LEADERBOARD_URL ? toggleBoard() : undefined;
@@ -2828,13 +2490,6 @@
     // A blocked run says so in a box that waits for [ OK ]; then the fight box plays the demon's reply.
     if (name !== "reset" && save.encounter && save.encounter.ranTried && !ranBefore && !save.dead) {
       blockedRun = true; noticeBox([`${save.encounter.name} blocked your way.`]);
-      return;
-    }
-    // The exchange's screen was touched: the window opens (the rules only set the flag).
-    if (save && save.exchangeOpen) {
-      delete save.exchangeOpen; persist(); draw();
-      ex.tab = 0; ex.sel = 0; ex.step = null; ex.msg = "";
-      exRefresh();
       return;
     }
     if (name !== "reset" && !encounterBox(true) && !altarBox()) {
@@ -2898,18 +2553,6 @@
     else if (mode === "altar" && save.altar && save.altar.script && !save.altar.result && save.altar.page < save.altar.script.length - 1) act("altar-next");   // a click brings the terminal's next line
     else if (mode === "altar" || mode === "encounter") return;                   // their own buttons only
     else if (e.target.closest(".btn")) closeFound();   // any other box: only its [ OK ]
-  });
-  // The exchange: tabs, rows and its own buttons. Clicking a row chooses it; clicking the chosen one is ENTER.
-  document.getElementById("exch").addEventListener("click", e => {
-    const t = e.target.closest("[data-tab]"), x = e.target.closest("[data-x]"), line = e.target.closest("[data-i]");
-    if (e.target.closest("input")) return;
-    if (t) { ex.tab = Number(t.dataset.tab); ex.sel = 0; ex.step = null; ex.peek = null; ex.msg = ""; return showExchange(true); }
-    if (x) {
-      if (x.dataset.x === "want") { ex.make.want = (ex.make.want + 1) % EX_WANTS.length; return showExchange(true); }
-      if (x.dataset.x === "pub") { ex.make.pub = !ex.make.pub; return showExchange(true); }
-      return exAct(x.dataset.x);
-    }
-    if (line) { const i = Number(line.dataset.i); if (i === ex.sel) return exAct("go"); ex.sel = i; return showExchange(true); }
   });
   // Clicking an item chooses it; clicking the chosen one again uses it. Only [C]LOSE, I or Esc closes it.
   document.getElementById("inv").addEventListener("click", e => {
@@ -3010,7 +2653,6 @@
       else if (key === "arrowleft" || key === "arrowright") { codexTab = codexTab === "demons" ? "items" : "demons"; codexSel = -1; showCodex(true); }
       return;
     }
-    if (exOpen()) { if (document.activeElement && document.activeElement.id === "excode") return; return exKey(e, key); }
     if (!document.getElementById("inv").hidden) {
       if (invReg) { e.preventDefault(); if (key === "escape" || key === "c" || key === "i" || key === "m" || key === "backspace") { invReg = null; showInv(true); } return; }
       if (ichorPick >= 0) {

@@ -15,7 +15,7 @@ import { playerOf, makePlayer, Oops, reply, body, originsOf, sha, readToken, ipO
 const MAX_RUN = 400000;
 const now = () => Math.floor(Date.now() / 1000);
 const tidy = (st) => { delete st.breath; return st; };          // breath off: no breath record means a full bar
-const OUTBOX = ["finds", "gone", "goneAt", "goneTo", "events", "tally", "line3", "exchangeOpen"];
+const OUTBOX = ["finds", "gone", "goneAt", "goneTo", "events", "tally", "line3"];
 const kept = (st) => { const k = { ...st }; for (const f of OUTBOX) delete k[f]; return k; };
 // (v1.24) WHAT THE PAGE IS SENT: the run without its secrets. The seeds (which would rebuild the whole floor), which
 // kind of room is behind which door, where the stairs and the locker are, and what each wall hides and how deep. The
@@ -203,7 +203,7 @@ export async function gameRoute(req, env, url, wctx, inner) {
     if (!/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const out = url.pathname === "/run" ? await run(env, req, ctx) : await act(env, req, inner);
     if (out.run && out.out && inner) await later(wctx, sendOut(env, inner, out.me, out.out, out.spends));
-    if (out.run) { out.run = out.admin ? kept(out.run) : secretless(kept(out.run)); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; if (out.out.exchangeOpen) out.run.exchangeOpen = true; } delete out.out; delete out.me; delete out.spends; delete out.admin; }
+    if (out.run) { out.run = out.admin ? kept(out.run) : secretless(kept(out.run)); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; } delete out.out; delete out.me; delete out.spends; delete out.admin; }
     if (out.stale) return reply({ run: out.run, n: out.n, error: "The run moved on." }, 409);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {
