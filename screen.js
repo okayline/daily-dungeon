@@ -2,7 +2,7 @@
 // Shared by the web page (index.html) and node (for testing).
 (function (root) {
   // The build number: bumped with every release, so About and the changelog always match.
-  const VERSION = "v1.34";
+  const VERSION = "v1.35";
   const W = 80, VW = 47, VH = 17, OFF = [0, 3, 6];
   const L_ = o => 2 + o, R_ = o => 44 - o;
   const ljust = (s, n) => s.length >= n ? s : s + " ".repeat(n - s.length);
@@ -577,8 +577,9 @@
       " > " + label("LEAN", leanLine(opts.lean))]) S.push(r(m));
     S.push("+" + "-".repeat(78) + "+");
     // Menu bar: same bracket-letter convention as the real in-game action bar.
-    const menu = " [N]EW RUN   [C]ONTINUE   [B]OARD   [?] ABOUT";
-    S.push("|" + menu + " ".repeat(78 - menu.length) + "|");
+    // (v1.35) A plain pointer for someone who has never played, at the bar's right end.
+    const menu = " [N]EW RUN   [C]ONTINUE   [B]OARD   [?] ABOUT", hint = "New here? Press N to start. ";
+    S.push("|" + menu + " ".repeat(78 - menu.length - hint.length) + hint + "|");
     S.push("+" + "=".repeat(78) + "+");
     return finishFrame(S);
   }

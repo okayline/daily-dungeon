@@ -2,6 +2,11 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.35 - Front Door - Oct 20 2026, 08:11 HST
+
+- **A pointer for new players.** The title screen's menu bar now ends with "New here? Press N to start."
+- Removed: nothing.
+
 ## v1.34 - Clean Start - Oct 20 2026, 04:45 HST
 
 - **The codex stays with you.** Starting a new run no longer empties the codex: the demons you've met and the things you've found stay in it, as they always should have. A name you chose stays too.
