@@ -179,6 +179,25 @@ test("(v1.27) occasions: real days are named, they mark a find, and every histor
   assert.deepEqual(marks, ["full", "eclipse_solar", "first_copy"]);
 });
 
+test("(v1.33) a find carries its finer place and level; copies in the bag get what they live through, once each", async () => {
+  const ACT = (await import("../../act.js")).default, RULES = (await import("../../rules.js")).default, name = ACT.nameOf(1);
+  const { settleCopies } = await import("../game.js");
+  const marks = [], env = { REGISTRY: { async addMark(m) { marks.push(m.value); return { ok: true, n: marks.length }; } } };
+  // a find from a locker on B3F, while a demon falls and a door opens: the old copy gets both, the new one neither
+  const st = { stats: { beaten: 2, unlocks: 1, fled: 0 }, copies: { [name]: [{ k: "r:1", c: 7, m: ["full", "found_wall"] }] },
+    finds: [{ id: 1, key: "r:2", p: 4, h: "found_wall", x: ["in_locker", "on_b3f", "bogus"] }] };
+  await settleCopies(env, null, st, { t: "fight" }, { id: 5 }, { stats: { beaten: 1, unlocks: 0, fled: 0 } });
+  assert.deepEqual(st.copies[name][0].m, ["full", "found_wall", "beat_demon", "through_door"]);
+  assert.deepEqual(st.copies[name][1].q, ["full", "found_wall", "in_locker", "on_b3f"]);
+  // another fight won: nothing new for a copy that already saw one
+  marks.length = 0;
+  await settleCopies(env, null, st, { t: "fight" }, { id: 5 }, { stats: { beaten: 1, unlocks: 1 } });
+  assert.deepEqual(marks, []);
+  assert.deepEqual(["in_locker", "deep_stone", "on_b4f", "on_1f", "talked_down", "fled_fight"].map((v) => RULES.markLabel("deed", v)),
+    ["In a hidden locker", "Deep in the stone", "On B4F", "On 1F", "Saw a demon talked down", "Ran from a fight"]);
+  assert.equal(RULES.markLines(["full", "found_wall", "in_locker", "on_b3f"])[0], "Found in a wall under a full moon.");   // the Moon still reads found_wall
+});
+
 test("(v1.31) a demon the player has answered stays seen on the server, so the page does not open its APPEARS screen again", async () => {
   const env = { DB: fakeD1() }, me = browser(env);
   let run = (await me("/run", {})).data, n = run.n, seenAfter = null;

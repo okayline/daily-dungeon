@@ -127,12 +127,24 @@ async function sendOut(env, inner, me, st, spends) {
 // came: found in a wall, from a demon, from a friend, left by a stranger); climbing a level adds carried_up to every
 // copy in the bag. Once a copy has its number, its waiting marks are stamped in the registry (same key, same mark, so a
 // retry never makes two) and move to m, which INVOKE shows. A mark the registry refuses or can't take keeps waiting.
+// (v1.33) A find also waits with its finer place and level (f.x: in_locker, in_archive, deep_stone, on_b4f ...). And what
+// the copies already in the bag live through, at most once per copy: a demon beaten (beat_demon), a demon talked down
+// or recruited (talked_down), a fight run from (fled_fight), a locked door opened (through_door). Seen by comparing the
+// run's tallies before and after the move, so things found in this same move don't get them.
+const FIND_EXTRA = /^(in_locker|in_archive|deep_stone|on_(b[1-4]|[1-9])f)$/;
+const LIVED = [[["beaten"], "beat_demon"], [["peace", "recruited"], "talked_down"], [["fled"], "fled_fight"], [["unlocks"], "through_door"]];
 export async function settleCopies(env, inner, st, a, me, old) {
   const copies = st.copies || {}, spends = [];
   if (a.t === "takeAway" && Number.isInteger(a.copy)) {
     const list = copies[a.name] || [], i = list.findIndex((e) => e.c === a.copy);
     if (i >= 0) list.splice(i, 1);
     if (!list.length) delete copies[a.name];
+  }
+  const now = st.stats || {}, was = (old && old.stats) || {}, more = (k) => (now[k] || 0) > (was[k] || 0);
+  const lived = LIVED.filter(([ks]) => ks.some(more)).map(([, v]) => v);
+  if (lived.length) for (const list of Object.values(copies)) for (const e of list) {
+    const has = new Set([...(e.m || []), ...(e.q || [])].map((v) => String(v).split(":")[0]));
+    for (const v of lived) if (!has.has(v)) (e.q = e.q || []).push(v);
   }
   const ask = [];
   for (const f of st.finds || []) {
@@ -143,6 +155,7 @@ export async function settleCopies(env, inner, st, a, me, old) {
     const q = [], ph = Number.isInteger(f.p) ? ACT.phaseMark(f.p) : null;
     if (ph) q.push(ph);
     if (typeof f.h === "string") q.push(f.h);
+    for (const x of Array.isArray(f.x) ? f.x : []) if (FIND_EXTRA.test(x)) q.push(x);
     for (const o of Array.isArray(f.o) ? f.o : []) if (ACT.OCCASIONS.includes(o)) q.push(o);
     (copies[name] = copies[name] || []).push(q.length ? { k: f.key, c: null, q } : { k: f.key, c: null });
   }

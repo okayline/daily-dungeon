@@ -41,7 +41,9 @@
   const BAG_MAX = 9;
   // (v1.25) `how` is the deed a find carries into its history (a mark in the shared registry): found_wall,
   // from_demon, given_member, from_stranger; null when it is none of those. The moon's phase goes with it (p).
-  function gain(st, it, lines, noQueue, how) {
+  // (v1.33) `where` is a finer place (in_locker, in_archive, deep_stone), a mark on top of the deed, so the Moon's
+  // found_wall still matches; and every find is marked with the level it came on (on_b4f ... on_b1f).
+  function gain(st, it, lines, noQueue, how, where) {
     // (v1.14) Every item gained is queued for the shared copy registry; the page sends the queue for a signed-in player
     // (registryTick in index.html) and drops it otherwise. The key (run + nth gain) makes a resend never count twice.
     // (noQueue: a thing that waited in the overflow was queued the first time it came; taking it now is not a new find.)
@@ -49,6 +51,8 @@
       st.gainN = (st.gainN || 0) + 1;
       const f = { id: ITEM_ID[it], key: st.runId + ":" + st.gainN, p: moon() };
       if (how) f.h = how;
+      const x = [where, st.floor ? "on_" + String(st.floor).toLowerCase() : null].filter(Boolean);
+      if (x.length) f.x = x;
       const occ = TIME.occasions ? TIME.occasions(TIME.now()) : [];
       if (occ.length) f.o = occ;      // (v1.27) a day the real sky makes special
       st.finds = (st.finds || []).concat(f).slice(-50);
@@ -986,7 +990,7 @@
       // The ? is a hidden locker: usually a RARE, sometimes MYTHIC; under a full moon, half the time a MOON item.
       case "lure": {
         const it = moon() === 4 && Math.random() < 0.5 ? pick(MOON_DROPS) : pick(names(Math.random() < 0.7 ? "RARE" : "MYTHIC"));
-        gain(st, it, undefined, false, "found_wall"); return `A locker holds ${it}.`;
+        gain(st, it, undefined, false, "found_wall", "in_locker"); return `A locker holds ${it}.`;
       }
       case "clue": {                          // a dead end's scrap: what one of the wing's two doors is
         const rm = st.dungeon.floor.rooms[st.dungeon.at], w = st.dungeon.floor.wings[rm.wing];
@@ -994,7 +998,7 @@
         return "A scrap of writing, pinned to the wall.";
       }
       case "silver": { const n = R(20, 150) * (inArchive(st) ? 2 : 1); st.silver = silver + n; tally(st, "silverFound", n); return `${n} SILVER, loose in the rubble.`; }
-      case "item": { const it = inArchive(st) ? pick(names(Math.random() < 0.35 ? "RARE" : "UNCOMMON")) : rollItem(st); gain(st, it, undefined, false, "found_wall"); return `KURA finds ${it}.`; }
+      case "item": { const it = inArchive(st) ? pick(names(Math.random() < 0.35 ? "RARE" : "UNCOMMON")) : rollItem(st); gain(st, it, undefined, false, "found_wall", inArchive(st) ? "in_archive" : null); return `KURA finds ${it}.`; }
       case "demon": {
         // A demon appears and stays until it's fought, talked down, or escaped (see the ENCOUNTER section).
         const base = pickDemon(st);
@@ -1247,7 +1251,7 @@
       w.deep.prog = (w.deep.prog || 0) + worth * (tripping(st) ? 3 : 1);
       if (w.deep.prog >= (w.deep.need || 35)) {
         w.deep.found = true; ev(st, "deep");
-        gain(st, w.deep.item, undefined, false, "found_wall");
+        gain(st, w.deep.item, undefined, false, "found_wall", "deep_stone");
         st.log = say("Deep in the stone, something gives.");
         st.extra = `> KURA pulls out ${w.deep.item}.`;
         return show(st);
@@ -1801,10 +1805,13 @@
   }
   // (v1.29) One mark as a short line for the HISTORY screen, 24 columns at most (it sits beside a date and time).
   const MOON_WORDS = { answered: "Answered the Moon", blessed: "Blessed by the Moon" };
+  // (v1.33) where exactly it was found, and what it lived through while carried (each at most once per copy)
+  const MORE_WORDS = { in_locker: "In a hidden locker", in_archive: "In the Archive", deep_stone: "Deep in the stone",
+    beat_demon: "Saw a demon fall", talked_down: "Saw a demon talked down", fled_fight: "Ran from a fight", through_door: "Through a locked door" };
   function markLabel(kind, value) {
     const v = String(value || ""), sky = OCC_WORDS[v] || PHASE_WORDS[v];
     let t = kind === "night" ? (sky ? "Under " + sky : "") : kind === "moon" ? MOON_WORDS[v] || "" : v === "carried_up" ? "Carried up" : DEED_WORDS[v] || (COPY_WORDS[v] || "").replace(/\.$/, "");
-    if (!t) t = v.replace(/_/g, " ");
+    if (!t) t = MORE_WORDS[v] || (/^on_(b\d|\d+)f$/.test(v) ? "On " + v.slice(3).toUpperCase() : v.replace(/_/g, " "));
     if (t.length > 24) t = t.replace(/^Under (a|an|the) /, "Under ");
     return t.slice(0, 24);
   }

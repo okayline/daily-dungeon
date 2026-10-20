@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.33 - Fuller Stories - Oct 20 2026, 00:30 HST
+
+- **Things remember more of where they came from.** A find now also remembers the level it came on, and whether it was hidden in a locker, in the Archive or deep in the stone.
+- **Things remember what they've been through with you.** Whatever is in your bag when a demon falls, a demon is talked down, you run from a fight or you open a locked door keeps that in its history, once for each.
+- Nothing was removed. Things found before today keep the history they had.
+
 ## v1.32 - Patient Party - Oct 19 2026, 21:20 HST
 
 - **Your party is more patient.** Members take far more talking before they are talked out for the day, and go quiet only in the hottest rooms.
