@@ -8,7 +8,7 @@
 
 An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei with some modern twists.  Played on the real lunar calendar. You wake at the bottom of a pit. The dark is already rising.
 
-4Dungeon is a daily, asynchronous, moon-phased, time-gated, seeded, real-world-clock-driven, server-authoritative, shared-world, ambient multiplayer, roguelike dungeon crawler with permadeath-style runs, one key a day, sealed stairs, and a public hash-chained ledger keeping track of items with provenance.
+Daily Digital Demon Dungeon (4Dungeon) is a daily, asynchronous, moon-phased, time-gated, seeded, real-world-clock-driven, server-authoritative, shared-world, ambient multiplayer, roguelike dungeon crawler with permadeath-style runs, one key a day, sealed stairs, and a public hash-chained ledger keeping track of items with provenance.
 
 
 
