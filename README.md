@@ -2,7 +2,7 @@
 
 *One door a day. The dark rises with the moon.*
 
-**Play it:** [dungeon.88x31.app](https://dungeon.88x31.app). The older copy on [itch.io](https://okayline.itch.io/4dungeon) plays the run in your browser instead, without the server.
+**Play it:** [dungeon.88x31.app](https://dungeon.88x31.app).
 
 <img width="60%" alt="Daily Digital Demon Dungeon, build v1.26" src="screenshots/v1.26.png" />
 
