@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.29 - Pages - Oct 19 2026, 20:00 HST
+
+- **INVOKE has pages.** Six things to a page, with room between the parts. ICHOR and SILVER sit on the line above the first thing, and the bottom bar holds the page controls, HISTORY, MAIL and CLOSE. Pressing a number still uses that thing.
+- **A HISTORY screen.** Press H on a thing to see its whole story: how rare it is, when it was made, how many of it exist, and everything that has happened to it, with the date and time, newest first. A link opens its page in the public ledger.
+- **MAIL is tidier.** The BACK button and the ESC note are gone; CLOSE is on the bar.
+- **Hold Omen is gone from INVOKE.** The button and its key are removed.
+
 ## v1.28 - Tidy Up - Oct 18 2026, 19:40 HST
 
 - **The Exchange is gone.** It had been switched off since v1.04, so the game plays exactly the same. The market window, the trading code and the tables behind it are removed.
