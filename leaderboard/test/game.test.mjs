@@ -197,7 +197,7 @@ test("(v1.33) a find carries its finer place and level; copies in the bag get wh
   await settleCopies(env, null, st, { t: "fight" }, { id: 5 }, { stats: { beaten: 1, unlocks: 1 } });
   assert.deepEqual(marks, []);
   assert.deepEqual(["in_locker", "deep_stone", "on_b4f", "on_1f", "talked_down", "fled_fight"].map((v) => RULES.markLabel("deed", v)),
-    ["In a hidden locker", "Deep in the stone", "On B4F", "On 1F", "Saw a demon talked down", "Ran from a fight"]);
+    ["In a hidden locker", "Deep in the stone", "On B4F", "On 1F", "Saw a demon talked down", "Escaped a fight"]);
   assert.equal(RULES.markLines(["full", "found_wall", "in_locker", "on_b3f"])[0], "Found in a wall under a full moon.");   // the Moon still reads found_wall
 });
 

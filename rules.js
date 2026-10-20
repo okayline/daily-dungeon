@@ -1808,7 +1808,7 @@
   const MOON_WORDS = { answered: "Answered the Moon", blessed: "Blessed by the Moon" };
   // (v1.33) where exactly it was found, and what it lived through while carried (each at most once per copy)
   const MORE_WORDS = { in_locker: "In a hidden locker", in_archive: "In the Archive", deep_stone: "Deep in the stone",
-    beat_demon: "Saw a demon fall", talked_down: "Saw a demon talked down", fled_fight: "Ran from a fight", through_door: "Through a locked door" };
+    beat_demon: "Saw a demon fall", talked_down: "Saw a demon talked down", fled_fight: "Escaped a fight", through_door: "Through a locked door" };
   function markLabel(kind, value) {
     const v = String(value || ""), sky = OCC_WORDS[v] || PHASE_WORDS[v];
     let t = kind === "night" ? (sky ? "Under " + sky : "") : kind === "moon" ? MOON_WORDS[v] || "" : v === "carried_up" ? "Carried up" : DEED_WORDS[v] || (COPY_WORDS[v] || "").replace(/\.$/, "");
