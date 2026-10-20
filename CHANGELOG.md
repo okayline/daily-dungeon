@@ -2,7 +2,7 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
-## v1.36 - User Page - Oct 20 2026, 08:30 HST
+## v1.36 - User Page - Oct 20 2026, 09:00 HST
 
 - **A USER page on the title screen.** The title's menu bar now has [U]SER. It opens inside the 3D view and lists your save codes and passkeys (each one can be forgotten), makes a new save code, adds a passkey, and has a box to type a save code in to log in on this device. During a run, press U. When you're signed in, the [?] page has a [U]SER button at the top.
 - **INVOKE pages.** The bag's first page shows 5 things, then a grey "6 ... (next page)" row (6 turns the page). The second page ends with a grey "10 ... (previous page)" row that takes you back. There's an open line above the [<] [>] row at the bottom.
