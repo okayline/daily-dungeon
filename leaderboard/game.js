@@ -10,6 +10,7 @@
 // not kept. An action that changes nothing answers {same: true, n} and writes nothing (the page's once-a-minute tick).
 // Breath is off here (always full) until it's retuned for the server's feel. Admin tools (ACT.ADMIN) need players.admin.
 import ACT from "../act.js";
+import SMT from "../screen.js";
 import { playerOf, makePlayer, Oops, reply, body, originsOf, sha, readToken, ipOf } from "./accounts.js";
 
 const MAX_RUN = 400000;
@@ -59,7 +60,7 @@ async function run(env, req, ctx) {
   if (!row || b.fresh === true) {
     const st = fresh(row && JSON.parse(row.state)), n = row ? row.n + 1 : 0;
     await store(env, me, st, n);
-    return { run: st, n, admin: !!me.admin };
+    return { run: st, n, me, moments: await runMoments(st, null), admin: !!me.admin };      // (v1.36) KURA wakes in the pit: sealed after the answer
   }
   const st = tidy(ACT.apply(JSON.parse(row.state), { t: "tick" }));   // catch up with the real date
   await store(env, me, st, row.n);
@@ -93,7 +94,7 @@ async function act(env, req, inner) {
   catch (e) { console.error(e); throw new Oops("That didn't work.", 400); }
   const old = JSON.parse(row.state);
   const { spends, marks } = await settleCopies(env, inner, st, a, me, old);
-  const ended = st.dead && !old.dead ? await runEnd(st) : null;
+  const moments = await runMoments(st, old);
   const s = JSON.stringify(kept(st));
   if (s === row.state && !OUTBOX.some((f) => st[f] !== undefined)) return { same: true, n: row.n };
   if (s.length > MAX_RUN) throw new Oops("This run has grown too big to keep.", 413);
@@ -103,19 +104,37 @@ async function act(env, req, inner) {
   ];
   if (Math.random() < 0.01) write.push(env.DB.prepare("DELETE FROM acct_limits WHERE window_start < ?").bind(t - 86400));
   await env.DB.batch(write);
-  return { run: st, n: row.n + 1, out: st, me, spends, marks, ended, admin: !!me.admin };
+  return { run: st, n: row.n + 1, out: st, me, spends, marks, moments, admin: !!me.admin };
 }
 
-// (v1.36) A RUN'S END ON THE SHARED LEDGER: when a run ends, one entry is sealed in the registry (sealRun, after the
-// answer) with a few public facts. Its `run` is a fingerprint of the run id, never the id itself, so the entry can't be
-// tied to the run's finds; a board can still check a posted run by hashing its id. A run that used a cheat isn't sealed.
+// (v1.36) A RUN'S MOMENTS ON THE SHARED LEDGER: a few turning points are sealed in the registry (sealRun, after the
+// answer), never every move: KURA waking in the pit (a new run, from /run), a demon appeased (talked_down) or joining,
+// a level climbed, an offering to the Moon at the sealed stairs, climbing out of the pit (leave) and the run's end. Each
+// carries the level, the day, the turn and the moon. Its `run` is a fingerprint of the run id, never the id itself (the
+// id is the start of every find's key), so a run's moments read together but can't be tied to its finds. Moments are
+// seen by comparing the run's tallies before and after the move. A run that used a cheat seals nothing.
 const WORD = /^[#A-Za-z0-9_ .-]{1,40}$/;   // what the registry takes as a short word
-export async function runEnd(st) {
-  if (st.cheated || st.freeSteps || !st.runId) return null;
-  const s = ACT.score(st), killer = String(st.killer || "");
-  const detail = { level: WORD.test(String(st.floor)) ? String(st.floor) : null, days: s.days, climbed: s.stats.climbs, demons: s.demons, turns: s.turns,
-    end: killer ? "fell" : "dark", ...(WORD.test(killer) ? { killer } : {}) };
-  return { run: (await sha("4dungeon-run:" + st.runId)).slice(0, 32), detail };
+const word = (v) => (WORD.test(String(v || "")) ? String(v) : null);
+export async function runMoments(st, old) {
+  if (st.cheated || st.freeSteps || !st.runId || (old && old.runId !== st.runId)) return [];
+  const now = st.stats || {}, was = (old && old.stats) || {}, more = (k) => (now[k] || 0) > (was[k] || 0);
+  const base = { level: word(st.floor), day: st.day || 1, turn: st.steps || 0, moon: ACT.phaseMark(SMT.moonIndex(SMT.now())) };
+  const demon = word(old && old.encounter && old.encounter.name), out = [];
+  const add = (moment, extra = {}) => out.push({ moment, detail: { ...base, ...extra } });
+  if (!old) add("enter");
+  else {
+    if (more("peace")) add("talked_down", demon ? { demon } : {});
+    if (more("recruited")) add("joined", demon ? { demon } : {});
+    if (more("moonJudged")) add("offering", { level: word(old.floor), blessed: more("moonBlessed") ? 1 : 0 });
+    if (more("floors")) add((old.height || 1) === 4 ? "leave" : "climbed");      // from the top of the pit, she climbs out into the air
+    if (st.dead && !old.dead) {
+      const s = ACT.score(st), killer = word(st.killer);
+      add("end", { climbed: s.stats.climbs, demons: s.demons, end: st.killer ? "fell" : "dark", ...(killer ? { killer } : {}) });
+    }
+  }
+  if (!out.length) return [];
+  const run = (await sha("4dungeon-run:" + st.runId)).slice(0, 32);
+  return out.map((m) => ({ run, ...m }));
 }
 // (v1.36) The board's numbers for a run this server keeps: null when the poster has no run here (the itch.io page plays
 // on its own), { bad: true } when the post isn't this player's run or the run isn't over or used a cheat.
@@ -134,9 +153,9 @@ export async function keptScore(env, me, runId) {
 // copies (/found); items gone from the bag for good are used up there (/spent, the newest copy this player holds of
 // that item); a door's first entry is a tally mark (/tally); the run's moments are rumors (/event). A run that used
 // the testing tools sends no events. Nothing here can fail a move.
-async function sendOut(env, inner, me, st, spends, marks, ended) {
+async function sendOut(env, inner, me, st, spends, marks, moments) {
   const events = st.events || [];
-  if (env.REGISTRY && ended) { const r = await env.REGISTRY.sealRun({ game: "4dungeon", playerId: me.id, ...ended }); if (r && r.error) console.error("sealRun", r.error); }
+  if (env.REGISTRY) for (const m of moments || []) { const r = await env.REGISTRY.sealRun({ game: "4dungeon", playerId: me.id, ...m }); if (r && r.error) console.error("sealRun", m.moment, r.error); }
   if (env.REGISTRY && marks && marks.length) await stampMarks(env, marks);   // (v1.36) before /spent: a used-up copy takes no marks
   if (spends && spends.length) await inner("/spent", { items: spends });
   if (st.tally) await inner("/tally", st.tally);
@@ -250,8 +269,8 @@ export async function gameRoute(req, env, url, wctx, inner) {
     if (req.method !== "POST") throw new Oops("No such thing.", 404);
     if (!/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const out = url.pathname === "/run" ? await run(env, req, ctx) : await act(env, req, inner);
-    if (out.run && out.out && inner) await later(wctx, sendOut(env, inner, out.me, out.out, out.spends, out.marks, out.ended));
-    if (out.run) { out.run = out.admin ? kept(out.run) : secretless(kept(out.run)); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; } delete out.out; delete out.me; delete out.spends; delete out.marks; delete out.ended; delete out.admin; }
+    if (out.run && (out.out || out.moments) && inner) await later(wctx, sendOut(env, inner, out.me, out.out || {}, out.spends, out.marks, out.moments));
+    if (out.run) { out.run = out.admin ? kept(out.run) : secretless(kept(out.run)); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; } delete out.out; delete out.me; delete out.spends; delete out.marks; delete out.moments; delete out.admin; }
     if (out.stale) return reply({ run: out.run, n: out.n, error: "The run moved on." }, 409);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {

@@ -227,22 +227,33 @@ test("a new run keeps the codex and a chosen name, and nothing else from the las
   assert.equal(run.silver, 0);
 });
 
-test("(v1.36) a run's end is sealed in the registry after the answer, and the board posts the server's numbers", async () => {
+test("(v1.36) a run's moments are sealed in the registry after the answer, and the board posts the server's numbers", async () => {
   const { createHash } = await import("node:crypto");
   const env = { DB: fakeD1() }, me = browser(env), sealed = [];
   env.REGISTRY = { async sealRun(a) { sealed.push(a); return { ok: true, created: true }; }, async addMark() { return { ok: true }; } };
   await me("/run", {});
   const put = (f) => { const st = JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state); f(st); env.DB.raw.prepare("UPDATE runs SET state = ?").run(JSON.stringify(st)); return st; };
-  const st = put((s) => { s.dungeon.deadline = -1; s.today.date -= 1; s.steps = 12; });   // a new day, and the dark has already risen: the next move ends the run
-  const r = await me("/act", { n: 0, action: { t: "tick" } });
+  const st0 = put(() => {});
+  const fp = createHash("sha256").update("4dungeon-run:" + st0.runId).digest("hex").slice(0, 32);
+  // a new run: KURA wakes in the pit
+  assert.deepEqual(sealed.map((m) => [m.game, m.run, m.moment, m.detail.turn]), [["4dungeon", fp, "enter", 0]]);
+  // a plain move seals nothing
+  await me("/act", { n: 0, action: { t: "turn", dir: "L" } });
+  assert.equal(sealed.length, 1);
+  // a demon appeased: the peace tally goes up on a move during the fight with THE HOUND
+  const { runMoments } = await import("../game.js");
+  const after = { ...st0, steps: 5, stats: { peace: 1 } };
+  assert.deepEqual((await runMoments(after, { ...st0, encounter: { name: "THE HOUND" }, stats: { peace: 0 } })).map((m) => [m.moment, m.detail.demon, m.detail.turn]), [["talked_down", "THE HOUND", 5]]);
+  // the run's end: the dark has risen and a new day comes
+  const st = put((s) => { s.dungeon.deadline = -1; s.today.date -= 1; s.steps = 12; });
+  const r = await me("/act", { n: 1, action: { t: "tick" } });
   assert.equal(r.data.run.dead, true);
-  assert.equal(sealed.length, 1);
-  assert.equal(sealed[0].game, "4dungeon");
-  assert.equal(sealed[0].run, createHash("sha256").update("4dungeon-run:" + st.runId).digest("hex").slice(0, 32));
-  assert.equal(sealed[0].detail.end, "dark"); assert.equal(sealed[0].detail.turns, 12); assert.equal(sealed[0].detail.days, st.day);
-  assert.ok(!JSON.stringify(sealed[0]).includes(st.runId), "the run id itself is never sent");
-  await me("/act", { n: 1, action: { t: "tick" } });                           // already over: nothing sealed twice
-  assert.equal(sealed.length, 1);
+  const end = sealed.at(-1);
+  assert.equal(end.moment, "end"); assert.equal(end.run, fp); assert.equal(end.detail.end, "dark"); assert.equal(end.detail.turn, 12);
+  assert.ok(!JSON.stringify(sealed).includes(st.runId), "the run id itself is never sent");
+  const count = sealed.length;
+  await me("/act", { n: 2, action: { t: "tick" } });                           // already over: nothing sealed again
+  assert.equal(sealed.length, count);
   // the page claims a deeper floor and more turns; the board keeps the server's
   const post = await me("/score", { run: st.runId, name: "TESTER", floor: 4, days: 4, demons: 9, turns: 999, version: "t" });
   assert.equal(post.status, 200);
