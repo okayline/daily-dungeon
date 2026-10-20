@@ -427,13 +427,8 @@
   }
   // Now and then she reacts to what just happened (kind: fight, search, find, run). Never on a moonless night.
   function moonReact(st, kind) { return moonSky() === "none" || !MOON_REACT[kind] ? null : pick(MOON_REACT[kind]); }
-  // LOOKING UP (v1.06). One press of [M]OON: KURA looks up at the sky and asks, for a breath (SCRY is gone). The first
-  // look of the night may bring her offer: two things on [1] and [2], likelier the fuller she is, never at the new
-  // moon, and now or never (she doesn't wait). Her offers are things no one else deals in: a hunch about a locked
-  // door, a breath back, a pull toward LAW or toward CHAOS, a quiet aura for the day, and near full a moon thing.
-  // After that she talks a little, and then goes quiet until the next night. Every look costs a breath.
-  const MOON_TALKS = 3;                                  // looks a night she answers; after that, only light
-  const MOON_DONE = ["The moon is only light now.", "She's said what she'll say tonight.", "The moon has gone quiet. It's late, even for her."];
+  // LOOKING UP. One press of [M]OON: KURA looks up at the sky and asks, for a breath. Every look says her wish, plainly,
+  // as often as she is asked (with the moon up; at the new moon, or with no level, she only chatters).
   const MOON_GIFT = {
     hunch: k => ({ kind: "hunch", label: "a hunch about a door", say: MOON_SAYS[k] }),
     breath: () => ({ kind: "breath", label: "her light, for breath" }),
@@ -452,7 +447,6 @@
     const night = st.moonNight && st.moonNight.day === st.day ? st.moonNight : (st.moonNight = { day: st.day, n: 0 });
     night.n++;
     tally(st, "moonAsked");
-    if (night.n > MOON_TALKS) { st.extra = "> " + pick(MOON_DONE); return; }
     // (v1.26) Her offers of two things are gone: she says her wish, plainly. Without one (no level yet), her chatter as before.
     const wish = wishFor(st);
     if (wish && sky !== "none") { wish.told = true; st.extra = wishLine(wish); return; }
