@@ -91,7 +91,7 @@ async function act(env, req, inner) {
   let st;
   try { st = tidy(ACT.apply(JSON.parse(row.state), a)); }
   catch (e) { console.error(e); throw new Oops("That didn't work.", 400); }
-  const spends = await settleCopies(env, inner, st, a, me, JSON.parse(row.state));
+  const { spends, marks } = await settleCopies(env, inner, st, a, me, JSON.parse(row.state));
   const s = JSON.stringify(kept(st));
   if (s === row.state && !OUTBOX.some((f) => st[f] !== undefined)) return { same: true, n: row.n };
   if (s.length > MAX_RUN) throw new Oops("This run has grown too big to keep.", 413);
@@ -101,7 +101,7 @@ async function act(env, req, inner) {
   ];
   if (Math.random() < 0.01) write.push(env.DB.prepare("DELETE FROM acct_limits WHERE window_start < ?").bind(t - 86400));
   await env.DB.batch(write);
-  return { run: st, n: row.n + 1, out: st, me, spends, admin: !!me.admin };
+  return { run: st, n: row.n + 1, out: st, me, spends, marks, admin: !!me.admin };
 }
 
 // (v1.22) WHAT THE RULES QUEUED FOR THE OUTSIDE WORLD, sent by the server after it has answered (ctx.waitUntil), through
@@ -109,8 +109,9 @@ async function act(env, req, inner) {
 // copies (/found); items gone from the bag for good are used up there (/spent, the newest copy this player holds of
 // that item); a door's first entry is a tally mark (/tally); the run's moments are rumors (/event). A run that used
 // the testing tools sends no events. Nothing here can fail a move.
-async function sendOut(env, inner, me, st, spends) {
+async function sendOut(env, inner, me, st, spends, marks) {
   const events = st.events || [];
+  if (env.REGISTRY && marks && marks.length) await stampMarks(env, marks);   // (v1.36) before /spent: a used-up copy takes no marks
   if (spends && spends.length) await inner("/spent", { items: spends });
   if (st.tally) await inner("/tally", st.tally);
   if (!st.cheated && !st.freeSteps) for (const e of events.slice(-4)) await inner("/event", e);
@@ -126,13 +127,16 @@ async function sendOut(env, inner, me, st, spends) {
 // (v1.25) MARKS, a copy's history. A new find waits with the marks it was born with (q: the moon's phase, and how it
 // came: found in a wall, from a demon, from a friend, left by a stranger); climbing a level adds carried_up to every
 // copy in the bag. Once a copy has its number, its waiting marks are stamped in the registry (same key, same mark, so a
-// retry never makes two) and move to m, which INVOKE shows. A mark the registry refuses or can't take keeps waiting.
+// retry never makes two) and move to m, which INVOKE shows. (v1.36) They move to m when the move is saved and are stamped
+// after the answer (sendOut), so a fight's end doesn't wait on a registry write for every copy in the bag; a mark the
+// registry refuses or can't take then is logged and not tried again.
 // (v1.33) A find also waits with its finer place and level (f.x: in_locker, in_archive, deep_stone, on_b4f ...). And what
 // the copies already in the bag live through, at most once per copy: a demon beaten (beat_demon), a demon talked down
 // or recruited (talked_down), a fight run from (fled_fight), a locked door opened (through_door). Seen by comparing the
 // run's tallies before and after the move, so things found in this same move don't get them.
 const FIND_EXTRA = /^(in_locker|in_archive|deep_stone|on_(b[1-4]|[1-9])f)$/;
 const LIVED = [[["beaten"], "beat_demon"], [["peace", "recruited"], "talked_down"], [["fled"], "fled_fight"], [["unlocks"], "through_door"]];
+// Returns { spends, marks }: the copies to use up and the marks to stamp, both sent after the answer.
 export async function settleCopies(env, inner, st, a, me, old) {
   const copies = st.copies || {}, spends = [];
   if (a.t === "takeAway" && Number.isInteger(a.copy)) {
@@ -172,7 +176,7 @@ export async function settleCopies(env, inner, st, a, me, old) {
       }
     } catch (e) { console.error("copies", e); }
   }
-  if (env.REGISTRY && me) await stampMarks(env, me, copies);
+  const marks = env.REGISTRY && me ? takeMarks(me, copies) : [];
   const goneAt = st.goneAt || [];
   for (const [gi, name] of (st.gone || []).entries()) {
     const list = copies[name];
@@ -185,23 +189,28 @@ export async function settleCopies(env, inner, st, a, me, old) {
   }
   if (st.pocketed && !Object.keys(st.pocketed).length) delete st.pocketed;
   if (Object.keys(copies).length) st.copies = copies; else delete st.copies;
-  return spends;
+  return { spends, marks };
 }
 const NIGHT = new Set([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ACT.phaseMark(i)).concat(ACT.OCCASIONS));
-async function stampMarks(env, me, copies) {
+// The marks waiting on numbered copies, taken off them (q to m) as registry calls; an unnumbered copy's keep waiting.
+function takeMarks(me, copies) {
+  const out = [];
   for (const [name, list] of Object.entries(copies)) for (const e of list) {
     if (e.c === null || !e.q || !e.q.length) continue;
-    const itemId = ACT.itemId(name), left = [];
+    const itemId = ACT.itemId(name);
     for (const w of e.q) {
       const value = w.split(":")[0], kind = NIGHT.has(value) ? "night" : value === "answered" || value === "blessed" ? "moon" : "deed";
-      try {
-        const r = await env.REGISTRY.addMark({ itemId, copy: e.c, holder: { game: "4dungeon", playerId: me.id }, kind, value, key: me.id + ":" + e.k + ":" + w });
-        if (r && r.ok) (e.m = e.m || []).push(value);
-        else if (r && r.error && /theirs|used up|No such/.test(r.error)) { /* never going to land: drop it */ }
-        else left.push(w);
-      } catch (err) { console.error("marks", err); left.push(w); }
+      out.push({ itemId, copy: e.c, holder: { game: "4dungeon", playerId: me.id }, kind, value, key: me.id + ":" + e.k + ":" + w });
+      (e.m = e.m || []).push(value);
     }
-    if (left.length) e.q = left; else delete e.q;
+    delete e.q;
+  }
+  return out;
+}
+export async function stampMarks(env, marks) {
+  for (const m of marks) {
+    try { const r = await env.REGISTRY.addMark(m); if (!(r && r.ok)) console.error("marks", m.key, r && r.error); }
+    catch (err) { console.error("marks", err); }
   }
 }
 const later = (ctx, job) => { const p = job.catch((e) => console.error("sendOut", e)); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else return p; };
@@ -215,8 +224,8 @@ export async function gameRoute(req, env, url, wctx, inner) {
     if (req.method !== "POST") throw new Oops("No such thing.", 404);
     if (!/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const out = url.pathname === "/run" ? await run(env, req, ctx) : await act(env, req, inner);
-    if (out.run && out.out && inner) await later(wctx, sendOut(env, inner, out.me, out.out, out.spends));
-    if (out.run) { out.run = out.admin ? kept(out.run) : secretless(kept(out.run)); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; } delete out.out; delete out.me; delete out.spends; delete out.admin; }
+    if (out.run && out.out && inner) await later(wctx, sendOut(env, inner, out.me, out.out, out.spends, out.marks));
+    if (out.run) { out.run = out.admin ? kept(out.run) : secretless(kept(out.run)); if (out.out) { if (out.out.line3) out.run.line3 = out.out.line3; } delete out.out; delete out.me; delete out.spends; delete out.marks; delete out.admin; }
     if (out.stale) return reply({ run: out.run, n: out.n, error: "The run moved on." }, 409);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {

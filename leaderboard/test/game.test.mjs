@@ -112,9 +112,9 @@ test("(v1.25) a find is stamped with its moon and its deed once numbered; a clim
   const r = await me("/act", { n: 0, action: { t: "turn", dir: "L" } });
   assert.deepEqual(r.data.run.copies[name].at(-1), { k: "r:1", c: 3, m: ["full", "found_wall"] });
   // a climb: the run before had climb 1, the run after climb 2 (settleCopies compares the two)
-  const { settleCopies } = await import("../game.js");
+  const { settleCopies, stampMarks } = await import("../game.js");
   const st = { climb: 2, copies: { [name]: [{ ...r.data.run.copies[name].at(-1) }] } };
-  await settleCopies(env, null, st, { t: "go" }, { id: 1 }, { climb: 1 });
+  await stampMarks(env, (await settleCopies(env, null, st, { t: "go" }, { id: 1 }, { climb: 1 })).marks);
   assert.deepEqual(st.copies[name][0].m, ["full", "found_wall", "carried_up"]);
   assert.deepEqual(marks.map((m) => m.slice(0, 3)), [[3, "night", "full"], [3, "deed", "found_wall"], [3, "deed", "carried_up"]]);
   assert.deepEqual(RULES.markLines(["full", "found_wall", "carried_up"]), ["Found in a wall under a full moon.", "Carried up a level."]);
@@ -129,12 +129,12 @@ test("(v1.27) the copy that leaves the bag is the one the registry uses up; a bl
   const spent = [];
   const env = { REGISTRY: { async addMark() { return { ok: true }; } } };
   const st = { copies: { [name]: [{ k: "a", c: 4, m: ["blessed"] }, { k: "b", c: 9 }] }, gone: [name], goneAt: [1] };
-  const out = await settleCopies(env, null, st, { t: "use" }, null, {});
+  const out = (await settleCopies(env, null, st, { t: "use" }, null, {})).spends;
   assert.deepEqual(out, [{ itemId: 1, copy: 9 }]);
   assert.deepEqual(st.copies[name], [{ k: "a", c: 4, m: ["blessed"] }]);
   // no slot named: the newest goes, as before
   const st2 = { copies: { [name]: [{ k: "a", c: 4 }, { k: "b", c: 9 }] }, gone: [name] };
-  assert.deepEqual(await settleCopies(env, null, st2, { t: "use" }, null, {}), [{ itemId: 1, copy: 9 }]);
+  assert.deepEqual((await settleCopies(env, null, st2, { t: "use" }, null, {})).spends, [{ itemId: 1, copy: 9 }]);
   // the rules: using the second of two names records k = 1 (takeOut), and a blessed copy counts one tier up
   const tier = RULES.TIER ? RULES.TIER[name] : null;
   const run = { items: [name], copies: { [name]: [{ k: "a", c: 4, m: ["blessed"] }] } };
@@ -147,7 +147,7 @@ test("(v1.27) a thing handed to a friend keeps its copy and marks, and comes hom
   const { settleCopies } = await import("../game.js");
   const env = {}, mine = { k: "a", c: 4, m: ["full", "blessed"] };
   const st = { copies: { [name]: [mine] }, gone: [name], goneAt: [0], goneTo: ["PIXIE"] };
-  assert.deepEqual(await settleCopies(env, null, st, { t: "give" }, null, {}), []);          // not used up
+  assert.deepEqual((await settleCopies(env, null, st, { t: "give" }, null, {})).spends, []);          // not used up
   assert.equal(st.copies, undefined);
   assert.deepEqual(st.pocketed, { PIXIE: [{ n: name, e: mine }] });
   const back = { pocketed: st.pocketed, finds: [{ id: 1, key: "r:9", h: "given_member", w: "PIXIE" }] };
@@ -172,10 +172,11 @@ test("(v1.27) occasions: real days are named, they mark a find, and every histor
       for (const l of RULES.markLines(["full", d, o, ...first, "carried_up", "carried_up", "carried_up"])) assert.ok(l.length <= 41, "fits: " + l);
   assert.equal(RULES.markLines(["full", "found_wall", "blue_moon"])[0], "Found in a wall under a blue moon.");
   // the first copy is stamped when numbered
-  const { settleCopies } = await import("../game.js");
+  const { settleCopies, stampMarks } = await import("../game.js");
   const marks = [], env = { REGISTRY: { async addMark(m) { marks.push(m.value); return { ok: true, n: 1 }; } } };
   const name = ACT.nameOf(1), st = { copies: { [name]: [{ k: "r:1", c: null, q: ["full", "eclipse_solar"] }] }, finds: [] };
-  await settleCopies(env, async () => ({ json: async () => ({ copies: [{ key: "r:1", copy: 1 }] }) }), st, { t: "go" }, { id: 5 }, {});
+  const done = await settleCopies(env, async () => ({ json: async () => ({ copies: [{ key: "r:1", copy: 1 }] }) }), st, { t: "go" }, { id: 5 }, {});
+  await stampMarks(env, done.marks);
   assert.deepEqual(marks, ["full", "eclipse_solar", "first_copy"]);
 });
 
@@ -186,7 +187,9 @@ test("(v1.33) a find carries its finer place and level; copies in the bag get wh
   // a find from a locker on B3F, while a demon falls and a door opens: the old copy gets both, the new one neither
   const st = { stats: { beaten: 2, unlocks: 1, fled: 0 }, copies: { [name]: [{ k: "r:1", c: 7, m: ["full", "found_wall"] }] },
     finds: [{ id: 1, key: "r:2", p: 4, h: "found_wall", x: ["in_locker", "on_b3f", "bogus"] }] };
-  await settleCopies(env, null, st, { t: "fight" }, { id: 5 }, { stats: { beaten: 1, unlocks: 0, fled: 0 } });
+  const out = await settleCopies(env, null, st, { t: "fight" }, { id: 5 }, { stats: { beaten: 1, unlocks: 0, fled: 0 } });
+  assert.deepEqual(marks, []);                                                         // (v1.36) nothing is written before the answer
+  assert.deepEqual(out.marks.map((m) => [m.copy, m.value]), [[7, "beat_demon"], [7, "through_door"]]);   // they go after it (sendOut)
   assert.deepEqual(st.copies[name][0].m, ["full", "found_wall", "beat_demon", "through_door"]);
   assert.deepEqual(st.copies[name][1].q, ["full", "found_wall", "in_locker", "on_b3f"]);
   // another fight won: nothing new for a copy that already saw one

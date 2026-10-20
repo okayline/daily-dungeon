@@ -6,7 +6,8 @@ Changes to the game itself, newest first, with the time each went live (Honolulu
 
 - **A USER page on the title screen.** The title's menu bar now has [U]SER. It opens inside the 3D view and lists your save codes and passkeys (each one can be forgotten), makes a new save code, adds a passkey, and has a box to type a save code in to log in on this device. During a run, press U. When you're signed in, the [?] page has a [U]SER button at the top.
 - **INVOKE pages.** The bag's first page shows 5 things, then a grey "6 ... (next page)" row (6 turns the page). The second page ends with a grey "10 ... (previous page)" row that takes you back. There's an open line above the [<] [>] row at the bottom.
-- Removed: the sixth thing on the bag's first page (it starts the second page now), the [P]ASSWORD button from the [?] page and the P key for it (U opens the page now), the pop-up that asked for a save code, and the old account box in the middle of the screen.
+- **No more wait at the end of a fight.** The last FIGHT, TALK or RUN of a fight (and opening a locked door) answers right away. What your things lived through is still written into their histories, just after.
+- Removed: the long pause after a fight's last move, the sixth thing on the bag's first page (it starts the second page now), the [P]ASSWORD button from the [?] page and the P key for it (U opens the page now), the pop-up that asked for a save code, and the old account box in the middle of the screen.
 
 ## v1.35.1 - Oct 20 2026, 08:15 HST
 
