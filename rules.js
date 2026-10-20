@@ -1714,21 +1714,22 @@
     return res;
   }
 
-  function reset(st) {
-    st = copy(st);
-    delete st.macca; delete st.mag;
+  // What a new run keeps from the last one; everything else starts over. The codex fills up across runs; the
+  // calendar guard (lastSeen) stops a new run from replaying a day; a chosen name and the cheat stay; finds and
+  // tally are queues the page still owes the server (see index.html).
+  const CARRY = ["codex", "tz", "lastSeen", "rewindNoted", "freeSteps", "playerName", "needName", "finds", "tally"];
+  function reset(old) {
+    old = old || {};
+    let st = {};
+    for (const k of CARRY) if (old[k] !== undefined) st[k] = clone(old[k]);
     // A new run counts days in the player's own timezone (Honolulu for the chat run). Moving to a
     // new timezone starts the calendar guard fresh, so a zone behind the old one doesn't stall it.
     const tz = (root.SMT || require("./screen.js")).zone();
     if (st.tz !== tz) { delete st.lastSeen; delete st.rewindNoted; }
     // A new run starts on the real calendar: the X testing cheat doesn't carry over.
-    if (st.clockOffset) { delete st.clockOffset; delete st.lastSeen; delete st.rewindNoted; }
+    if (old.clockOffset) { delete st.lastSeen; delete st.rewindNoted; }
     // A new run is clean, unless infinite steps (the one cheat that carries over) is still on.
-    delete st.cheated; if (st.freeSteps) st.cheated = true;
-    // Nothing from the last run carries over except the codex, the timezone and the cheats.
-    for (const k of ["taint", "wear", "snatched", "question", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
-      "fidgetLine", "hollow", "overflow", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
-      "itemSnap", "gone", "goneAt", "goneTo", "slots", "pocketed", "visitors", "visitorInfo", "regCopies", "visitDay", "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "moonNight", "hushDay", "offer", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
+    if (st.freeSteps) st.cheated = true;
     st.timeFixed = true;
     st.tz = tz;
     // The omen itself is shared (the same real day gives everyone the same omen): no salt rerolls it any more.
@@ -1736,7 +1737,7 @@
     // things are hidden, and which room (if any) turns out to be a bonus or an omen-streak room on this floor --
     // never the shared shape (wing count, topology, which kinds are paired) that every player's floor agrees on.
     st.pseed = 1 + Math.floor(Math.random() * 4294967295);
-    st.runId = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(""); delete st.submitted; st = named(st, true);   // the leaderboard takes one entry per run; a chosen name carries over, a placeholder is rerolled
+    st.runId = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join(""); st = named(st, true);   // the leaderboard takes one entry per run; a chosen name carries over, a placeholder is rerolled
     const t = clock(st);
     Object.assign(st, {
       day: 1, steps: 0, dead: false, startDay: t, today: { date: t, stepped: false },

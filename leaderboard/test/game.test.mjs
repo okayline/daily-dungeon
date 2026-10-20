@@ -210,3 +210,16 @@ test("(v1.31) a demon the player has answered stays seen on the server, so the p
   }
   assert.equal(seenAfter, true, "the demon the player just fought is marked seen");
 });
+
+test("a new run keeps the codex and a chosen name, and nothing else from the last run", async () => {
+  const env = { DB: fakeD1() }, me = browser(env);
+  await me("/run", {});
+  const st = JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state);
+  Object.assign(st, { codex: { demons: { ELF: { met: 3 } }, items: {} }, playerName: "MINNIE", pacts: [{ name: "ELF", on: true }], tags: ["fought"], raiseOk: true, silver: 40 });
+  env.DB.raw.prepare("UPDATE runs SET state = ?").run(JSON.stringify(st));
+  const run = (await me("/run", { fresh: true })).data.run;
+  assert.equal(run.codex.demons.ELF.met, 3);
+  assert.equal(run.playerName, "MINNIE");
+  for (const k of ["pacts", "tags", "raiseOk"]) assert.equal(run[k], undefined, k);
+  assert.equal(run.silver, 0);
+});

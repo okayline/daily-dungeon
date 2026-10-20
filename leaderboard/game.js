@@ -39,8 +39,8 @@ async function store(env, me, st, n) {
   if (s.length > MAX_RUN) throw new Oops("This run has grown too big to keep.", 413);
   await env.DB.prepare("INSERT INTO runs (player_id, state, n, updated) VALUES (?, ?, ?, ?) ON CONFLICT(player_id) DO UPDATE SET state = excluded.state, n = excluded.n, updated = excluded.updated").bind(me.id, s, n, now()).run();
 }
-function fresh() {
-  let st = ACT.apply({}, { t: "reset" });
+function fresh(old) {                     // a new run: what carries over (the codex, the name) comes from the old one
+  let st = ACT.apply(old || {}, { t: "reset" });
   st = ACT.apply(st, { t: "named" });
   return tidy(ACT.apply(st, { t: "tick" }));
 }
@@ -57,7 +57,7 @@ async function run(env, req, ctx) {
   const me = (await playerOf(env, req)) || (await makePlayer(env, req, ctx));
   const row = await load(env, me);
   if (!row || b.fresh === true) {
-    const st = fresh(), n = row ? row.n + 1 : 0;
+    const st = fresh(row && JSON.parse(row.state)), n = row ? row.n + 1 : 0;
     await store(env, me, st, n);
     return { run: st, n, admin: !!me.admin };
   }
