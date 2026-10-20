@@ -335,13 +335,14 @@
       }
       // WEEK / EPOCH / LEAN: the same three rows the in-run log box occupies.
       if (i >= lines.length - 6 && i <= lines.length - 4) return `|<span class="logline">${esc(line.slice(1, -1))}</span>|`;
-      // The menu bar: [N]EW RUN [C]ONTINUE [B]OARD [?] ABOUT, same bracket convention as the real bar.
+      // The menu bar: [N]EW RUN [C]ONTINUE [B]OARD [U]SER [?] ABOUT, same bracket convention as the real bar.
       if (i === lines.length - 2) {
         const b = (txt, act, ok) => `<span class="btn${ok ? "" : " off"}" data-act="${act}">${txt}</span>`;
         return esc(line)
           .replace("[N]EW RUN", b("[N]EW RUN", "title-new", true))
           .replace("[C]ONTINUE", b("[C]ONTINUE", "title-continue", titleCanContinue()))
           .replace("[B]OARD", b("[B]OARD", "title-board", !!LEADERBOARD_URL))
+          .replace("[U]SER", b("[U]SER", "title-user", true))
           .replace("[?] ABOUT", b("[?] ABOUT", "title-about", true));
       }
       return esc(line).replace(/([一-鿿])/g, '<span class="kanji"><span class="g">$1</span></span>');      // (the level's heading carries the quarter's kanji)
@@ -1029,6 +1030,8 @@
       else { leaveTitle(); freshRun(); }
     } else if (name === "title-board") {
       if (LEADERBOARD_URL) toggleBoard(true);
+    } else if (name === "title-user") {
+      backup();
     } else if (name === "title-about") {
       showAbout(true);
     }
@@ -1204,7 +1207,7 @@
     }
   }
 
-  // The account page opens from [P] and the header button.
+  // The USER page (the account) opens from [U] and the title screen's [U]SER.
   function backup() { accountBox(); }
   let passAct = null;
 
@@ -1225,7 +1228,7 @@
     const r = await serverRun(save); if (r) { save = r; persist(); if (!atTitle) draw(); }
   }
 
-  // ACCOUNT: a save code or passkey (the shared 88x31 accounts) so the run follows you across devices. Optional.
+  // USER: a save code or passkey (the shared 88x31 accounts) so the run follows you across devices. Optional.
   function accountBox(note) {
     const box = document.getElementById("found"), pre = box.querySelector("pre");
     floatBox(box); pre.innerHTML = "";
@@ -1234,7 +1237,7 @@
     const b64 = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     const unb64 = t => { t = t.replace(/-/g, "+").replace(/_/g, "/"); return Uint8Array.from(atob(t + "===".slice((t.length + 3) % 4)), c => c.charCodeAt(0)); };
     const api = acctApi;
-    add("ACCOUNT", "gold"); add(" ");
+    add("USER", "gold"); add(" ");
     const msg = add(note || " ");
     box.dataset.mode = "pass"; box.hidden = false;
     const row = document.createElement("div");
@@ -1337,7 +1340,7 @@
     add("MAIL", ""); add(" ");
     const btn2 = (t, a) => { const sp = document.createElement("span"); sp.className = "btn"; sp.textContent = t; sp.dataset.regact = a; return sp; };
     if (!signedIn()) {
-      for (const w of wrapText(ACCOUNT_HOST ? "Sign in from the ACCOUNT page, and what you find is kept here too." : "Items are kept in the shared list when you are signed in at dungeon.88x31.app.", 41)) add(w, "dim");
+      for (const w of wrapText(ACCOUNT_HOST ? "Sign in from the USER page, and what you find is kept here too." : "Items are kept in the shared list when you are signed in at dungeon.88x31.app.", 41)) add(w, "dim");
       add(" "); const f = add(""); f.append(btn2("[C]LOSE", "back")); return;
     }
     if (R.items === null) {
@@ -1519,8 +1522,8 @@
     const line = "-".repeat(71);
     // A titled box the width of the divider, in the page's own frame characters.
     const framed = (title, ...rows) => ["+- " + title + " " + "-".repeat(71 - 5 - title.length) + "+", ...rows.map(r => "|" + r.padEnd(69) + "|"), "+" + "-".repeat(69) + "+"].join("\n");
-    // The header buttons as shown: [C]ODEX and [P]ASSWORD with a run, [P]ASSWORD alone (to paste one in) without.
-    const head = save ? "{{CODEX}}   {{PASS}}" : "{{PASS}}", headLen = save ? 20 : 10;
+    // The header button as shown: [C]ODEX with a run, nothing without.
+    const head = save ? "{{CODEX}}" : "", headLen = save ? 7 : 0;
     const text = [
       "DAILY DIGITAL DEMON DUNGEON   " + head + ("build " + SMT.VERSION).padStart(71 - 30 - headLen), line,
       "A dungeon crawler you play on the real lunar calendar.",
@@ -1548,7 +1551,7 @@
         ["[1]  [2]  [ESC]", "take one of two things offered, or leave it"],
         ["[C]ODEX", "every demon and item found, over all runs"],
         ["[L]OG", "the adventure log"],
-        ["[P]ASSWORD", "your account: save codes and passkeys"],
+        ["[U]SER", "your account: save codes and passkeys"],
         ...(LEADERBOARD_URL ? [["{{BOARD}}", "the leaderboard (post when a run ends)"]] : []),
         ["[R]ESET", "start a new run"],
         ["[?]", "this page"],
@@ -1562,12 +1565,11 @@
       "",
       "Made by okayline.   [?] or {{CLOSE}}",
     ].join("\n");
-    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{PASS}}", '<span class="btn" data-pass>[P]ASSWORD</span>').replace("{{BOARD}}", '<span class="btn" data-board>[B]OARD</span>').replace("{{CLOSE}}", '<span class="btn" data-close>[ESC] CLOSE</span>');
+    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{BOARD}}", '<span class="btn" data-board>[B]OARD</span>').replace("{{CLOSE}}", '<span class="btn" data-close>[ESC] CLOSE</span>');
   }
   document.getElementById("about").addEventListener("click", e => {
     // Its own buttons do their own thing; any other click on the page closes it, same as [ESC] CLOSE.
     if (e.target.closest("[data-codex]")) { showAbout(false); codexSel = -1; showCodex(true); }   // the link in the help page
-    else if (e.target.closest("[data-pass]")) { showAbout(false); backup(); }                      // PASS lives here now
     else if (e.target.closest("[data-board]")) { showAbout(false); toggleBoard(true); }
     else showAbout(false);
   });
@@ -2633,13 +2635,13 @@
       return;
     }
     if (atTitle) {
-      const a = { n: "title-new", c: "title-continue", b: "title-board", "?": "title-about" }[key];
+      const a = { n: "title-new", c: "title-continue", b: "title-board", u: "title-user", "?": "title-about" }[key];
       if (a) { e.preventDefault(); titleAction(a); }      // every other key (F5, Tab, F12...) is left to the browser
       return;
     }
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || (save.question.lab && (key === "1" || key === "2")))) { e.preventDefault(); return act(key === "y" || key === "1" ? "qyes" : "qno"); }
-    const k = { "?": "about", c: "codex", f: "fight", t: "word", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
+    const k = { "?": "about", c: "codex", f: "fight", t: "word", i: "invoke", l: "log", b: "board", u: "backup", r: "reset",
       s: "search", m: "look", arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") {   // testing cheats, behind the admin key: X toggles infinite steps, Shift+X jumps a day
       e.preventDefault(); if (gating) return;

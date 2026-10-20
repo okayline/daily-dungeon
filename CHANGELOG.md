@@ -2,6 +2,11 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.36 - User Page - Oct 20 2026, 08:30 HST
+
+- **A USER page on the title screen.** The title's menu bar now has [U]SER, which opens your account: save codes and passkeys, the same as before. During a run, press U.
+- Removed: the [P]ASSWORD button from the [?] page, and the P key for it (U opens it now).
+
 ## v1.35.1 - Oct 20 2026, 08:15 HST
 
 - Removed: the "New here? Press N to start." line on the title screen's menu bar. Nothing was added.
