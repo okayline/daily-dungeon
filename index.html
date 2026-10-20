@@ -1346,7 +1346,9 @@
       if (!R.loading) { R.loading = true; acctApi("/inventory").then(r => { if (invReg !== R) return; R.loading = false; R.err = r.error || ""; R.items = r.items || []; showInv(true); }); }
       return;
     }
-    const items = R.items, pages = Math.max(1, Math.ceil(items.length / per)); R.page = Math.min(R.page, pages - 1);
+    // (v1.29) Only what is in the bag now: the registry also holds copies from earlier runs (a new run never uses them up), which INVOKE doesn't show.
+    const inBag = it => { const own = RULES.nameOf(it.itemId); return !!save && (!!(save.visitors || {})[it.itemId + ":" + it.copy] || !!(own && ((save.copies || {})[own] || []).some(e => e.c === it.copy))); };
+    const items = R.items.filter(inBag), pages = Math.max(1, Math.ceil(items.length / per)); R.page = Math.min(R.page, pages - 1);
     add(R.err || (items.length ? `${items.length} kept${pages > 1 ? `   page ${R.page + 1}/${pages}` : ""}` : "Nothing yet. Items you find while signed in land here."), "dim");
     for (const it of items.slice(R.page * per, R.page * per + per)) {
       const row = document.createElement("div"), home = it.from === "88x31";
