@@ -2,6 +2,14 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.31 - Loose Ends - Oct 19 2026, 20:50 HST
+
+- **The Moon answers every time.** Looking up says her wish each time you ask, at every phase of the moon, however many times. It no longer stops after a few looks, and no longer goes quiet at the new moon.
+- **Starting late keeps your level.** A run begun near the end of a quarter wakes on that quarter's level with a shorter floor, instead of waking a level higher.
+- **She only asks for things you can still get.** Her wish no longer asks for something from a stranger, and asks for a friend's gift only while a night is left.
+- **Walls give things up sooner, and no room is empty.** Every room hides at least one item, and what is hidden in a wall takes fewer searches to find.
+- **Fights stay on the fight.** After each choice a fight no longer jumps back to the demon's first screen, so TALK and RUN work every time.
+
 ## v1.30 - Use It - Oct 19 2026, 20:15 HST
 
 - **Click a name for its story.** Clicking the thing you have chosen now opens its HISTORY instead of using it. INVOKE has a new [U]SE on the bar (the U key too) for using it.
