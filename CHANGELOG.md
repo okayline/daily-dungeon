@@ -2,6 +2,17 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.32 - Patient Party - Oct 19 2026, 21:20 HST
+
+- **Your party is more patient.** Members take far more talking before they are talked out for the day, and go quiet only in the hottest rooms.
+- **No more questions from the party.** Members no longer stop to ask you a question after long talks. The ones about a hot or worn wall are still there.
+- **More to find in the walls.** Every room hides one to three things to find, on top of its coins and demons.
+- **The altar room is empty.** Its terminal is still on the wall, but it no longer takes an offering, so nothing is given up there and nothing comes back.
+- **The Moon's wish shows at once.** Looking up no longer waits for your next move to show what she wants.
+- **Offers say which way.** A demon's offer now reads TAKE ONE or GIVE ONE above the choices.
+- **INVOKE has a next-page row.** When the bag has a second page, the first page ends with "7 ... (next page)", which you can click or press 7 for.
+- **HISTORY reads better.** "Found in 4Dungeon, Oct 19 at 20:50:07 HST" replaces "Made in", and the times show seconds.
+
 ## v1.31 - Loose Ends - Oct 19 2026, 20:50 HST
 
 - **The Moon answers every time.** Looking up says her wish each time you ask, at every phase of the moon, however many times. It no longer stops after a few looks, and no longer goes quiet at the new moon.
