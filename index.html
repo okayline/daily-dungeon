@@ -1465,9 +1465,10 @@
     invList.slice(first, first + INV_PER).forEach((it, k) => {
       const i = first + k;
       add((`${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{40}).{4,}$/, "$1...")).padEnd(43) + (it.pip ? "+" : ""), "btn", i); });   // (v1.26) + : something the moon wants
-    if (pages > 1 && invPage === 0) add(`  ${INV_PER + 1}  ... (next page)`, "btn").dataset.page = "next";   // (v1.33) the seventh row turns the page (a click, or the 7 key)
+    if (pages > 1 && invPage === 0) add(`  ${INV_PER + 1}  ... (next page)`, "btn dim").dataset.page = "next";   // (v1.33) the seventh row turns the page (a click, or the 7 key); grey (v1.36)
     if (empty) add("  1  The bag is empty", "dim");               // (v1.06.1) no row of empty slots when there's nothing in it
     else for (let k = Math.max(count, invPage * INV_PER); k < Math.min(RULES.BAG_MAX, (invPage + 1) * INV_PER); k++) add(`  ${k + 1}  .`, "dim");
+    if (invPage > 0) add(` ${RULES.BAG_MAX + 1}  ... (previous page)`, "btn dim").dataset.page = "prev";   // (v1.36) under the last slot, grey like the 7 row: a click turns back
     add(" ");
     // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX; where this copy has been is on HISTORY.
     const it0 = invList[invSel];
