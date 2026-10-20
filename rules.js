@@ -428,7 +428,7 @@
   // Now and then she reacts to what just happened (kind: fight, search, find, run). Never on a moonless night.
   function moonReact(st, kind) { return moonSky() === "none" || !MOON_REACT[kind] ? null : pick(MOON_REACT[kind]); }
   // LOOKING UP. One press of [M]OON: KURA looks up at the sky and asks, for a breath. Every look says her wish, plainly,
-  // as often as she is asked (with the moon up; at the new moon, or with no level, she only chatters).
+  // as often as she is asked, at every phase. With no level to wish about, she only chatters.
   const MOON_GIFT = {
     hunch: k => ({ kind: "hunch", label: "a hunch about a door", say: MOON_SAYS[k] }),
     breath: () => ({ kind: "breath", label: "her light, for breath" }),
@@ -449,7 +449,7 @@
     tally(st, "moonAsked");
     // (v1.26) Her offers of two things are gone: she says her wish, plainly. Without one (no level yet), her chatter as before.
     const wish = wishFor(st);
-    if (wish && sky !== "none") { wish.told = true; st.extra = wishLine(wish); return; }
+    if (wish) { wish.told = true; st.extra = wishLine(wish); return; }
     // No offer: the first look gets her chatter; the next couple, a word about being asked again.
     st.extra = "> " + pick(night.n === 1 || sky === "none" ? MOON_CHAT[sky] : sky === "bright" ? MOON_AGAIN_SASS.concat(MOON_QUIET_SASS) : MOON_AGAIN.concat(MOON_QUIET));
   }
