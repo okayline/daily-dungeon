@@ -2,12 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
-## v1.38 - One Line Per Moment - Oct 20 2026, 09:28 HST
+## v1.38 - One Line Per Moment - Oct 20 2026, 09:29 HST
 
 - **One ledger line per moment.** When a fight ends, a door opens or KURA climbs a level, the shared ledger gets one line naming every thing in the bag that hadn't been through that before (like "TORCH #3, BONE CHARM #12 and LANTERN #1 ran from a fight"). Each thing still keeps it in its own history.
 - Removed: a separate ledger line for each thing in the bag. Lines already on the ledger stay as they are.
 
-## v1.37 - Bottomless Bag - Oct 20 2026, 09:22 HST
+## v1.37 - Bottomless Bag - Oct 20 2026, 09:29 HST
 
 - **The bag never fills up.** KURA can carry any number of things. INVOKE pages through them five at a time, with grey "next page" and "previous page" rows and [<] [>] at the bottom.
 - Anything that was waiting for room in a full bag goes into it the next time you play.
