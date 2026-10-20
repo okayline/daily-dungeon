@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.37 - Bottomless Bag - Oct 20 2026, 09:22 HST
+
+- **The bag never fills up.** KURA can carry any number of things. INVOKE pages through them five at a time, with grey "next page" and "previous page" rows and [<] [>] at the bottom.
+- Anything that was waiting for room in a full bag goes into it the next time you play.
+- Removed: the 9-thing limit, the "what do you leave behind?" box when a tenth thing came, and the swaps a party member or demon offered when the bag was full (they just give now). The gift box still asks for something small in return.
+
 ## v1.36.1 - Oct 20 2026, 09:13 HST
 
 - **The USER page scrolls.** Everything on it can be reached now, down to [LOG OUT OF THIS BROWSER].

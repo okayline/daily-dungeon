@@ -22,7 +22,6 @@
     offerTrade: (st, a) => RULES.offerTrade(st, n(a.i)),
     offerLeave: (st, a) => RULES.offerLeaveConfirm(st, !!a.yes),
     swap: (st, a) => RULES.swap(st, n(a.i)),
-    keep: (st, a) => RULES.keepItem(st, n(a.i)),
     // (v1.26) the sealed stairs: raise up to two things to the moon
     raisePick: (st, a) => RULES.raisePick(st, n(a.i)),
     raiseGo: st => RULES.raiseGo(st),

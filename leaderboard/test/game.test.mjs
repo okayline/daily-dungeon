@@ -260,3 +260,16 @@ test("(v1.36) a run's moments are sealed in the registry after the answer, and t
   assert.deepEqual({ ...env.DB.raw.prepare("SELECT floor, demons, turns FROM scores").get() }, { floor: st.climb || 1, demons: 0, turns: 12 });
   assert.equal((await me("/score", { run: "zzzzzzzzzzzzzzzz", name: "TESTER", floor: 1, days: 1, demons: 0, turns: 1 })).status, 400);   // not this player's run
 });
+
+test("(v1.37) the bag has no limit: what waited for a full bag goes into it", async () => {
+  const env = { DB: fakeD1() }, me = browser(env);
+  await me("/run", {});
+  const ACT = (await import("../../act.js")).default, name = ACT.nameOf(1);
+  const st = JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state);
+  st.items = Array.from({ length: 9 }, () => name); st.overflow = [name, name];
+  env.DB.raw.prepare("UPDATE runs SET state = ?").run(JSON.stringify(st));
+  const r = await me("/act", { n: 0, action: { t: "tick" } });
+  assert.equal(r.data.run.items.length, 11);
+  assert.equal(r.data.run.overflow, undefined);
+  assert.equal(ACT.types.includes("keep"), false);         // the "what do you leave?" answer is gone
+});

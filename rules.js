@@ -36,9 +36,7 @@
   const itemAlign = name => ITEM_ALIGN[name] || null;
   const relicAlign = name => (["RARE", "MYTHIC", "MOON"].includes(TIER[name]) ? itemAlign(name) : null);
   // KURA picks up an item; an aligned one tugs at her.
-  // THE BAG (v1.05.1) holds 9 things (ICHOR is a count, not a thing). A thing that comes to a full bag waits in
-  // st.overflow; the page asks what to leave behind (keepItem). Nothing counts as found until it is kept.
-  const BAG_MAX = 9;
+  // THE BAG (v1.37) has no limit (ICHOR is a count, not a thing). It held 9 from v1.05.1 to v1.36.
   // (v1.25) `how` is the deed a find carries into its history (a mark in the shared registry): found_wall,
   // from_demon, given_member, from_stranger; null when it is none of those. The moon's phase goes with it (p).
   // (v1.33) `where` is a finer place (in_locker, in_archive, deep_stone), a mark on top of the deed, so the Moon's
@@ -46,7 +44,7 @@
   function gain(st, it, lines, noQueue, how, where) {
     // (v1.14) Every item gained is queued for the shared copy registry; the page sends the queue for a signed-in player
     // (registryTick in index.html) and drops it otherwise. The key (run + nth gain) makes a resend never count twice.
-    // (noQueue: a thing that waited in the overflow was queued the first time it came; taking it now is not a new find.)
+    // (noQueue: a thing that waited in a full bag's overflow before v1.37 was queued the first time it came; taking it now is not a new find.)
     if (!noQueue && ITEM_ID[it] && st.runId && !(st.visitorInfo && st.visitorInfo[it])) {
       st.gainN = (st.gainN || 0) + 1;
       const f = { id: ITEM_ID[it], key: st.runId + ":" + st.gainN, p: moon() };
@@ -57,7 +55,6 @@
       if (occ.length) f.o = occ;      // (v1.27) a day the real sky makes special
       st.finds = (st.finds || []).concat(f).slice(-50);
     }
-    if ((st.items || []).length >= BAG_MAX) { st.overflow = (st.overflow || []).concat(it); return; }
     st.items = (st.items || []).concat(it);
     note(st, "items", it, "found");
     tally(st, "items");
@@ -672,7 +669,7 @@
     delete st.slots;
     st.itemSnap = cur.slice();
   }
-  // A visiting 88x31 button joins the bag at dawn and whenever the bag is opened (the page asks the registry; a full bag waits).
+  // A visiting 88x31 button joins the bag at dawn and whenever the bag is opened (the page asks the registry).
   // It is a guest: it can't be broken by fiddling, but party members and demons may ask for it, and it
   // changes hands without ever being used up. It counts toward her aura like any item. If it has left the bag and isn't in a
   // party member's pockets either (a demon walked off with it), the next look brings it home to the bag.
@@ -682,7 +679,7 @@
     if (!st.dungeon || st.dead || !v || !v.name || !Number.isInteger(v.itemId) || !Number.isInteger(v.copy)) return st;
     const key = v.itemId + ":" + v.copy;
     st.visitors = st.visitors || {};
-    if (hasVisitor(st, v.name) || (st.items || []).length >= BAG_MAX) return st;
+    if (hasVisitor(st, v.name)) return st;
     const back = !!st.visitors[key];
     st.visitorInfo = st.visitorInfo || {};
     st.visitorInfo[v.name] = { name: v.name, itemId: v.itemId, rarity: v.rarity, note: v.note, align: v.align, nature: v.nature };
@@ -869,6 +866,9 @@
   function spendBreath(st, amount = 1) { const n = breathNow(st, true); st.breath = { n: Math.max(0, n - amount), at: TIME.now().getTime() + BREATH_WAIT }; }
   function sync(st) {
     snapBack(st);
+    if (st.overflow) { for (const it of st.overflow) gain(st, it, undefined, true); delete st.overflow; }   // (v1.37) what waited for a full bag goes into it
+    if (st.encounter && st.encounter.stage === "trade") { st.encounter.stage = "offer"; if (st.encounter.offer) delete st.encounter.offer.pick; }   // (v1.37) a full-bag swap left open goes back to the offer
+    if (st.offer && st.offer.trade && !st.offer.box) { delete st.offer.trade; delete st.offer.pick; }
     const t = clock(st);
     if (rawClock(st) < t && !st.rewindNoted) { st.extra = "> The calendar won't turn back."; st.rewindNoted = true; }
     if (rawClock(st) >= t) delete st.rewindNoted;
@@ -1930,20 +1930,6 @@
   const MOON_NO = ["The moon looks, and says nothing. The stairs open anyway.", "\"Not what I asked for.\" She lets KURA by all the same."];
   const MOON_SOME = ["The moon looks for a while. \"Close.\"", "\"Some of it,\" she says. \"Some of it.\""];
   const MOON_YES = ["The moon looks for a long time. \"Yes. That one.\"", "\"There it is,\" she says, very quietly."];
-  // A full bag's answer: drop = which thing in the bag to leave (its index), or null to leave the new one where it lay.
-  function keepItem(st, drop) {
-    st = copy(st);
-    const it = (st.overflow || [])[0];
-    if (!it) return show(st);
-    st.overflow.shift(); if (!st.overflow.length) delete st.overflow;
-    const old = drop === null || drop === undefined ? null : (st.items || [])[drop];
-    if (!old) { st.gone = (st.gone || []).concat(it).slice(-50); st.goneAt = (st.goneAt || []).concat(-1).slice(-50); st.log = `> KURA leaves ${it} where it is. The bag is full.`; return show(st); }   // (it was found, but never kept: its copy is used up)
-    takeOut(st, drop);
-    if (st.wear && !st.items.includes(old)) delete st.wear[old];
-    gain(st, it, undefined, true);
-    st.log = `> KURA leaves ${old} behind and takes ${it}.`.slice(0, 77);
-    return show(st);
-  }
   // Use one of an item. Things that can't be used yet just get looked at.
   // Lines must fit the 77 columns of a log line: with a long item name, say "it" instead.
   const fitIt = (line, the) => line.length <= 77 ? line
@@ -2679,12 +2665,6 @@
     data: ['{n}: "REQUEST: ONE OF THESE. OPTIONAL."'], hardware: ['{n}: "can I hold one of those? to keep?"'], hybrid: ['{n}: "Either of those would suit me."'],
     folklore: ['{n}: "One of those, child, if you would."'],
   };
-  // The bag is full: whoever offered is happy to swap.
-  const OFFER_TRADE = {
-    ELF: ['ELF: "A trade, then. Fair."'], PIXIE: ['PIXIE: "Ooh, you have TRADES?"'], "CU SITH": ["CU SITH waits to see what KURA gives back."],
-    data: ['{n}: "TRADE PROTOCOL OPEN."'], hardware: ['{n}: "ooh, you have trades?"'], hybrid: ['{n}: "A swap. Even better."'],
-    folklore: ['{n}: "An exchange. The old way."'], beast: ["CU SITH waits to see what KURA gives back."],
-  };
   const OFFER_THANKS = {
     ELF: ['ELF: "Thank you."', "ELF tucks it away, pleased."], PIXIE: ['PIXIE: "MINE. Thank you!"', "PIXIE hugs it."],
     "CU SITH": ["CU SITH carries it off proudly.", "CU SITH sets it down between its paws."],
@@ -2849,7 +2829,7 @@
   function departs(st, e, lines, gift) {
     tally(st, "peace"); ev(st, "parted");
     const have = pockets(st, e);
-    if (have.length && Math.random() < gift && (st.items || []).length < BAG_MAX) {
+    if (have.length && Math.random() < gift) {
       const it = pick(have); lines.push(`${THE(e.name)} leaves ${it} behind.`); takeFrom(st, e, it, lines);
       lines.push(`${THE(e.name)} is content. ${say2(e, "leave")}`);
     } else lines.push(`${THE(e.name)} goes its way. ${say2(e, "leave")}`);
@@ -2991,11 +2971,11 @@
     return show(st);
   }
   // AN OFFER'S ANSWER: [1] or [2] (i = 0 or 1), or i = null to leave it. A member's offer lives in st.offer; a
-  // demon's in its encounter (stage "offer"). Taking with a full bag opens the bag to choose what to give back.
+  // demon's in its encounter (stage "offer").
   const fit77 = l => (l.length <= 77 ? l : l.slice(0, 74) + "...");
   function offerOf(st) {
     const e = st.encounter;
-    if (e) return e.offer && ["offer", "trade", "leave"].includes(e.stage) ? { o: e.offer, who: e, e } : null;
+    if (e) return e.offer && ["offer", "leave"].includes(e.stage) ? { o: e.offer, who: e, e } : null;
     if (!st.offer) return null;
     if (st.offer.moon) return { o: st.offer, who: { name: "MOON" }, e: null, moon: true };
     if (st.offer.box) return { o: st.offer, who: { name: "BOX" }, e: null, box: true };
@@ -3037,42 +3017,23 @@
       h.fizzle = true;
       return offerDone(st, h, "the wrapping", lines);
     }
-    if (o.dir === "give" && (st.items || []).length >= BAG_MAX) {   // a full bag: it's a swap now
-      o.pick = i;
-      if (e) { e.stage = "trade"; st.round = [`KURA takes ${it}.`, beast(e) ? OFFER_TRADE.beast[0] : lineFor(OFFER_TRADE, e)]; st.roundOver = false; }
-      else { o.trade = true; st.extra = "> " + lineFor(OFFER_TRADE, who); }
-      return show(st);
-    }
     if (o.dir === "give") { lines.push(`KURA takes ${it}.`); takeFrom(st, who, it, lines); }
     else { lines.push(`KURA gives ${it}.`); handTo(st, who, it, lines); }
     return offerDone(st, h, it, lines);
   }
-  // The full bag's swap: j = which thing in KURA's bag goes back with them, or null to go back to the two things.
+  // The gift box's swap: j = which thing in KURA's bag goes in its place, or null to go back (v1.37: only the box swaps now).
   function offerTrade(st, j) {
     st = copy(st);
     const h = offerOf(st);
-    if (!h || h.o.pick === undefined) return show(st);
-    const { o, who, e } = h, lines = [];
-    if (h.box) {
-      if (o.wait) return show(st);
-      if (j === null) { if (o.items.length) { delete o.pick; delete o.trade; } else { delete st.offer; delete st.box; st.extra = "> KURA closes the lid, gently."; } return show(st); }
-      const back = (st.items || [])[j];
-      if (!back) return show(st);
-      if (!BOX_OK(back)) { st.extra = "> The box only holds small things. Not that."; return show(st); }
-      st.boxPending = { k: o.k, give: back, take: o.items[o.pick] || null }; o.wait = true;
-      return show(st);
-    }
-    if (j === null) {
-      delete o.pick;
-      if (e) { e.stage = "offer"; st.round = ["KURA thinks it over."]; st.roundOver = false; } else delete o.trade;
-      return show(st);
-    }
-    const back = (st.items || [])[j], it = o.items[o.pick];
-    if (!back || !it) return show(st);
-    lines.push(`KURA gives ${back}, and takes ${it}.`);
-    handTo(st, who, back, lines); takeFrom(st, who, it, lines);
-    delete o.pick;
-    return offerDone(st, h, it, lines);
+    if (!h || !h.box || h.o.pick === undefined) return show(st);
+    const { o } = h;
+    if (o.wait) return show(st);
+    if (j === null) { if (o.items.length) { delete o.pick; delete o.trade; } else { delete st.offer; delete st.box; st.extra = "> KURA closes the lid, gently."; } return show(st); }
+    const back = (st.items || [])[j];
+    if (!back) return show(st);
+    if (!BOX_OK(back)) { st.extra = "> The box only holds small things. Not that."; return show(st); }
+    st.boxPending = { k: o.k, give: back, take: o.items[o.pick] || null }; o.wait = true;
+    return show(st);
   }
   function offerDone(st, h, it, lines) {
     const { o, who, e } = h;
@@ -3095,7 +3056,7 @@
     } else {
       lines.push(said(e, o.dir === "give" ? "like" : "love"));
       // A demon given something sometimes gives something back.
-      if (o.dir === "ask" && Math.random() < 0.4 && pockets(st, e).length && (st.items || []).length < BAG_MAX) {
+      if (o.dir === "ask" && Math.random() < 0.4 && pockets(st, e).length) {
         const back = pick(e.items); lines.push(`${THE(e.name)} gives KURA ${back} in return.`); takeFrom(st, e, back, lines);
       }
       if (e.align === "CHAOS") { lines.push(`${THE(e.name)} runs off laughing.`); ev(st, "trickster"); leaves(st, e); }
@@ -3148,7 +3109,7 @@
     const { o, who, e } = h;
     if (h.box) return { who: "BOX", box: true, dir: "give", items: o.items.slice(), picked: o.pick, trade: o.pick !== undefined && !!o.trade, empty: !o.items.length, wait: !!o.wait, leave: false, demon: false, hostile: false, bag: (st.items || []).slice() };
     if (h.moon) return { who: "MOON", moon: true, dir: "give", items: o.choices.map(g => g.label), trade: false, leave: !!o.leave, demon: false, hostile: false, bag: [] };
-    return { who: who.name, dir: o.dir, items: o.items.slice(), picked: o.pick, trade: o.pick !== undefined && (e ? e.stage === "trade" : !!o.trade),
+    return { who: who.name, dir: o.dir, items: o.items.slice(), picked: o.pick, trade: false,
       leave: !!(e && e.stage === "leave"), demon: !!e, hostile: !!o.hostile, bag: (st.items || []).slice() };
   }
   // TALK with no demon around: KURA talks to her party, and someone answers. Now and then something
@@ -3720,7 +3681,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, markLabel, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, markLabel, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);
