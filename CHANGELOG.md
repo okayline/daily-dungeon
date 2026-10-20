@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.34 - Clean Start - Oct 20 2026, 04:45 HST
+
+- **The codex stays with you.** Starting a new run no longer empties the codex: the demons you've met and the things you've found stay in it, as they always should have. A name you chose stays too.
+- **A new run starts clean.** Nothing else from your last run follows you into the next one any more: not old pacts, not the lean of your old choices, not stairs you'd already opened, not the Moon's old wish.
+- Removed: the bits of the last run that were leaking into the new one.
+
 ## v1.33 - Fuller Stories - Oct 20 2026, 00:30 HST
 
 - **Things remember more of where they came from.** A find now also remembers the level it came on, and whether it was hidden in a locker, in the Archive or deep in the stone.
