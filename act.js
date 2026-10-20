@@ -27,10 +27,6 @@
     raisePick: (st, a) => RULES.raisePick(st, n(a.i)),
     raiseGo: st => RULES.raiseGo(st),
     raiseCancel: st => RULES.raiseCancel(st),
-    // the altar
-    altarOpen: st => RULES.altarOpen(st),
-    altarNext: st => RULES.altarNext(st),
-    altarGive: (st, a) => RULES.altarGive(st, n(a.i)),
     // the bag
     useItem: (st, a) => RULES.useItem(st, a.name),
     giveIchor: (st, a) => RULES.giveIchor(st, Number(a.n) || 0),
@@ -70,16 +66,14 @@
     if (st && st.encounter && !st.encounter.seen && ENCOUNTER_ACTS.has(a.t)) st = { ...st, encounter: { ...st.encounter, seen: true } };
     return f(st, a);
   }
-  // The page's old button names ("go-N", "opick-2", "altar-none", "yes", ...) as actions.
+  // The page's old button names ("go-N", "opick-2", "yes", ...) as actions.
   function fromName(name) {
     const pick = (p, t) => (name.startsWith(p) ? { t, i: name === p + "none" ? null : Number(name.slice(p.length)) } : null);
     if (name === "yes" || name === "no") return { t: "answer", yes: name === "yes" };
     if (name === "left" || name === "right" || name === "look") return { t: "turn", dir: { left: "L", right: "R", look: "U" }[name] };
-    if (name === "altar") return { t: "altarOpen" };
-    if (name === "altar-next") return { t: "altarNext" };
     if (name.startsWith("oleave-")) return { t: "offerLeave", yes: name === "oleave-yes" };
     if (name.startsWith("go-")) return { t: "go", dir: name.slice(3) };
-    return pick("opick-", "offerPick") || pick("otrade-", "offerTrade") || pick("swap-", "swap") || pick("altar-", "altarGive") || { t: name };
+    return pick("opick-", "offerPick") || pick("otrade-", "offerTrade") || pick("swap-", "swap") || { t: name };
   }
   const api = { apply, fromName, runWay, ADMIN, types: Object.keys(ACTIONS), itemId: n => RULES.itemId(n), nameOf: id => RULES.nameOf(id), phaseMark: i => RULES.PHASE_MARK[i] || null, OCCASIONS: RULES.OCCASIONS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

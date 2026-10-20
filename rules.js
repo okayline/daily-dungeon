@@ -283,7 +283,7 @@
   const clone = st => JSON.parse(JSON.stringify(st));
   const copy = st => { const c = clone(st); delete c.pull; return c; };
   // ROOM STATE. Everything the game remembers about a room lives in one object per room: d.state[i] =
-  // { visited, found: [what's been uncovered], heat, linger, kindDay, altarDay, altarUses, walls }. Rooms are
+  // { visited, found: [what's been uncovered], heat, linger, kindDay, walls }. Rooms are
   // reserved as the floor grows (see floor.js), so nothing assumes how many there are.
   const freshRoom = () => ({ visited: false, found: [], heat: 0, linger: 0 });
   const RS = (d, i = d.at) => {
@@ -382,7 +382,7 @@
   const MOON_SAYS = {
     den: "Moonlight shows a warm room, heaped with things left behind.", bay: "Moonlight shows a still room, and somewhere to lie down.",
     relay: "Moonlight shows a dish, turning, listening for something.", vault: "Moonlight shows cold drawers, heavy with coin.",
-    forge: "Moonlight shows a bench and tools, and a smell of ash.", altar: "Moonlight shows a screen in a wall, waiting to be fed.",
+    forge: "Moonlight shows a bench and tools, and a smell of ash.", altar: "Moonlight shows a screen in a wall, glowing for no one.",
   };
   // THE MOON'S VOICE (v1.04): solemn while she's dim (new moon and the crescents), sassy while she's bright (gibbous
   // and full), a bit of both at the quarters. Very old, has seen everything, a little over it.
@@ -490,7 +490,7 @@
     relay: ["> Scrawled in marker: THE DISHES TURN. LISTEN, IT KNOWS THE WAY.", "> A cable, tied in a knot, tagged: FOLLOW THE CARRIER."],
     vault: ["> Chalked on the stone: COIN. RACKS OF IT. DON'T LINGER.", "> A tally of numbers, and under it: SILVER, BEHIND THE COLD DOOR."],
     forge: ["> A scorched tag: BENCH AND TOOLS. BRING WHAT YOU DRANK TO BURN OUT.", "> Scratched deep: IT MENDS THE BAD OUT OF YOU."],
-    altar: ["> A scrap of print: IT ASKS. GIVE, AND IT ANSWERS.", "> Written small, over and over: FEED THE SCREEN."],
+    altar: ["> A scrap of print: A SCREEN, ALWAYS ON. NOBODY ANSWERS.", "> Written small, over and over: THE SCREEN KEEPS WATCH."],
     archive: ["> A label, half peeled: EVERYTHING EVER SAVED. TAKE ONE.", "> Stamped on a drive: ONE STILL SPINS."],
   };
   // What the room beyond an open arch is like (finishes "a room that ..."). Senses only; it never names the room.
@@ -669,7 +669,7 @@
     st.itemSnap = cur.slice();
   }
   // A visiting 88x31 button joins the bag at dawn and whenever the bag is opened (the page asks the registry; a full bag waits).
-  // It is a guest: it can't be broken by fiddling or given to an altar, but party members and demons may ask for it, and it
+  // It is a guest: it can't be broken by fiddling, but party members and demons may ask for it, and it
   // changes hands without ever being used up. It counts toward her aura like any item. If it has left the bag and isn't in a
   // party member's pockets either (a demon walked off with it), the next look brings it home to the bag.
   const hasVisitor = (st, name) => (st.items || []).includes(name) || (st.party || []).some(p => (p.items || []).includes(name));
@@ -944,7 +944,7 @@
     const d = st.dungeon;
     if (d && t > d.deadline) {
       st.dead = true;
-      st.encounter = null; st.question = null; st.altar = null;          // nothing is left pending on a dead run
+      st.encounter = null; st.question = null;          // nothing is left pending on a dead run
       st.party = st.party.map(p => ({ ...p, hp: 0 }));
       st.log = `> The moon turned. The dark rose and closed over KURA.`;
       return st;
@@ -1026,7 +1026,6 @@
     st.unsaved = true;
     delete st.roundVoice;                    // (v1.08) whose voice the round's lines are in, when it isn't the speakers' own
     if (st.talkLine) delete st.talkLine;     // (v1.06.1: a party member's line stays up until something else takes line 1, so it never goes blank)
-    if (st.altar) st.altar = null;           // walking off closes the terminal
     bump(st, key || "act");                // the same thing again and again (see LOOP at the top)
     if (key && key.startsWith("search:") && st.box && st.box.state === "hidden") {      // (v1.12.1) searching the room turns up the gift box
       st.box.n = (st.box.n || 0) + 1;
@@ -1132,9 +1131,7 @@
     const rs = RS(d, i);
     if (rs.walls) return rs.walls;
     const room = d.floor.rooms[i];
-    // The terminal's wall can't be searched for hidden things (it wakes the terminal instead), so nothing hides there.
-    const altar = room.kind === "altar" ? altarDir(d.floor, i) : null;
-    const free = CW.filter(x => !doorWall(room, x) && x !== altar);
+    const free = CW.filter(x => !doorWall(room, x));
     const w = { taken: {} };
     free.forEach(x => { w[x] = []; w.taken[x] = 0; });
     const sd = stairsDir(d.floor, i);
@@ -1187,12 +1184,6 @@
       }
       { const other = pool.filter(l => "> " + l !== st.log); st.log = "> " + pick(other.length ? other : pool); }   // (an arch has one line: it may repeat)
       act(st, "door"); nag(st);
-      return show(st);
-    }
-    if (facingAltar(st)) {
-      act(st, "altar:open");
-      st.log = "> KURA touches the terminal. The screen wakes.";
-      st.altar = altarUsed(st) ? { open: true, used: true } : { open: true, used: false, script: altarScript(st), page: 0 };
       return show(st);
     }
     if (found.includes("stairs") && dir === stairsDir(d.floor, d.at)) { act(st, "stairs"); st.log = "> The stairs wait. Nothing more here."; return show(st); }
@@ -1453,7 +1444,7 @@
       "CU SITH": ['CU SITH sneezes at the sharp smell.', 'CU SITH sniffs the cold bench and sneezes.'],
     },
     altar: {
-      ELF: ['ELF: "Do not stare at the glow. It stares back."', 'ELF: "That was built to be asked things."'],
+      ELF: ['ELF: "Do not stare at the glow. It stares back."', 'ELF: "That was built to be spoken to."'],
       PIXIE: ['PIXIE: "The wall is GLOWING. Should it glow?"', 'PIXIE: "Is that a face? It\'s not a face. Hi anyway."'],
       "CU SITH": ['CU SITH will not step closer to the glow.', "CU SITH's hackles rise, and stay up."],
     },
@@ -1502,7 +1493,7 @@
   }
 
   // ROOM KINDS. Most rooms have one (see floor.js). The first time KURA enters, the room does its one thing (line 3).
-  // The Den, Bay, Forge and Altar keep working: going back does it again at HALF strength, once a day per room.
+  // The Den, Bay and Forge keep working: going back does it again at HALF strength, once a day per room.
   // The rest are one-time finds. No kind is better than another: they answer different needs.
   // Placeholders (nothing to act on yet): DEN gear, BAY shield, VAULT keys, FORGE repairs.
   const ROOM = { den: "CYBER-DEN", bay: "RECHARGE BAY", relay: "SIGNAL RELAY", vault: "DATA VAULT", forge: "FORGE-NODE", altar: "MATRIX ALTAR", archive: "THE ARCHIVE", void: "THE VOID" };
@@ -1510,7 +1501,7 @@
   function enterKind(st, i, isNew) {
     const d = st.dungeon, rm = d.floor.rooms[i], k = rm.kind;
     if (!k) return;
-    if (!isNew && !["den", "bay", "forge", "altar"].includes(k)) return;
+    if (!isNew && !["den", "bay", "forge"].includes(k)) return;
     if (RS(d, i).kindDay === st.day) return;
     RS(d, i).kindDay = st.day;
     if (k === "den") st.tell = "> Warm, close air. Loose parts and old gear lie scattered in the dark.";
@@ -1569,104 +1560,15 @@
     tally(st, "fixtures");
   }
 
-  // THE ALTAR (the Matrix Altar room): a terminal that takes one offering a day and shifts KURA's lean.
-  // The offering's own alignment sets the way (LAW item toward LAW, CHAOS item toward CHAOS, a neutral one
-  // or SILVER back toward the middle) and its tier the size. The terminal is a data thing, so it likes
-  // tech and dislikes spirit things; its mood (:) :| :() only changes how much the shift takes. The
-  // offering is always lost. (v1.10: the symbols now say which way it went, and the terminal gives something back.)
-  const TERMINAL = { family: "data", align: "NEUTRAL", want: 3 };
-  const ALTAR_SIZE = { COMMON: 0.5, UNCOMMON: 0.8, RARE: 1.2, MYTHIC: 2, MOON: 2 };
-  const ALTAR_SAYS = {
-    good: ["> THANK YOU.", "> ACCEPTED.", "> YES. MORE LIGHT.", "> THIS ONE IS WARM."],
-    ok: ["> NOTED.", "> LOGGED.", "> ACCEPTABLE.", "> I WILL KEEP IT."],
-  };
-  const ALTAR_FACE = { good: ":)", ok: ":|" };
-  const ALTAR_FLAVOR = { good: ["The terminal drinks it.", "The three symbols shift."], ok: ["The terminal takes it.", "The three symbols stir."],
- };
-  // The terminal is set into one of the room's walls (never a door wall, and not the stairs wall).
-  // Face it and SEARCH (or [G]IVE) to wake it.
+  // THE TERMINAL (the Matrix Altar room): a screen set into one of the room's walls (never a door wall, and not the stairs
+  // wall). It is only drawn: nothing here takes an offering or answers, and its wall is searched like any other.
   function altarDir(fl, i) {
     const room = fl.rooms[i];
     if (room.kind !== "altar") return null;
     const free = CW.filter(x => !doorWall(room, x) && !(fl.stairs === i && x === stairsDir(fl, i)));
     return free.length ? free[(fl.seed + i * 17) % free.length] : null;
   }
-  // What the terminal says before it asks. Every script ends by asking for an offering. Low voice, a little wrong, never explained.
-  const ALTAR_TALK = [      // (v1.10) three lines each, then the ask: short enough to be worth reading
-    ["> INPUT?", "> I KEPT A LIGHT ON.", "> WHAT DID YOU BRING?"],
-    ["> HELLO, WARM THING.", "> YOUR HEART IS LOUD.", "> LEAVE SOMETHING."],
-    ["> SOMEONE CAME BEFORE", "> THEY LEFT A GIFT.", "> GIVE. I'LL SAY WHY."],
-    ["> SIGNAL FOUND.", "> THREE SYMBOLS.", "> SEE FOR YOURSELF."],
-    ["> YOU AGAIN?", "> A DIFFERENT YOU.", "> FEED THE SCREEN."],
-    ["> DON'T FEAR THE DARK.", "> IT IS ONLY ME, OFF.", "> GIVE ME SOMETHING."],
-    ["> INPUT?", "> THE MOON IS UP.", "> OFFER. I'LL ANSWER."],
-    ["> OH. YOU CAME BACK.", "> I SAVED YOU A SPACE.", "> BRING ME A GIFT."],
-  ];
-  function altarScript(st) {
-    const d = st.dungeon, last = d && RS(d).altarScript, pool = ALTAR_TALK.map((_, i) => i).filter(i => i !== last), i = pick(pool);
-    if (d) RS(d).altarScript = i;
-    return ALTAR_TALK[i];
-  }
   const facingAltar = st => !!(st.dungeon && altarDir(st.dungeon.floor, st.dungeon.at) === st.facing);
-  function altarUsed(st) { const d = st.dungeon; return !!(d && RS(d).altarDay === st.day); }
-  function altarGifts(st) {
-    const n = 20 * floorNum(st), out = [{ silver: n, ok: (st.silver ?? 0) >= n, label: `${n} SILVER` }];
-    for (const it of inventory(st).filter(x => !isVisitor(st, x.name)).slice(0, 5)) out.push({ item: it.name, ok: true, label: it.name });   // a guest is never offered to the altar
-    return out;
-  }
-  function altarOpen(st) {                               // [G]IVE in an Altar room
-    st = copy(st);
-    if (st.dead) { st.extra = OVER; return show(st); }
-    const d = st.dungeon;
-    if (st.encounter || !d || !facingAltar(st)) { st.log = "> Nothing here to give to."; return show(st); }
-    st.altar = altarUsed(st) ? { open: true, used: true } : { open: true, used: false, script: altarScript(st), page: 0 };
-    return show(st);
-  }
-  function altarNext(st) {                              // the terminal's next line (clicks and Enter while it talks)
-    st = copy(st);
-    if (st.altar && st.altar.script && st.altar.page < st.altar.script.length - 1) st.altar.page++;
-    return show(st);
-  }
-  function altarGive(st, i) {                            // i = an index of altarGifts(), or null to close
-    st = copy(st);
-    if (!st.altar) return show(st);
-    if (i === null || st.altar.used || st.altar.result) { st.altar = null; return show(st); }
-    const g = altarGifts(st)[i];
-    if (!g) return show(st);
-    if (!g.ok) return show(st);
-    act(st, "altar");
-    const d = st.dungeon, mood = g.item && affinity(TERMINAL, g.item) >= 2 ? "good" : "ok";      // (v1.10: it called worth(), which was removed with Give, so every offering threw and nothing happened)
-    let amt;
-    const gi = g.silver ? -1 : st.items.indexOf(g.item), gtier = gi >= 0 ? slotTier(st, gi) : TIER[g.item] || "COMMON";
-    if (g.silver) { st.silver -= g.silver; amt = 0; } else { takeOut(st, gi); amt = 0; }
-    const a = (g.item && itemAlign(g.item)) || "NEUTRAL";      // (v1.10: any item has a leaning here, not only the rare ones, so every offering can do something)
-    const size = g.item ? ALTAR_SIZE[gtier] : 0.5;
-    amt = a === "LAW" ? -size : a === "CHAOS" ? size : -Math.sign(st.alignScore || 0) * 0.5;
-    amt *= { bad: 0.5, ok: 1, good: 1.25 }[mood];
-    if (RS(d).altarUses) amt *= 0.5;            // a terminal already fed in this room shifts KURA half as much
-    RS(d).altarUses = (RS(d).altarUses || 0) + 1;
-    LEAN.altarTmp = amt; lean(st, "altarTmp");
-    RS(d).altarDay = st.day;
-    tally(st, "offerings");
-    st.log = `> KURA makes an offering.`;
-    if (mood === "good") ev(st, "altar");
-    // (v1.10) The terminal answers: the symbols show which way the offering moved her, and it gives something back.
-    const way = amt < 0 ? "The three symbols turn toward LAW." : amt > 0 ? "The three symbols turn toward CHAOS." : "The three symbols settle in the middle.";
-    st.altar = { open: true, used: true, result: { mood, face: ALTAR_FACE[mood], say: pick(ALTAR_SAYS[mood]), lines: [ALTAR_FLAVOR[mood][0], way, ...altarBoon(st, a, mood)] } };
-    return show(st);
-  }
-  // What the terminal gives back, by the offering's alignment. LAW: a door's secret (line 3 keeps it once the box closes).
-  // CHAOS: her breath, all of it, and the party mended a little. Anything else: a few breaths. Never a loss.
-  function altarBoon(st, a, mood) {
-    const d = st.dungeon, rm = d.floor.rooms[d.at], w = d.floor.wings[rm.wing], good = mood === "good";
-    const breathTo = n => { const m = Math.min(BREATH_MAX, breathNow(st, true) + n); if (m >= BREATH_MAX) delete st.breath; else st.breath = { n: m, at: TIME.now().getTime() + BREATH_WAIT }; };
-    const heal = pct => { for (const p of st.party || []) if (p.hp > 0) p.hp = Math.min(p.hpmax, p.hp + Math.max(1, Math.ceil(p.hpmax * pct))); };
-    if (a === "LAW" && w && w.clueKind) { st.extra = pick(KIND_CLUE[w.clueKind]); tally(st, "altarBoon"); return ["A door's secret glows on the screen."]; }
-    tally(st, "altarBoon");
-    if (a === "CHAOS") { breathTo(BREATH_MAX); heal(good ? 0.25 : 0.15); return ["Warmth floods the party.", "KURA's breath comes back, all of it."]; }
-    breathTo(good ? 3 : 2);
-    return ["The screen glows. KURA breathes easier."];
-  }
 
   // Turning is free: "L" and "R" turn 90 degrees.
   function turn(st, how) {
@@ -1820,7 +1722,7 @@
     // A new run is clean, unless infinite steps (the one cheat that carries over) is still on.
     delete st.cheated; if (st.freeSteps) st.cheated = true;
     // Nothing from the last run carries over except the codex, the timezone and the cheats.
-    for (const k of ["taint", "wear", "snatched", "question", "altar", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
+    for (const k of ["taint", "wear", "snatched", "question", "loop", "round", "roundOver", "tell", "tripLeft", "turnShown",
       "fidgetLine", "hollow", "overflow", "restedDay", "extraUrgent", "dreadCheck", "clue", "pull", "logged", "status", "statusIn", "statusKind", "omenText",
       "itemSnap", "gone", "goneAt", "goneTo", "slots", "pocketed", "visitors", "visitorInfo", "regCopies", "visitDay", "omenDay", "bankedOmen", "useBanked", "omenCooldownDay", "bonusEpoch", "bonusCount", "lastBonusDay", "look", "moonDay", "moonNight", "hushDay", "offer", "listen", "events", "path", "height", "climb", "breath", "killer"]) delete st[k];
     st.timeFixed = true;
@@ -1927,7 +1829,7 @@
     st.wish = { n: d.quarter, night, deed: pick(deeds), base: { k, v } };
     return st.wish;
   }
-  // The tier of the copy in bag slot i, counting its blessings: aura, the altar and breaking all read this.
+  // The tier of the copy in bag slot i, counting its blessings: aura and breaking read this.
   function slotTier(st, i) {
     const name = (st.items || [])[i];
     return tierWithBlessings(name, copyMarks(copyAt(st, i)));
@@ -2336,7 +2238,7 @@
     if (Math.abs(base) < 0.1) return;                       // a tiny nudge leaves no tag
     st.tags = ((st.tags || []).concat(why)).slice(-TAG_KEEP);
     const tp = tagPull(st);
-    st.alignScore = tp.chaos - tp.law;                      // (kept for the debug line and the altar: the tags' net pull)
+    st.alignScore = tp.chaos - tp.law;                      // (kept for the debug line: the tags' net pull)
     st.pull = Math.sign(base);                              // the arrow on the colour tag: which way the last choice pulled
     const before = String(st.align || "NEUTRAL").toUpperCase(), s = st.alignScore;
     const after = aura(st).dom;      // (AURA) her colour: choices (the lean) + what she carries + who walks with her
@@ -2493,7 +2395,7 @@
     den: ["Whatever's back there is giving cozy.", "Warm vibes. Like, actually warm."],
     forge: ["It's giving workshop. Warm, kinda crunchy.", "Warm vibes, but make it industrial."],
     bay: ["That door is giving nap.", "Soft vibes. Suspiciously soft."],
-    altar: ["That door wants something from me. I can tell.", "Soft vibes, but kinda holy? Ew."],
+    altar: ["That door is giving screen glow.", "Soft vibes, but kinda holy? Ew."],
     vault: ["Cold vibes. Rich-people cold.", "That door is gatekeeping something."],
     relay: ["Cold vibes. And it won't stop talking.", "Static back there. It's trying to tell me something."],
     archive: ["That door has so many tabs open.", "Giving librarian. Dusty, but organized."],
@@ -3810,7 +3712,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, markLabel, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, markLabel, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

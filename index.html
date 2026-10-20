@@ -361,8 +361,8 @@
     if (steps - h.steps >= 2) setTimeout(draw, h.t + 2000 - now + 30);   // the turns are up: wait out the clock
     return h.text;
   }
-  // Put back the fight or altar box that belongs to the run (after a cancelled question, a loaded password...).
-  function restoreBoxes() { if (save) { encounterBox(); altarBox(); } }
+  // Put back the fight box that belongs to the run (after a cancelled question, a loaded password...).
+  function restoreBoxes() { if (save) { encounterBox(); } }
   function draw() {
     if (atTitle) return drawTitle();               // a stray redraw (the clock, a closing box) must never paint the run over the title
     if (!save) return;
@@ -445,7 +445,7 @@
     persist();
   }
   // (v1.15) VISITORS: at the first look of each new day, and whenever the bag is opened, a signed-in player's visiting 88x31
-  // buttons come into the bag (one each, while there is room). They are guests: they can't break or go to an altar, they can
+  // buttons come into the bag (one each, while there is room). They are guests: they can't break, they can
   // change hands in a run without being used up, and they come back to the bag if a demon walks off with one.
   let visitBusy = false, visitLast = 0;
   function visitorTick(force) {
@@ -829,7 +829,6 @@
     out: ["Someone climbed out, into open air.", "Someone reached the surface tonight."],
     restored: ["A corrupted voice turned, and was made whole again.", "A broken name was mended tonight.", "Something damaged was talked back to itself."],
     trickster: ["Something ran off laughing, gift in hand.", "A gift was taken. The taker did not stay.", "Laughter, going away down a hall."],
-    altar: ["An altar considered an offering, and was pleased.", "A screen in a wall glowed a little warmer.", "Something was fed, and said thank you."],
     joined: ["A stranger walked in, and stayed.", "A pact was made in the dark.", "Two walked on where one had come.", "Something old took a traveler's side."],
     deep: ["A wall gave up its secret, after many tries.", "Something very old came out of the stone.", "Patience was rewarded, for once."],
     left: ["Someone walked out, and did not look back.", "A pact ended badly.", "One fewer set of footsteps, somewhere below."],
@@ -1023,7 +1022,7 @@
     if (name === "title-continue") {
       if (!titleCanContinue()) return;
       leaveTitle();
-      try { await tick(); flashStatus(); draw(); encounterBox(); altarBox(); }
+      try { await tick(); flashStatus(); draw(); encounterBox(); }
       catch (err) { console.error(err); try { localStorage.setItem(KEY + "-corrupt", localStorage.getItem(KEY)); } catch (e) {} save = null; freshRun(); }
     } else if (name === "title-new") {
       if (save) resetBox();           // something exists to lose: confirm first (answerConfirm -> act("reset") leaves the title)
@@ -1542,7 +1541,6 @@
         ["[M]OON", "look up and ask the moon (a breath); again to look level"],
         ["[F]IGHT  [T]ALK", "deal with a demon; with none, TALK with the party"],
         ["[T]ALK alone", "listen to the room, or a door (half the breath bar)"],
-        ["[G]IVE", "at a wall terminal: make an offering"],
         ["[I]NVOKE", "the bag: 1-9 or arrows choose, Enter uses"],
         ["[R]UN in a fight", "run through a door (it may block you)"],
         ["[S]EARCH", "search what KURA faces (each takes a breath)"],
@@ -1784,94 +1782,6 @@
   let doneTimer = null, doneReveal = null, doneSeen = null;      // the fight-end screen's beat-by-beat unfolding
   let blockedRun = false, replayTimer = null, replayAdvance = null, replayWait = false, prevDemonHp = null, prevKuraHp = null;     // prevDemonHp: its HP before the round, so the bar drops when the party's blow lands
   function finishReplay() { if (replayTimer) { clearInterval(replayTimer); replayTimer = null; replayAdvance = null; replayWait = false; encounterBox(false); } }
-
-  // THE ALTAR: the terminal in a Matrix Altar room. Its screen types out its words, a glare shimmers across it,
-  // and after an offering it answers with a face. The list is the gift list; the result and the "quiet today"
-  // screen end with [ OK ]. Nothing here says which way the offering pulled KURA.
-  let altarTimer = null;
-  function altarBox() {
-    if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
-    const box = document.getElementById("found"), pre = box.querySelector("pre");
-    const A = save && save.altar;
-    if (!A || !A.open || save.encounter) {
-      if (box.dataset.mode === "altar") { box.hidden = true; box.dataset.mode = ""; pre.innerHTML = ""; }
-      return false;
-    }
-    box.className = "foundbox inframe"; box.removeAttribute("style"); box.hidden = false;
-    placeInView(box, 15);
-    box.dataset.mode = "altar";
-    pre.innerHTML = "";
-    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
-    const opt = (label, act) => { const d = document.createElement("span"); d.textContent = label; d.className = "btn"; d.dataset.fact = act; return d; };
-    const PAD = " ".repeat(10), IN = 23;
-    add(PAD + ".-----------------------.", "artframe");
-    const s1 = document.createElement("div"), s2 = document.createElement("div");
-    s1.className = s2.className = "artframe screen";
-    pre.append(s1, s2);
-    add(PAD + "'-----------------------'", "artframe");
-    add(" ".repeat(16) + "[=======]", "artframe");
-    add(" ");
-    // below the terminal
-    if (A.result) {
-      for (const l of A.result.lines) add("  " + l);
-      add(" "); add("  [ OK ]", "btn").dataset.fact = "altar-none";
-    } else if (A.used) {
-      add("  THE TERMINAL IS QUIET."); add("  COME BACK TOMORROW."); add(" ");
-      add("  [ OK ]", "btn").dataset.fact = "altar-none";
-    } else if (A.script && A.page < A.script.length - 1) {
-      add(" "); add(" "); add("  ").append(Object.assign(document.createElement("span"), { className: "wait", textContent: "_" }));
-      add(" "); add(" "); add("  click or Enter  (B back)", "dim");
-    } else {
-      RULES.altarGifts(save).slice(0, 6).forEach((g, i) => {
-        const line = document.createElement("div"), o = opt(`  [${i + 1}] ${g.label}`, "altar-" + i);
-        if (!g.ok) o.classList.add("off");
-        line.append(o); pre.appendChild(line);
-      });
-      add(" ");
-      const row = document.createElement("div"); row.append(opt("  [B]ACK", "altar-none")); pre.appendChild(row);
-    }
-    // the screen: line 1 types, line 2 shimmers (or types the face once there is an answer)
-    const say = A.result ? A.result.say : A.used ? "> ...ZZZ" : A.script ? A.script[Math.min(A.page, A.script.length - 1)] : "> INPUT?";
-    const face = A.result ? "  " + A.result.face : "";
-    const WAVE = ["_", ".", "-", "'"];                   // a sine wave in four heights, drifting across the screen
-    let tick = 0;
-    // The wave follows its mood: flat when it dislikes the offering, easy when it's neutral, quick and tight when it loves it.
-    const mood = A.result ? A.result.mood : "ok";
-    const waveOf = n => {
-      if (mood === "bad") return "-".repeat(n);
-      const [period, speed] = mood === "good" ? [6, 0.9] : [11, 0.35];
-      let w = ""; for (let x = 0; x < n; x++) w += WAVE[Math.round((Math.sin((x - tick * speed) * 2 * Math.PI / period) + 1) / 2 * 3)];
-      return w;
-    };
-    const scroll = !!(A.script && !A.result);          // its own talk scrolls in from the right; the answer types
-    const W = IN - 2, stopAt = Math.min(0, W - say.length);
-    let held = 0, heldAt = -1;                          // (v1.08.1) its typing stops a full second at each period
-    const paint = () => {
-      let typed1 = Math.min(say.length, Math.floor(tick / 2));
-      if (!scroll && typed1 > 0 && typed1 < say.length && say[typed1 - 1] === "." && say[typed1] !== "." && heldAt !== typed1) {
-        if (held < Math.round(PERIOD_STOP / 55)) { held++; s1.textContent = PAD + "|" + (" " + say.slice(0, typed1) + "_").padEnd(IN) + "|"; return; }
-        heldAt = typed1; held = 0;
-      }
-      const done1 = scroll ? W - tick <= stopAt : typed1 >= say.length;
-      const typed2 = A.result ? Math.max(0, Math.min(face.length, Math.floor((tick - say.length * 2 - 8) / 3))) : 0;
-      const cursor = Math.floor(tick / 8) % 2 === 0 ? "_" : " ";
-      const t1 = " " + say.slice(0, typed1) + (done1 ? "" : "_");
-      let t2;
-      if (A.result) t2 = (waveOf(IN - 5) + " " + face.trim().slice(0, Math.max(0, typed2 - 2))).padEnd(IN);
-      else t2 = waveOf(IN);
-      if (scroll) {
-        const pos = Math.max(stopAt, W - tick);
-        const body = pos > 0 ? " ".repeat(pos) + say : say.slice(-pos);
-        s1.textContent = PAD + "|" + (" " + body.slice(0, W) + (done1 ? cursor : "")).padEnd(IN) + "|";
-      } else if (!A.result && done1) s1.textContent = PAD + "|" + (" " + say + cursor).padEnd(IN) + "|";
-      else s1.textContent = PAD + "|" + t1.padEnd(IN) + "|";
-      s2.textContent = PAD + "|" + t2 + "|";
-      tick++;
-    };
-    paint();
-    altarTimer = setInterval(paint, 55);
-    return true;
-  }
 
   // (v1.06.1) A line that rolls in: the new rows rise in from a row below and fade up, and the rows that stay slide up
   // by however many rows dropped off the top, so the scroll reads as a scroll.
@@ -2241,7 +2151,6 @@
     if (k.floors) own.push(`${n(k.floors, "level", "levels")} climbed since she woke`);
     if (save.bankedOmen !== undefined) own.push("An omen is held in reserve . . .");
     if (k.fixtures) own.push(`${n(k.fixtures, "fixture", "fixtures")} put to use`);
-    if (k.offerings) own.push(`${n(k.offerings, "offering", "offerings")} made at a terminal`);
     if (k.ichorDrunk) own.push(`ICHOR drunk ${n(k.ichorDrunk, "time", "times")}, ${k.trips || 0} bad`);
     if (k.moonAsked) own.push(`The moon asked ${n(k.moonAsked, "time", "times")}, answered ${k.moonAnswered || 0}`);
     if (k.breathOut) own.push(`Out of breath ${n(k.breathOut, "time", "times")}`);
@@ -2352,7 +2261,7 @@
   let queuedTurn = null, actDepth = 0;
   function flushTurn() {
     const q = queuedTurn; queuedTurn = null;
-    if (!q || Date.now() - q.at > 3000 || waiting || searchBeat || atTitle || !save || !save.dungeon || save.dead || save.encounter || save.question || save.raise || (save.altar && save.altar.open)) return;
+    if (!q || Date.now() - q.at > 3000 || waiting || searchBeat || atTitle || !save || !save.dungeon || save.dead || save.encounter || save.question || save.raise) return;
     if (!document.getElementById("found").hidden || ["inv", "log", "board", "about", "codex"].some(id => { const e = document.getElementById(id); return e && !e.hidden; })) return;
     act(q.name);
   }
@@ -2434,7 +2343,7 @@
           const had = (save.items || []).length;
           searchBeat = null; searchGo = true; holdFound = true;
           try { await act("search"); } finally { searchGo = false; holdFound = false; }
-          if (!save || save.dead || save.encounter || save.question || (save.altar && save.altar.open) || !document.getElementById("found").hidden) { showHeld(); typeQuiet = false; return; }
+          if (!save || save.dead || save.encounter || save.question || !document.getElementById("found").hidden) { showHeld(); typeQuiet = false; return; }
           full = save.log;
           const m = /^> KURA (?:searches|scries) the [^.]+\.+/.exec(full || "");
           head = m ? m[0] : null;
@@ -2479,7 +2388,7 @@
     }
     // A party member's question waits for [Y]ES or [N]O: nothing else moves the game on until it's answered
     // (the bag, codex, log, help and password still open, so the player can think it over).
-    if (save && save.question && /^(search|hold|left|right|look|forward|run|fight|word|altar|go-)/.test(name)) {
+    if (save && save.question && /^(search|hold|left|right|look|forward|run|fight|word|go-)/.test(name)) {
       document.querySelectorAll(".btn.ask").forEach(el => { el.classList.remove("nudge"); void el.offsetWidth; el.classList.add("nudge"); });
       return;
     }
@@ -2521,7 +2430,6 @@
     if (save.line3) { line3Next = save.line3; delete save.line3; }   // AURA's own read goes on line 3, next
     if (name === "reset") {
       save.history = [];
-      if (altarTimer) { clearInterval(altarTimer); altarTimer = null; }
       heldExtra = null; logGlow = false; invSel = 0; queuedNotice = null;
     }
     remember(name === "reset" || save.steps !== steps ? "" : log);
@@ -2532,7 +2440,7 @@
       blockedRun = true; noticeBox([`${save.encounter.name} blocked your way.`]);
       return;
     }
-    if (name !== "reset" && !encounterBox(true) && !altarBox()) {
+    if (name !== "reset" && !encounterBox(true)) {
       foundBox(before);
       // Nothing else opened: if this action brought something significant, say so in a box.
       if (!save.encounter) {
@@ -2590,8 +2498,7 @@
     const b = e.target.closest("[data-fact]");
     if (b) act(b.dataset.fact);
     else if (mode === "found" || mode === "done") { if (e.target.closest(".btn")) closeFound(); }   // only its [ OK ]
-    else if (mode === "altar" && save.altar && save.altar.script && !save.altar.result && save.altar.page < save.altar.script.length - 1) act("altar-next");   // a click brings the terminal's next line
-    else if (mode === "altar" || mode === "encounter") return;                   // their own buttons only
+    else if (mode === "encounter") return;                   // their own buttons only
     else if (e.target.closest(".btn")) closeFound();   // any other box: only its [ OK ]
   });
   // Clicking an item chooses it; clicking the chosen one again opens its HISTORY ([U]SE uses it). Only [C]LOSE, I or Esc closes it.
@@ -2653,16 +2560,6 @@
       if (e.repeat) return;                        // holding a key can't answer a box
       if (fbox.dataset.mode === "confirm") {
         answerConfirm(key === "enter" || key === "y" || (key === "arrowup" && !!armed));     // anything else is NO
-        return;
-      }
-      if (fbox.dataset.mode === "altar") {
-        const A = save.altar || {};
-        let k;
-        const speaking = !A.result && !A.used && A.script && A.page < A.script.length - 1;
-        if (speaking) k = { enter: "altar-next", " ": "altar-next", escape: "altar-none", b: "altar-none" }[key];
-        else if (A.result || A.used) k = { enter: "altar-none", " ": "altar-none", escape: "altar-none", b: "altar-none" }[key];
-        else k = /^[1-6]$/.test(key) ? "altar-" + (Number(key) - 1) : { b: "altar-none", escape: "altar-none" }[key];
-        if (k) act(k);
         return;
       }
       if (fbox.dataset.mode === "encounter" && replayAdvance && (key === "enter" || key === " ")) { e.preventDefault(); replayAdvance(); return; }
@@ -2743,7 +2640,7 @@
     // S is SEARCH now; the day's step is [^] or the up arrow (the compass keys are gone with the NSEW buttons).
     if (save && save.question && (key === "y" || key === "n" || (save.question.lab && (key === "1" || key === "2")))) { e.preventDefault(); return act(key === "y" || key === "1" ? "qyes" : "qno"); }
     const k = { "?": "about", c: "codex", f: "fight", t: "word", i: "invoke", l: "log", b: "board", p: "backup", r: "reset",
-      s: "search", g: "altar", m: "look", arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
+      s: "search", m: "look", arrowdown: save && save.look ? "look" : null, arrowup: "forward", arrowleft: "left", arrowright: "right" }[key];
     if (key === "x") {   // testing cheats, behind the admin key: X toggles infinite steps, Shift+X jumps a day
       e.preventDefault(); if (gating) return;
       const shift = e.shiftKey; gating = true;
