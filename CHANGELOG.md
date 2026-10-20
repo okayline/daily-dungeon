@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.35.1 - Oct 20 2026, 08:15 HST
+
+- Removed: the "New here? Press N to start." line on the title screen's menu bar. Nothing was added.
+
 ## v1.35 - Front Door - Oct 20 2026, 08:11 HST
 
 - **A pointer for new players.** The title screen's menu bar now ends with "New here? Press N to start."
