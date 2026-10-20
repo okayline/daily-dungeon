@@ -1,12 +1,16 @@
 # Daily Digital Demon Dungeon
 
-*One door a day. The dark rises with the moon.*
+*One door a day. The darkness rises with the moon.*
 
-**Play it:** [dungeon.88x31.app](https://dungeon.88x31.app).
+**Play it:** [dungeon.88x31.app](https://dungeon.88x31.app)
 
 <img width="60%" alt="Daily Digital Demon Dungeon, build v1.26" src="screenshots/v1.26.png" />
 
-An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei, played on the real lunar calendar. You wake at the bottom of a pit. The dark is already rising.
+An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Tensei with some modern twists.  Played on the real lunar calendar. You wake at the bottom of a pit. The dark is already rising.
+
+Daily Digital Demon Dungeon (4Dungeon) is a daily, asynchronous, moon-phased, time-gated, seeded, real-world-clock-driven, server-authoritative, shared-world, ambient multiplayer, roguelike dungeon crawler with permadeath-style runs, one key a day, sealed stairs, and a public hash-chained ledger keeping track of items with provenance.
+
+
 
 ## The Moon Is Real
 
