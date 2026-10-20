@@ -258,10 +258,10 @@
       st.tell = HEAT_TELL[after][kind];
     }
     if (after !== before) { st.statusIn = 0; st.statusKind = "air"; }   // the conditions report updates right away
-    // (VIBES) A room turning hot is the only thing that touches the party, and it takes nothing away: everyone goes quiet
-    // for the rest of the day (p.hush), and a night's sleep, or a TALK with them, brings them back.
-    if (before < 2 && after >= 2) for (const p of st.party || []) if (p.demon && p.hp > 0) p.hush = true;
-    if (before < 2 && after >= 2 && (st.party || []).some(p => p.demon && p.hp > 0) && !st.tell) st.tell = "> The others go quiet.";
+    // (VIBES) A room turning very hot (tier 3; it was tier 2) is the only thing that touches the party, and it takes nothing away:
+    // everyone goes quiet for the rest of the day (p.hush), and a night's sleep, or a TALK with them, brings them back.
+    if (before < 3 && after >= 3) for (const p of st.party || []) if (p.demon && p.hp > 0) p.hush = true;
+    if (before < 3 && after >= 3 && (st.party || []).some(p => p.demon && p.hp > 0) && !st.tell) st.tell = "> The others go quiet.";
   }
   // (v1.12) Dealing with a demon cools the room by a third (fight, WORD, recruit or run).
   function coolOff(st) { const d = st.dungeon; if (d) { const rs = RS(d); rs.heat = Math.floor(rs.heat * 2 / 3); } }
@@ -2734,7 +2734,7 @@
     return set && Math.random() < 0.7 ? pick(set) : pick(OVERHEAR_ANY)(a, b);
   };
   const WORD_BREATH = 0.5;
-  const WORD_YIELD = [1, 1, 0.5, 0.25];                 // the 1st, 2nd, 3rd, 4th WORD with one member today; past that, they're talked out
+  const WORD_YIELD = [...Array(8).fill(1), ...Array(4).fill(0.5), ...Array(4).fill(0.25)];   // the 1st to 16th WORD with one member today (was 4); past that, they're talked out
   const famKey = p => (isProgram(p.base || p.name) ? "data" : p.family || "folklore");
   const lineFor = (table, p) => pick(table[p.name] || table[famKey(p)] || table.folklore).replace(/\{n\}/g, p.name);
   // Talked out for today: gentle, never annoyed.
