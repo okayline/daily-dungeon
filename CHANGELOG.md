@@ -2,7 +2,7 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
-## v1.36.1 - Oct 20 2026, TIME HST
+## v1.36.1 - Oct 20 2026, 09:13 HST
 
 - **The USER page scrolls.** Everything on it can be reached now, down to [LOG OUT OF THIS BROWSER].
 - Removed: nothing.
