@@ -1,6 +1,6 @@
 # Daily Digital Demon Dungeon
 
-*One door a day. The dark rises with the moon.*
+*One door a day. The darkness rises with the moon.*
 
 **Play it:** [dungeon.88x31.app](https://dungeon.88x31.app)
 
