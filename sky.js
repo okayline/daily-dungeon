@@ -96,8 +96,8 @@
     if (!tops.length) { const t = day ? "Daylight. No stars." : "No bright stars up."; [...t].forEach((ch, i) => { c[13][2 + i] = ch; }); }
     tops.forEach(([, name, g, col], i) => { const gx = 2 + (i % 3) * COLW, gy = 13 + Math.floor(i / 3), t = g + " " + name;
       [...t].forEach((ch, k) => { c[gy][gx + k] = ch; }); guide.push({ x: gx, y: gy, len: t.length, color: col }); });
-    const parts = {}; try { new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).formatToParts(date).forEach(q => { parts[q.type] = q.value; }); } catch (e) {}
-    const stamp = `${p.city} \u00b7 ${parts.month || ""} ${parts.day || ""} ${parts.year || ""} \u00b7 ${parts.hour || ""}:${parts.minute || ""} ${parts.dayPeriod || ""}`.trim();
+    const parts = {}; try { new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date).forEach(q => { parts[q.type] = q.value; }); } catch (e) {}
+    const stamp = `${p.city} \u00b7 ${parts.month || ""} ${parts.day || ""} ${parts.year || ""} \u00b7 ${parts.hour || ""}:${parts.minute || ""}`.trim();
     return { rows: c.map(r => r.join("")), color, guide, stamp, day, moonUp: mh.alt > 0 };
   }
   const api = { render, moonPos, place };

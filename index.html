@@ -65,6 +65,7 @@
   .door .g { position: relative; left: -0.1em; }   /* the fallback font draws || a touch right of its cell */
   .wall { color: var(--dim); opacity: 0.6; }
   .btn { cursor: pointer; color: var(--bright); }
+  .btn.gold { color: var(--gold); }
   .btn:hover { background: var(--fg); color: var(--bg); }
   .btn.off { color: var(--dim); }
   .btn.armed { background: var(--gold); color: var(--bg); }
@@ -1437,7 +1438,7 @@
         : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : [])];
       for (const l of lines) for (const w of wrapText(l, 41)) add(w, "");
     }
-    // The foot, pinned to the bottom of the box: page controls, then [H]ISTORY, [M]AIL and [C]LOSE.
+    // The foot, pinned to the bottom of the box: page controls, then [U]SE, [H]ISTORY, [M]AIL and [C]LOSE.
     if (empty) add(" ");
     const help = add("", "");
     if (empty) help.style.marginTop = "0";                       // (v1.06.1) with nothing in the bag, the foot comes up under the list
@@ -1445,7 +1446,7 @@
       const pg = (t, v) => { const sp = btn(t, "page"); sp.dataset.page = v; return sp; };
       help.append(pg("[<]", "prev"), ` ${invPage + 1}/${pages} `, pg("[>]", "next"), "  ");
     }
-    help.append(btn("[H]ISTORY", "hist", "btn" + (it0 && !it0.ichor ? "" : " off")), " ", btn("[M]AIL", "reg"), " ", btn("[C]LOSE", "close"));
+    help.append(btn("[U]SE", "use"), " ", btn("[H]ISTORY", "hist", it0 && !it0.ichor ? "btn gold" : "btn off"), " ", btn("[M]AIL", "reg"), " ", btn("[C]LOSE", "close"));
   }
   // Move to the next or previous page of the bag: the chosen thing becomes the first one on it.
   function pageInv(d) {
@@ -1458,8 +1459,8 @@
   // screen opens). A thing with no registry number has no history to look up. [L]EDGER opens the copy's registry page.
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const GAME_NAMES = { "4dungeon": "4Dungeon", "88x31": "88x31", "irl-dungeon": "irl-dungeon", "scoundrel": "scoundrel.exe", "dawn-baton": "Dawn Baton" };
-  const stamp = (at, pad) => { const d = new Date(at * 1000), h = d.getHours() % 12 || 12, p = pad ? (n => String(n).padStart(2)) : String;
-    return `${MONTHS[d.getMonth()]} ${p(d.getDate())} ${p(h)}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() < 12 ? "AM" : "PM"}`; };
+  const stamp = (at, pad) => { const d = new Date(at * 1000), two = n => String(n).padStart(2, "0");   // 24-hour time, in the player's own time zone
+    return `${MONTHS[d.getMonth()]} ${pad ? String(d.getDate()).padStart(2) : d.getDate()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
   function openHist() {
     const it = invList[invSel];
     if (!it || it.ichor) return;
@@ -1475,7 +1476,7 @@
     const H = invHist, it = H.it, S = H.story;
     let used = 0;
     const put = (t, cls) => { used++; return add(t, cls); };
-    put("HISTORY", ""); put(" ");
+    put("HISTORY", "gold"); put(" ");
     const tail = H.num ? `  #${H.num}${S ? ` of ${S.of}` : ""}` : "";
     put(it.name.length + tail.length > 41 ? it.name.slice(0, 41 - tail.length - 2) + ".." + tail : it.name + tail, "");
     put(`${RULES.tierWithBlessings(it.name, it.own).toLowerCase()}   ${it.align || "NEUTRAL"}   ${it.nature || "plain"}`, "dim");
@@ -1494,7 +1495,7 @@
       put(" ");
       const label = e => e.k === "mark" ? RULES.markLabel(e.kind, e.value) : e.k === "move" ? (e.from === "4dungeon" ? "Sent to " + (GAME_NAMES[e.to] || e.to) : "Came from " + (GAME_NAMES[e.from] || e.from)) : "Used up";
       const room = HIST_ROWS - used - 2, ev = S.events, shown = ev.length <= room ? ev : ev.slice(0, Math.max(0, room - 1));   // newest first, one page: the rest are on the ledger page
-      for (const e of shown) put(`${stamp(e.at, true)}  ${label(e)}`.slice(0, 41), e.k === "mark" && e.kind === "moon" ? "gold" : "");
+      for (const e of shown) put(`${stamp(e.at, true)}  ${label(e)}`.slice(0, 41), e.k === "mark" && e.kind === "moon" ? "moon" : "");
       if (shown.length < ev.length) put(`+${ev.length - shown.length} older, see the ledger`, "dim");
     }
     const btn2 = (t, a) => { const sp = document.createElement("span"); sp.className = "btn"; sp.textContent = t; sp.dataset.histact = a; return sp; };
@@ -2588,7 +2589,7 @@
     else if (mode === "altar" || mode === "encounter") return;                   // their own buttons only
     else if (e.target.closest(".btn")) closeFound();   // any other box: only its [ OK ]
   });
-  // Clicking an item chooses it; clicking the chosen one again uses it. Only [C]LOSE, I or Esc closes it.
+  // Clicking an item chooses it; clicking the chosen one again opens its HISTORY ([U]SE uses it). Only [C]LOSE, I or Esc closes it.
   document.getElementById("inv").addEventListener("click", e => {
     if (invReg) { const ra = e.target.closest("[data-regact]"); if (ra) regAct(ra.dataset.regact); return; }
     if (invHist) { const ha = e.target.closest("[data-histact]"); if (ha) histAct(ha.dataset.histact); return; }
@@ -2604,7 +2605,7 @@
     if (ichorPick >= 0) { if (!line) { ichorPick = -1; return showInv(true); } const n = Number(line.dataset.i); if (n === ichorPick) return useInv(invSel, n || "0"); ichorPick = n; return showInv(true); }
     if (!line) { showInv(false); if (save && save.encounter) encounterBox(); return; }   // any other click closes, same as [C]LOSE
     const i = Number(line.dataset.i);
-    if (i === invSel) useInv(i); else { invSel = i; showInv(true); }
+    if (i === invSel) openHist(); else { invSel = i; showInv(true); }   // (v1.29) the chosen thing's name opens its HISTORY; [U]SE uses it
   });
   document.getElementById("codex").addEventListener("click", e => {
     const tab = e.target.closest("[data-tab]"), line = e.target.closest("[data-i]");
@@ -2703,6 +2704,7 @@
       }
       if (key === "i" || key === "c" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
       else if (key === "h") { e.preventDefault(); openHist(); }
+      else if (key === "u") { e.preventDefault(); useInv(invSel); }
       else if (key === "m") { e.preventDefault(); invReg = { page: 0, items: null, msg: "", err: "", loading: false }; showInv(true); }
       else if ((key === "arrowleft" || key === "arrowright") && invSel === 0 && invList.length && invList[0].ichor) { e.preventDefault(); topSel = key === "arrowright" ? 1 : 0; showInv(true); }
       else if (key === "arrowleft" || key === "arrowright") { e.preventDefault(); pageInv(key === "arrowright" ? 1 : -1); }
