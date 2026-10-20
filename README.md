@@ -10,26 +10,25 @@ An 80-column ASCII dungeon crawler in the spirit of 80s CRPGs and Shin Megami Te
 
 ## The Moon Is Real
 
-- **The dark rises with her.** Each quarter of the lunar month, the dark takes a level. Climb out before the quarter ends. Survive all four to finish the cycle, and the game!
-- **She wants something.** Each quarter the moon asks for three things: a night, a way it came to you, and a kind of thing. Look up ([M]) and she says it plainly. At the stairs, offer her up to two things. Anything passes; the ones that fit are remembered, and if all three fit, one thing is lifted a tier.
-- **She sets the mood.** Near the new moon demons are easier to talk to; near the full moon they run wild. Most of the game shifts a little with her phase.
-- **Full moons are rarer and stranger.** Some things only turn up under the brightest light.
-- **Look up and ask her.** There's no ceiling, only the sky. Ask as often as you like.
-- **Everyone's in the same pit.** Everyone playing this quarter is on the same level with the same rooms. Which door is which is yours alone. The game tells you how many others are down there, never who.
+Each quarter of the lunar month, the dark takes a level, so you have to climb out before the quarter ends. Survive all four and you finish the cycle, and the game! Everyone playing this quarter is in the same pit, on the same level with the same rooms. Which door is which is yours alone, and the game tells you how many others are down there, never who.
+
+The moon sets the mood. Near the new moon demons are easier to talk to, and near the full moon they run wild. Full moons are rarer and stranger, too, and some things only turn up under the brightest light.
+
+There's no ceiling, only the sky. Look up ([M]) and ask her as often as you like. Each quarter she wants something: a night, a way it came to you, and a kind of thing. She says so plainly. When you reach the stairs you can offer her up to two things. Anything passes, but what fits is remembered, and if all three fit, one thing is lifted a tier.
 
 ## Good to Know
 
-- **One key a day.** Spend it on one of two doors every day. Everyone playing has the same choice, but a different context. A level is a run of wings, one a day, with the stairs in the last. Start late and your level is just shorter.
-- **Breath.** Searching, walking and talking take breath. If you're out of breath, wait a few seconds. At dungeon.88x31.app breath is resting for now and never runs out.
-- **Search the walls.** Face a wall and search. Every room hides one to three items, plus coins and demons. Each search warms the room, and a hot room draws demons.
-- **Fights.** Fight, talk or run. A fallen demon may drop a thing or two, and some offer a swap: take one or give one.
-- **TALK.** Talk to a demon, or to your party. Everyone carries things, and sometimes they'll offer you one. On your own, KURA listens to the room or the door she faces instead.
-- **Your party.** Start with three friends. Demons can join when there's room. Talking builds good vibes with them, and they'll go quiet for a day if a room runs very hot.
-- **Things have stories.** Every item is a numbered copy. [H]ISTORY, in INVOKE, shows where and when it was found and every time it changed hands, down to the second. The bag holds nine, six to a page. Things can travel between the Dungeons games.
-- **Aura.** What you carry, who walks with you and what you've done lately make you louder, and give you a colour. Demons, the dungeon, and the moon can tell.
-- **The Omen.** Once a day the moon whispers her Omen, and it tilts what the day brings.
-- **The Board.** Post a finished run to the leaderboard. Your run starts under a placeholder name; type your own when you post.
-- **Saves.** At dungeon.88x31.app your run lives on the server. The account page ([P]) keeps a save code and passkeys so you can pick it up on another device.
+You get one key a day, and you spend it on one of two doors. Everyone has the same choice, but a different context. A level is a run of wings, one a day, with the stairs in the last one, so if you start late your level is just shorter.
+
+Searching, walking and talking take breath. If you run out, wait a few seconds. (At dungeon.88x31.app breath is resting for now and never runs out.) Face a wall and search to find things: every room hides one to three items, plus some coins and demons. Each search warms the room, and a hot room draws demons. You can fight, talk or run. A fallen demon may drop a thing or two, and some will offer a swap, take one or give one.
+
+You start with three friends, and demons can join when there's room. Talk to them and they warm up to you, though they'll go quiet for a day if a room runs very hot. Everyone carries things, and sometimes they'll offer you one. On your own, TALK just has KURA listen to the room or the door she faces.
+
+Every item is a numbered copy with a story. [H]ISTORY, in INVOKE, shows where and when it was found and every time it changed hands, down to the second. The bag holds nine, six to a page, and things can travel between the Dungeons games.
+
+What you carry, who walks with you and what you've done lately make you louder and give you a colour, your aura, and demons, the dungeon and the moon can tell. Once a day she also whispers her Omen, which tilts what the day brings.
+
+When a run is done, post it to the leaderboard. It starts under a placeholder name, so type your own when you post. At dungeon.88x31.app your run lives on the server, and the account page ([P]) keeps a save code and passkeys so you can pick it up on another device.
 
 ## Files
 
