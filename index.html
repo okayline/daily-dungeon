@@ -106,9 +106,13 @@
   #ticker { display: inline-block; width: 76ch; overflow: hidden; white-space: pre; vertical-align: top; }
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
-  .foundbox[data-mode="pass"] { max-width: calc(100vw - 8px); box-sizing: border-box; }   /* the account page wraps instead of scrolling sideways */
-  .foundbox[data-mode="pass"] pre { white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
-  .brow2 { display: flex; flex-wrap: wrap; gap: 0 2ch; }
+  /* (v1.36) The USER page sits in the 3D view like the bag, and scrolls; its title and message stay at the top. */
+  .foundbox[data-mode="pass"] { overflow: auto; }
+  .foundbox[data-mode="pass"] pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .foundbox[data-mode="pass"] .top { position: sticky; top: 0; background: var(--bg); }
+  .foundbox[data-mode="pass"] .code { -webkit-user-select: text; user-select: text; }
+  .foundbox[data-mode="pass"] .btn { display: inline-block; }
+  .codebox { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 29ch; padding: 0 4px; text-transform: uppercase; }
   .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
   .nameinput.bad { border-color: var(--demon); }
   #board .auto { color: var(--trail); }
@@ -1229,48 +1233,73 @@
   }
 
   // USER: a save code or passkey (the shared 88x31 accounts) so the run follows you across devices. Optional.
-  function accountBox(note) {
+  // (v1.36) Laid out like irl-dungeon's: a panel inside the 3D view (47 columns, 17 rows) that scrolls, the title and
+  // the message pinned at its top.
+  function accountBox() {
     const box = document.getElementById("found"), pre = box.querySelector("pre");
-    floatBox(box); pre.innerHTML = "";
-    const add = (t, cls) => { const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls; pre.appendChild(d); return d; };
-    const btn = (t, a) => { const e = document.createElement("span"); e.textContent = t; e.className = "btn"; e.dataset.pact = a; return e; };
+    floatBox(box);
+    box.className = "foundbox inframe"; box.dataset.mode = "pass"; box.hidden = false;
+    placeInView(box, 17);
     const b64 = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     const unb64 = t => { t = t.replace(/-/g, "+").replace(/_/g, "/"); return Uint8Array.from(atob(t + "===".slice((t.length + 3) % 4)), c => c.charCodeAt(0)); };
+    const monthDay = s => new Date(s * 1000).toLocaleDateString([], { month: "short", day: "numeric" });
     const api = acctApi;
-    add("USER", "gold"); add(" ");
-    const msg = add(note || " ");
-    box.dataset.mode = "pass"; box.hidden = false;
-    const row = document.createElement("div");
-    const close = () => { box.hidden = true; draw(); };
-    if (!ACCOUNT_HOST) {
-      msg.textContent = "Accounts work at dungeon.88x31.app. Open the game there to use them.";
-      row.append(btn("[ BACK ]", "back"));
-      pre.appendChild(row);
-      passAct = () => close();
-      return;
+    let newCode = "", msg = "", last = null, copied = false;
+    const close = () => { box.hidden = true; pre.innerHTML = ""; draw(); };
+    const btn = (t, a) => { const e = document.createElement("span"); e.textContent = `[${t}]`; e.className = "btn"; e.dataset.pact = a; return e; };
+    const line = (t, cls) => { const d = document.createElement("div"); d.textContent = t || " "; if (cls) d.className = cls; pre.appendChild(d); return d; };
+    const row = (...parts) => { const d = document.createElement("div"); d.append(...parts); pre.appendChild(d); return d; };
+    let input = null;
+    function paint(a) {
+      const top = box.scrollTop;
+      pre.innerHTML = "";
+      const head = document.createElement("div"); head.className = "top"; pre.appendChild(head);
+      const t = document.createElement("div"); const x = btn("", "close"); x.textContent = "[ESC] CLOSE"; t.append(" USER" + " ".repeat(29), x); head.appendChild(t);
+      const rule = document.createElement("div"); rule.textContent = " " + "-".repeat(44); head.appendChild(rule);
+      const m = document.createElement("div"); m.className = "msg gold"; m.textContent = msg ? " " + msg : ""; m.hidden = !msg; head.appendChild(m);
+      if (!ACCOUNT_HOST) { line(" Accounts work at dungeon.88x31.app."); line(" Open the game there to use them."); return; }
+      if (!a) { line(" Loading...", "dim"); return; }
+      if (a.error) { line(" " + a.error); return; }
+      if (newCode) {
+        line(" YOUR NEW SAVE CODE (shown once)", "gold");
+        line("   " + newCode, "gold code");
+        line(" Write it down. It can't be shown again.");
+        row("   ", btn(copied ? "COPIED" : "COPY", "copycode"), "  ", btn("DOWNLOAD AS A TEXT FILE", "dlcode"));
+        row("   ", btn("DONE", "done"));
+        line();
+      }
+      line(` SAVE CODES (${a.codes.length})`);
+      for (const c of a.codes) row(`   made ${monthDay(c.created_at)}${c.last_used_at ? ", used " + monthDay(c.last_used_at) : ""}  `, btn("FORGET", "fcode-" + c.id));
+      if (!a.codes.length) line("   None yet.", "dim");
+      row("   ", btn("MAKE A SAVE CODE", "code"));
+      line();
+      line(` PASSKEYS (${a.passkeys.length})`);
+      for (const k of a.passkeys) row(`   ${(k.label || "passkey").slice(0, 14)}, ${monthDay(k.created_at)}  `, btn("FORGET", "fpk-" + k.id));
+      if (!a.passkeys.length) line("   None yet.", "dim");
+      if (window.PublicKeyCredential) row("   ", btn("ADD A PASSKEY", "pk"));
+      else line("   This browser can't do passkeys.", "dim");
+      line();
+      line(" LOG IN ON THIS DEVICE");
+      input = document.createElement("input"); input.className = "codebox"; input.placeholder = "save code"; input.autocomplete = "off"; input.spellcheck = false; input.maxLength = 40;
+      input.onkeydown = e => { if (e.key === "Enter") passAct("enter"); e.stopPropagation(); if (e.key === "Escape") close(); };
+      row("   ", input);
+      row("   ", btn("USE CODE", "enter"));
+      if (window.PublicKeyCredential) row("   ", btn("LOG IN WITH A PASSKEY", "pklogin"));
+      line();
+      if (a.codes.length || a.passkeys.length) { row(" ", btn("LOG OUT OF THIS BROWSER", "out")); line(); }
+      line(a.player ? ` Saved on ${a.devices} device${a.devices === 1 ? "" : "s"}.` : " Not signed in. Playing without an account is fine.", "dim");
+      box.scrollTop = top;
     }
-    let newCode = "";
-    const codeBox = document.createElement("div"); pre.insertBefore(codeBox, msg);
-    const draw2 = async () => {
-      const a = await api("/account");
-      codeBox.textContent = "";
-      const line = t => { const d = document.createElement("div"); d.textContent = t; codeBox.appendChild(d); };
-      if (a.error) { line(a.error); } else if (!a.player) { line("Not signed in. Playing without an account is fine."); }
-      else { line("Signed in. " + (a.codes ? a.codes.length : 0) + " save code(s), " + (a.passkeys ? a.passkeys.length : 0) + " passkey(s)."); }
-      row.textContent = "";
-      const line2 = (...b) => { const d = document.createElement("div"); d.className = "brow2"; d.append(...b); row.appendChild(d); };
-      line2(btn("[ NEW SAVE CODE ]", "code"), btn("[ ENTER CODE ]", "enter"));
-      if (newCode) line2(btn("[ COPY CODE ]", "copycode"), btn("[ DOWNLOAD .TXT ]", "dlcode"));
-      if (window.PublicKeyCredential) line2(btn("[ ADD PASSKEY ]", "pk"), btn("[ PASSKEY LOGIN ]", "pklogin"));
-      line2(...(a.player ? [btn("[ SIGN OUT ]", "out")] : []), btn("[ BACK ]", "back"));
-    };
-    pre.appendChild(row);
-    const say = t => { msg.textContent = t; };
+    // The panel opens at once with what it showed last (or "Loading..."), and fills in when the server answers.
+    const draw2 = async () => { paint(last); if (!ACCOUNT_HOST) return; const a = await api("/account"); if (box.hidden || box.dataset.mode !== "pass") return; last = a; paint(a); };
+    const say = t => { msg = t; const m = pre.querySelector(".msg"); if (m) { m.textContent = t ? " " + t : ""; m.hidden = !t; } };
     passAct = async a => {
       if (a === "back" || a === "close") return close();
-      if (a === "code") { const r = await api("/codes", { action: "new" }); if (r.error) say(r.error); else { newCode = r.code; say("Your save code (it shows once, so keep it): " + r.code); } return draw2(); }
+      if (!ACCOUNT_HOST) return;
+      if (a === "code") { const r = await api("/codes", { action: "new" }); if (r.error) return say(r.error); newCode = r.code; copied = false; msg = ""; return draw2(); }
+      if (a === "done") { newCode = ""; copied = false; msg = ""; return paint(last); }
       if (a === "copycode") {
-        const ok = () => say("Save code copied."), no = () => say("Select the code above and copy it.");
+        const ok = () => { copied = true; msg = "Copied. Keep it somewhere safe."; paint(last); }, no = () => say("Couldn't copy. Select the code and copy it by hand.");
         try { navigator.clipboard.writeText(newCode).then(ok, no); } catch (e) { no(); }
         return;
       }
@@ -1279,20 +1308,29 @@
         const l = document.createElement("a"); l.href = url; l.download = "4dungeon-save-code.txt"; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
         return say("Save code downloaded.");
       }
-      if (a === "enter") { const c = prompt("Save code"); if (!c) return; const r = await api("/load", { code: c.trim() }); say(r.error || "Signed in."); await draw2(); if (!r.error) reloadRun(); return; }
-      if (a === "out") { const r = await api("/logout", {}); say(r.error || "Signed out."); return draw2(); }
+      if (a.startsWith("fcode-") || a.startsWith("fpk-")) {
+        const r = await api(a.startsWith("fcode-") ? "/codes" : "/passkey", { action: "remove", id: Number(a.split("-")[1]) });
+        if (r.error) return say(r.error); msg = "Forgotten."; return draw2();
+      }
+      if (a === "enter") {
+        const c = input ? input.value.trim() : ""; if (!c) return say("Type your save code first.");
+        const r = await api("/load", { code: c }); if (r.error) return say(r.error); msg = "Signed in."; await draw2(); reloadRun(); return;
+      }
+      if (a === "out") { const r = await api("/logout", {}); if (r.error) return say(r.error); msg = "Signed out."; return draw2(); }
       try {
         if (a === "pk") {
+          say("Waiting for your fingerprint, face or PIN...");
           const o = await api("/passkey", { action: "register_options" }); if (o.error) return say(o.error);
           const cred = await navigator.credentials.create({ publicKey: { ...o, challenge: unb64(o.challenge), user: { ...o.user, id: unb64(o.user.id) }, excludeCredentials: o.excludeCredentials.map(c => ({ ...c, id: unb64(c.id) })) } });
           const r = await api("/passkey", { action: "register", label: "4Dungeon", credential: { id: cred.id, response: { clientDataJSON: b64(cred.response.clientDataJSON), attestationObject: b64(cred.response.attestationObject) } } });
-          say(r.error || "Passkey added."); return draw2();
+          if (r.error) return say(r.error); msg = "Passkey added."; return draw2();
         }
         if (a === "pklogin") {
+          say("Waiting for your passkey...");
           const o = await api("/passkey", { action: "login_options" }); if (o.error) return say(o.error);
           const cred = await navigator.credentials.get({ publicKey: { ...o, challenge: unb64(o.challenge) } });
           const r = await api("/passkey", { action: "login", credential: { id: cred.id, response: { clientDataJSON: b64(cred.response.clientDataJSON), authenticatorData: b64(cred.response.authenticatorData), signature: b64(cred.response.signature) } } });
-          say(r.error || "Signed in."); await draw2(); if (!r.error) reloadRun(); return;
+          if (r.error) return say(r.error); msg = "Signed in."; await draw2(); reloadRun(); return;
         }
       } catch (e) { say("That didn't work or was cancelled."); }
     };
@@ -1331,7 +1369,7 @@
   }
   window.addEventListener("resize", () => {
     const b = document.getElementById("inv"); if (!b.hidden) placeInView(b);
-    const f = document.getElementById("found"); if (!f.hidden && f.classList.contains("inframe")) placeInView(f, 15);
+    const f = document.getElementById("found"); if (!f.hidden && f.classList.contains("inframe")) placeInView(f, f.dataset.mode === "pass" ? 17 : 15);
   });
   // INVENTORY inside the bag: what the shared item list says you hold in 4Dungeon (finds registered while signed in, and 88x31 buttons visiting).
   // A button can go home to your 88x31; a dungeon item can visit it.
@@ -1522,8 +1560,9 @@
     const line = "-".repeat(71);
     // A titled box the width of the divider, in the page's own frame characters.
     const framed = (title, ...rows) => ["+- " + title + " " + "-".repeat(71 - 5 - title.length) + "+", ...rows.map(r => "|" + r.padEnd(69) + "|"), "+" + "-".repeat(69) + "+"].join("\n");
-    // The header button as shown: [C]ODEX with a run, nothing without.
-    const head = save ? "{{CODEX}}" : "", headLen = save ? 7 : 0;
+    // The header buttons as shown: [C]ODEX with a run, [U]SER when signed in (where [P]ASSWORD was).
+    const heads = [...(save ? [["{{CODEX}}", 7]] : []), ...(signedIn() ? [["{{USER}}", 6]] : [])];
+    const head = heads.map(h => h[0]).join("   "), headLen = heads.reduce((n, h) => n + h[1], 0) + 3 * Math.max(0, heads.length - 1);
     const text = [
       "DAILY DIGITAL DEMON DUNGEON   " + head + ("build " + SMT.VERSION).padStart(71 - 30 - headLen), line,
       "A dungeon crawler you play on the real lunar calendar.",
@@ -1565,11 +1604,12 @@
       "",
       "Made by okayline.   [?] or {{CLOSE}}",
     ].join("\n");
-    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{BOARD}}", '<span class="btn" data-board>[B]OARD</span>').replace("{{CLOSE}}", '<span class="btn" data-close>[ESC] CLOSE</span>');
+    box.querySelector("pre").innerHTML = esc(text).replace("{{CODEX}}", '<span class="btn" data-codex>[C]ODEX</span>').replace("{{USER}}", '<span class="btn" data-user>[U]SER</span>').replace("{{BOARD}}", '<span class="btn" data-board>[B]OARD</span>').replace("{{CLOSE}}", '<span class="btn" data-close>[ESC] CLOSE</span>');
   }
   document.getElementById("about").addEventListener("click", e => {
     // Its own buttons do their own thing; any other click on the page closes it, same as [ESC] CLOSE.
     if (e.target.closest("[data-codex]")) { showAbout(false); codexSel = -1; showCodex(true); }   // the link in the help page
+    else if (e.target.closest("[data-user]")) { showAbout(false); backup(); }
     else if (e.target.closest("[data-board]")) { showAbout(false); toggleBoard(true); }
     else showAbout(false);
   });
@@ -2584,6 +2624,7 @@
       if (key === "?" || key === "escape") showAbout(false);
       else if (key === "c") { showAbout(false); codexSel = -1; showCodex(true); }
       else if (key === "b" && LEADERBOARD_URL) { showAbout(false); toggleBoard(true); }
+      else if (key === "u") { showAbout(false); backup(); }
       return;
     }
     if (!document.getElementById("codex").hidden) {

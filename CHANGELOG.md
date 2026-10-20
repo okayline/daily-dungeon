@@ -4,8 +4,8 @@ Changes to the game itself, newest first, with the time each went live (Honolulu
 
 ## v1.36 - User Page - Oct 20 2026, 08:30 HST
 
-- **A USER page on the title screen.** The title's menu bar now has [U]SER, which opens your account: save codes and passkeys, the same as before. During a run, press U.
-- Removed: the [P]ASSWORD button from the [?] page, and the P key for it (U opens it now).
+- **A USER page on the title screen.** The title's menu bar now has [U]SER. It opens inside the 3D view and lists your save codes and passkeys (each one can be forgotten), makes a new save code, adds a passkey, and has a box to type a save code in to log in on this device. During a run, press U. When you're signed in, the [?] page has a [U]SER button at the top.
+- Removed: the [P]ASSWORD button from the [?] page and the P key for it (U opens the page now), the pop-up that asked for a save code, and the old account box in the middle of the screen.
 
 ## v1.35.1 - Oct 20 2026, 08:15 HST
 
