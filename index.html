@@ -107,7 +107,7 @@
   .foundbox pre { white-space: pre; text-align: center; }
   .foundbox .gold { color: var(--gold); }
   /* (v1.36) The USER page sits in the 3D view like the bag, and scrolls; its title and message stay at the top. */
-  .foundbox[data-mode="pass"] { overflow: auto; }
+  .foundbox.inframe[data-mode="pass"] { overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }   /* (v1.36.1) .inframe below sets overflow: hidden; this must outrank it */
   .foundbox[data-mode="pass"] pre { white-space: pre-wrap; overflow-wrap: anywhere; }
   .foundbox[data-mode="pass"] .top { position: sticky; top: 0; background: var(--bg); }
   .foundbox[data-mode="pass"] .code { -webkit-user-select: text; user-select: text; }
