@@ -249,7 +249,9 @@ async function history(env, url) {
   const events = [];
   for (const e of s.entries) {
     let r; try { r = JSON.parse(e.record); } catch { continue; }
-    if (r.k === "mark") events.push({ at: e.at, k: "mark", kind: r.kind, value: r.value });
+    if (r.k === "mark" && Array.isArray(r.marks)) {   // (v1.39) one entry for several marks: this copy's own, newest first
+      for (const m of [...r.marks].reverse()) if (m && Array.isArray(m.copies) && m.copies.some((c) => c && c.item === s.item.id && c.copy === s.copy)) events.push({ at: e.at, k: "mark", kind: m.kind, value: m.value });
+    } else if (r.k === "mark") events.push({ at: e.at, k: "mark", kind: r.kind, value: r.value });
     else if (r.k === "move") events.push({ at: e.at, k: "move", from: r.from, to: r.to });
     else if (r.k === "spend") events.push({ at: e.at, k: "spend" });
   }

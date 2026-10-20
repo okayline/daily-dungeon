@@ -157,13 +157,16 @@ test("history gives one copy's story from the registry, newest first, with times
   const calls = [];
   const REGISTRY = { async copyStory(item, copy) {
     calls.push([item, copy]);
-    return item === 3 && copy === 2 ? { copy: 2, of: 5, born_game: "4dungeon", born_at: 1000, moves: 1, used_up: false, entries: [
+    return item === 3 && copy === 2 ? { item: { id: 3 }, copy: 2, of: 5, born_game: "4dungeon", born_at: 1000, moves: 1, used_up: false, entries: [
+      { at: 4000, record: JSON.stringify({ k: "mark", marks: [{ kind: "night", value: "full", copies: [{ item: 3, copy: 2, n: 3 }, { item: 4, copy: 1, n: 1 }] },   // (v1.39) a move's marks
+        { kind: "deed", value: "beat_demon", copies: [{ item: 4, copy: 1, n: 2 }] }, { kind: "deed", value: "on_b3f", copies: [{ item: 3, copy: 2, n: 4 }] }], game: "4dungeon" }) },
       { at: 3000, record: JSON.stringify({ k: "mark", item: 3, copy: 2, n: 2, kind: "moon", value: "answered", game: "4dungeon" }), hash: "h" },
       { at: 2000, record: JSON.stringify({ k: "move", item: 3, copy: 2, from: "4dungeon", to: "88x31" }) },
       { at: 1000, record: JSON.stringify({ k: "copy", item: 3, copy: 2, game: "4dungeon" }) }] } : null; } };
   const env = makeEnv({ REGISTRY }), anon = browser(env, { ip: "203.0.113.60" });
   const r = await anon("/history?item=3&copy=2");
   assert.deepEqual(r.data, { copy: 2, of: 5, born_game: "4dungeon", born_at: 1000, moves: 1, used_up: false, events: [
+    { at: 4000, k: "mark", kind: "deed", value: "on_b3f" }, { at: 4000, k: "mark", kind: "night", value: "full" },   // only this copy's, newest first
     { at: 3000, k: "mark", kind: "moon", value: "answered" }, { at: 2000, k: "move", from: "4dungeon", to: "88x31" }] });
   assert.equal((await anon("/history?item=3&copy=9")).status, 404);
 });

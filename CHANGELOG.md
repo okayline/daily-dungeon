@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.39 - Fewer Ledger Lines - Oct 20 2026, 09:47 HST
+
+- **A find's marks are one ledger line.** The moon a thing was found under, where it came from and the level it was picked up on are now one line on the shared ledger, right after the line where it came into the world (like "a neon tube fragment #3 and a scratched data disc #2 were found under a waxing gibbous moon, came from a demon and were picked up on B3F"). Things already in the bag that lived through the same fight get one line of their own.
+- **"Escaped a fight"** is the new wording for "Ran from a fight" in INVOKE and on the ledger.
+- Removed: a separate ledger line for each kind of mark, and "in 4Dungeon" at the end of 4Dungeon's ledger lines. Lines already on the ledger stay as they were sealed.
+
 ## v1.38 - One Line Per Moment - Oct 20 2026, 09:29 HST
 
 - **One ledger line per moment.** When a fight ends, a door opens or KURA climbs a level, the shared ledger gets one line naming every thing in the bag that hadn't been through that before (like "TORCH #3, BONE CHARM #12 and LANTERN #1 ran from a fight"). Each thing still keeps it in its own history.
