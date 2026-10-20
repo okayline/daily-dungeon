@@ -18,10 +18,11 @@
 //   POST /spent {items: [{itemId, copy}]}  (v1.15) copies that left a run's bag for good (broken, given, traded): used up in the registry
 //   GET  /inventory                     (v1.14) the copies you hold in 4Dungeon: your finds, and 88x31 buttons visiting
 //   POST /send {itemId, copy}           (v1.14) send one to your 88x31 (a button goes home; a dungeon item visits)
+//   GET  /history?item=&copy=           (v1.29) one copy's public story from the registry (the same thing its /ledger page shows)
 import SHARED from "../items.js";
 const GAME = "4dungeon", MAX_FOUND_A_DAY = 300;
 const OUR_ITEMS = new Set(SHARED.filter((i) => !i.retired).map((i) => i.id));   // only 4Dungeon's own items are registered from here
-const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/found", "/spent", "/inventory", "/send"]);
+const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/found", "/spent", "/inventory", "/send", "/history"]);
 
 export class Oops extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 const now = () => Math.floor(Date.now() / 1000);
@@ -166,7 +167,7 @@ export async function accountsRoute(req, env, url) {
     if (!originsOf(env).includes(from)) throw new Oops("Accounts work at dungeon.88x31.app. Open the game there to use them.", 403);
     if (req.method === "POST" && !/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const p = url.pathname, m = req.method;
-    if (p !== "/found" && p !== "/spent" && p !== "/inventory") ACC(env);   // no accounts service, no players made
+    if (p !== "/found" && p !== "/spent" && p !== "/inventory" && p !== "/history") ACC(env);   // no accounts service, no players made
     let out;
     if (p === "/account" && m === "GET") out = await account(env, req);
     else if (p === "/codes" && m === "POST") out = await codes(env, req, ctx);
@@ -177,6 +178,7 @@ export async function accountsRoute(req, env, url) {
     else if (p === "/spent" && m === "POST") out = await spent(env, req);
     else if (p === "/inventory" && m === "GET") out = await inventory(env, req);
     else if (p === "/send" && m === "POST") out = await send(env, req);
+    else if (p === "/history" && m === "GET") out = await history(env, url);
     else return reply({ error: "No such thing." }, 404);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {
@@ -236,6 +238,22 @@ async function inventory(env, req) {
   const held = await env.REGISTRY.heldBy(GAME, me.id);
   return { items: (held || []).map((c) => ({ itemId: c.itemId, copy: c.copy, name: c.item.name, note: c.item.note, rarity: c.item.rarity,
     from: c.item.source, image: c.item.source === "88x31" ? c.item.image : null, align: c.item.alignment || null, nature: c.item.nature || null })) };
+}
+// (v1.29) HISTORY: one copy's story, newest first: when and where it was made, how many copies of the item exist, how
+// many times it changed hands, and each thing that happened to it with the time. Public already (the registry's
+// /ledger page shows the same), so no sign-in; the registry only ever returns ids, copy numbers and game names.
+async function history(env, url) {
+  if (!env.REGISTRY) throw new Oops("The item registry is unavailable right now.", 503);
+  const s = await env.REGISTRY.copyStory(Number(url.searchParams.get("item")), Number(url.searchParams.get("copy")));
+  if (!s) throw new Oops("No such copy.", 404);
+  const events = [];
+  for (const e of s.entries) {
+    let r; try { r = JSON.parse(e.record); } catch { continue; }
+    if (r.k === "mark") events.push({ at: e.at, k: "mark", kind: r.kind, value: r.value });
+    else if (r.k === "move") events.push({ at: e.at, k: "move", from: r.from, to: r.to });
+    else if (r.k === "spend") events.push({ at: e.at, k: "spend" });
+  }
+  return { copy: s.copy, of: s.of, born_game: s.born_game, born_at: s.born_at, moves: s.moves, used_up: s.used_up, events };
 }
 async function send(env, req) {
   const me = await mustPlayer(env, req);

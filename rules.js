@@ -1877,7 +1877,8 @@
       // (v1.25) marks: one list per copy of this thing, oldest copy first, from the registry (st.copies, kept by the server)
       const marks = ((st.copies || {})[name] || []).map(e => e.m || []);
       const pips = ((st.copies || {})[name] || [{}]).map(e => wishPip(st, name, copyMarks(e)));
-      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON", align: itemAlign(name), hollow: st.hollow && name in st.hollow ? st.hollow[name] : undefined, marks, pips };
+      const nums = ((st.copies || {})[name] || []).map(e => (Number.isInteger(e.c) ? e.c : null));   // (v1.29) each copy's registry number; null until it has one
+      return { name, count: counts[name], text: info.text, usable: !!info.use, tier: TIER[name] || "COMMON", align: itemAlign(name), nature: ITEM_NATURE[name] || "plain", nums, hollow: st.hollow && name in st.hollow ? st.hollow[name] : undefined, marks, pips };
     });
   }
   // (v1.25) A copy's marks for INVOKE, in the world's dry voice: at most two lines of 41 columns (how it came and under
@@ -1902,6 +1903,15 @@
     const second = [copy ? COPY_WORDS[copy] : "", climb].filter(Boolean).join(" ");
     if (second) out.push(second.length <= 41 ? second : climb || second);
     return out;
+  }
+  // (v1.29) One mark as a short line for the HISTORY screen, 24 columns at most (it sits beside a date and time).
+  const MOON_WORDS = { answered: "Answered the Moon", blessed: "Blessed by the Moon" };
+  function markLabel(kind, value) {
+    const v = String(value || ""), sky = OCC_WORDS[v] || PHASE_WORDS[v];
+    let t = kind === "night" ? (sky ? "Under " + sky : "") : kind === "moon" ? MOON_WORDS[v] || "" : v === "carried_up" ? "Carried up" : DEED_WORDS[v] || (COPY_WORDS[v] || "").replace(/\.$/, "");
+    if (!t) t = v.replace(/_/g, " ");
+    if (t.length > 24) t = t.replace(/^Under (a|an|the) /, "Under ");
+    return t.slice(0, 24);
   }
   // (v1.26) THE MOON'S WISH. Each level belongs to a quarter of the moon (d.quarter), and for that quarter she wants three
   // things, said plainly: a night (a phase still ahead in that quarter, so it can always be made), a deed (how a thing
@@ -3868,7 +3878,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, keepItem, BAG_MAX, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, altarOpen, altarNext, altarGive, altarGifts, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, markLabel, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

@@ -153,6 +153,21 @@ test("inventory lists what you hold in 4Dungeon; send moves it to your own 88x31
   assert.deepEqual(moves, [{ itemId: 60, copy: 1, from: { game: "4dungeon", playerId: 1 }, to: { game: "88x31", playerId: 77 } }]);
 });
 
+test("history gives one copy's story from the registry, newest first, with times and no records or ids", async () => {
+  const calls = [];
+  const REGISTRY = { async copyStory(item, copy) {
+    calls.push([item, copy]);
+    return item === 3 && copy === 2 ? { copy: 2, of: 5, born_game: "4dungeon", born_at: 1000, moves: 1, used_up: false, entries: [
+      { at: 3000, record: JSON.stringify({ k: "mark", item: 3, copy: 2, n: 2, kind: "moon", value: "answered", game: "4dungeon" }), hash: "h" },
+      { at: 2000, record: JSON.stringify({ k: "move", item: 3, copy: 2, from: "4dungeon", to: "88x31" }) },
+      { at: 1000, record: JSON.stringify({ k: "copy", item: 3, copy: 2, game: "4dungeon" }) }] } : null; } };
+  const env = makeEnv({ REGISTRY }), anon = browser(env, { ip: "203.0.113.60" });
+  const r = await anon("/history?item=3&copy=2");
+  assert.deepEqual(r.data, { copy: 2, of: 5, born_game: "4dungeon", born_at: 1000, moves: 1, used_up: false, events: [
+    { at: 3000, k: "mark", kind: "moon", value: "answered" }, { at: 2000, k: "move", from: "4dungeon", to: "88x31" }] });
+  assert.equal((await anon("/history?item=3&copy=9")).status, 404);
+});
+
 test("spent uses up only your own copies, and needs a sign-in", async () => {
   const calls = [];
   const REGISTRY = { async spendCopy(a) { calls.push(a); return a.copy === 9 ? { error: "No such copy." } : { ok: true }; } };

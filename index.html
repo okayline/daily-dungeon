@@ -1298,9 +1298,11 @@
 
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
-  const HOLD_OMEN_ON = false;
+  const INV_PER = 6, HIST_ROWS = 16;   // (v1.29) things to a page of INVOKE; rows in the box, for HISTORY
+  const ITEMS_URL = "https://dungeon-items.ddddungeon.workers.dev";   // the shared registry's pages (/ledger)
   let invReg = null;   // the bag's INVENTORY view (what the shared item list says you hold), or null
-  let invList = [], invSel = 0, topSel = 0,  logGlow = false, ichorPick = -1, holdBtn = null;   // ichorPick: who the picker is on (-1: closed); holdBtn: Hold/Release Omen's own button, not a numbered slot
+  let invHist = null;  // (v1.29) HISTORY: the chosen thing's story { it, num, story, err, loading }, or null
+  let invList = [], invSel = 0, topSel = 0, invPage = 0, logGlow = false, ichorPick = -1;   // ichorPick: who the picker is on (-1: closed)
   // A box drawn in text, 72 wide: a title row (name left, tag right), then wrapped lines.
   function textBox(title, tag, lines, W = 70) {
     const out = ["+" + "-".repeat(W + 2) + "+"];
@@ -1332,11 +1334,11 @@
   // A button can go home to your 88x31; a dungeon item can visit it.
   function drawReg(pre, add) {
     const R = invReg, per = 7;
-    add("MAIL".padEnd(35) + "[ESC] back", ""); add(" ");
+    add("MAIL", ""); add(" ");
     const btn2 = (t, a) => { const sp = document.createElement("span"); sp.className = "btn"; sp.textContent = t; sp.dataset.regact = a; return sp; };
     if (!signedIn()) {
       for (const w of wrapText(ACCOUNT_HOST ? "Sign in from the ACCOUNT page, and what you find is kept here too." : "Items are kept in the shared list when you are signed in at dungeon.88x31.app.", 41)) add(w, "dim");
-      add(" "); const f = add(""); f.append(btn2("[ BACK ]", "back")); return;
+      add(" "); const f = add(""); f.append(btn2("[C]LOSE", "back")); return;
     }
     if (R.items === null) {
       add("Looking...", "dim");
@@ -1352,7 +1354,7 @@
     }
     add(" ");
     if (R.msg) add(R.msg, "gold");
-    const f = add(""); if (pages > 1) f.append(btn2("[ < ]", "prev"), " ", btn2("[ > ]", "next"), "  "); f.append(btn2("[ BACK ]", "back"));
+    const f = add(""); if (pages > 1) f.append(btn2("[<]", "prev"), ` ${R.page + 1}/${pages} `, btn2("[>]", "next"), "  "); f.append(btn2("[C]LOSE", "back"));
   }
   async function regAct(a) {
     const R = invReg; if (!R) return;
@@ -1373,27 +1375,14 @@
   function showInv(open) {
     const box = document.getElementById("inv");
     box.hidden = !open;
-    if (!open) { invReg = null; return; }
+    if (!open) { invReg = null; invHist = null; invPage = 0; return; }
     placeInView(box);
     visitorTick(true);                                // a visiting button may be waiting: check when the bag opens
-    invList = save ? RULES.inventory(save).flatMap(it => Array.from({ length: it.count }, (_, k) => ({ ...it, count: 1, history: RULES.markLines((it.marks || [])[k]), pip: !!(it.pips || [])[k] }))) : [];   // one line per thing (v1.05.1); (v1.25) each with its own copy's history
+    invList = save ? RULES.inventory(save).flatMap(it => Array.from({ length: it.count }, (_, k) => ({ ...it, count: 1, own: (it.marks || [])[k] || [], copy: (it.nums || [])[k], pip: !!(it.pips || [])[k] }))) : [];   // one line per thing (v1.05.1); (v1.25) each with its own copy's marks and registry number
     // ICHOR sits at the top of the bag: Enter feeds the party's demons; K, KURA drinks it herself.
     // (v1.06.1: ICHOR is always shown, even at 0.)
     if (save) invList.unshift({ name: "ICHOR", ichor: true, count: 1, tier: "ICHOR",
       text: "A flask of demon blood and old light. Heals the party. Not meant for KURA." });
-    // Hold Omen / Release Omen: its own button on the INVOKE header now, not a slot in the numbered
-    // list -- it's a standing action always in the same place, not something to dig for among found
-    // items. One morphing control: normally Hold Omen; once a day's held, it becomes Release Omen (was
-    // THE HELD DAY); releasing it starts a flat 7-real-day cooldown, during which it shows Hold Omen
-    // again but greyed out and inert, with the days left to go.
-    holdBtn = null;
-    if (save && HOLD_OMEN_ON) {                     // v1.04: Hold Omen is taken out of the bag for now (the rules still know it)
-      const av = RULES.available(save);
-      if (save.bankedOmen !== undefined && !save.useBanked) holdBtn = { label: "Release Omen", action: "release" };
-      else if (av.hold) holdBtn = { label: "Hold Omen", action: "hold" };
-      else if (av.omenCoolingDown) holdBtn = { label: `Hold Omen (${av.omenCooldownDays}d)`, action: "hold", cooling: true };
-      else if (!save.dead) holdBtn = { label: "Hold Omen", action: "hold", cooling: true };   // today's charge is spent (or a demon is here): still shown, greyed, so the button never vanishes
-    }
     invSel = Math.max(0, Math.min(invSel, invList.length - 1));
     const pre = box.querySelector("pre");
     pre.innerHTML = "";
@@ -1410,51 +1399,108 @@
     }
     if (ichorPick >= 0) ichorPick = -1;
     if (invReg) return drawReg(pre, add);
+    if (invHist) return drawHist(pre, add);
     // KURA's aura sits beside the title: her two-word name and how loud she is (v1.04).
     const au = save ? RULES.aura(save) : null;
     const head = `INVOKE   BAG ${(save && save.items || []).length}/${RULES.BAG_MAX}`;
     add(au ? head.padEnd(41 - (au.name.length + au.loud.length + 2)) + `${au.name}  ${au.loud}` : head, "");
     const ich = invList.length && invList[0].ichor ? 1 : 0;      // ICHOR is a count, not a thing: it sits above the bag as 0
     const empty = !(save && (save.items || []).length);
+    const count = invList.length - ich, pages = Math.max(1, Math.ceil(count / INV_PER));
+    if (invSel >= ich) invPage = Math.floor((invSel - ich) / INV_PER);   // the page follows the chosen thing; on ICHOR or SILVER it stays where it was
+    invPage = Math.max(0, Math.min(invPage, pages - 1));
+    const btn = (t, k, cls) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = cls || "btn"; sp.dataset[k] = "1"; return sp; };
     add(" ");                                                    // (v1.06.1) a little air under the title
-    // (v1.25) ICHOR and SILVER live on the foot line (not a row of the list), so the chosen thing has room for its history.
-    invList.forEach((it, i) => {
-      if (it.ichor) return;                                    // ICHOR and SILVER: drawn on the foot line below
+    // (v1.29) ICHOR and SILVER on the line above the first thing (0 is ICHOR; arrows and Enter still work; a number uses a thing straight away).
+    if (ich) {
+      const mk = (t, top) => { const sp = document.createElement("span"); sp.className = "btn"; sp.dataset.top = top; sp.dataset.i = 0; sp.textContent = t; return sp; };
+      add("").append(mk(`${invSel === 0 && topSel === 0 ? ">" : " "}ICHOR ${save.ichor}/${RULES.FLASK_MAX}`, 0), " ", mk(`${invSel === 0 && topSel === 1 ? ">" : " "}SILVER ${save.silver || 0}`, 1));
+      add(" ");
+    }
+    // (v1.29) The bag, INV_PER things to a page, numbered 1-9 across pages (a number still uses that thing, whichever page it is on).
+    const first = ich + invPage * INV_PER;
+    invList.slice(first, first + INV_PER).forEach((it, k) => {
+      const i = first + k;
       add((`${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{40}).{4,}$/, "$1...")).padEnd(43) + (it.pip ? "+" : ""), "btn", i); });   // (v1.26) + : something the moon wants
     if (empty) add("  1  The bag is empty", "dim");               // (v1.06.1) no row of empty slots when there's nothing in it
-    else for (let k = invList.length - ich; k < RULES.BAG_MAX; k++) add(`  ${k + 1}  .`, "dim");
-    // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX.
-    // The chosen thing (v1.05.1, compact so a full bag fits): a rule with its name and tag, then what it is.
+    else for (let k = Math.max(count, invPage * INV_PER); k < Math.min(RULES.BAG_MAX, (invPage + 1) * INV_PER); k++) add(`  ${k + 1}  .`, "dim");
+    add(" ");
+    // The chosen item: what it is and what it does. How demons feel about it lives in the CODEX; where this copy has been is on HISTORY.
     const it0 = invList[invSel];
     const it = it0 && it0.ichor && topSel === 1 ? { ...it0, silver: true, text: `Cold, pure metal. Cools the room and clears what clouds KURA. Costs ${RULES.silverCost(save)}.` } : it0;
     if (it) {
       const tag = it.silver ? `${save.silver || 0} in hand` : it.ichor ? `${save.ichor} in hand` : RULES.itemAlignName(it.name);
       const nm = it.silver ? "SILVER" : it.ichor ? "ICHOR" : it.name, room = 41 - 4 - tag.length - 2;
       const shown = nm.length > room ? nm.slice(0, room - 2) + ".." : nm;
-      const descRows = (it.ichor ? [it.text] : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : []), ...(it.history || [])]).reduce((n, l) => n + wrapText(l, 41).length, 0);
-      if (descRows < 2) add(" ");                                // (v1.06.1) a blank line above the chosen thing's rule, given up for a two-line description
       add(`-- ${shown} ${"-".repeat(Math.max(1, 41 - 4 - shown.length - tag.length - 1))} ${tag}`, "dim");
       const lines = it.ichor ? [it.text]
         : [it.text, ...(it.hollow === true ? ["Something rattles inside."] : it.hollow === false ? ["Solid, all the way through."] : [])];
       for (const l of lines) for (const w of wrapText(l, 41)) add(w, "");
-      for (const l of it.history || []) for (const w of wrapText(l, 41)) add(w, "dim");   // (v1.25) where this copy has been
     }
-    // What happened on the last try to use something (cleared when another item is chosen).
-    const btn = (t, k, cls) => { const sp = document.createElement("span"); sp.textContent = t; sp.className = cls || "btn"; sp.dataset[k] = "1"; return sp; };
-    // The hold/release button gets its own line above the rest -- the box is a fixed 47 columns (it
-    // overlays the 3D view), and "[1-9] choose  [ENTER] use  [H] Release Omen  [C]LOSE" alone runs
-    // past that width (49-54 chars depending on label/cooldown), which would silently clip or scroll.
-    // Both lines live in the one foot block, which stays pinned to the bottom of the box however long the list gets.
+    // The foot, pinned to the bottom of the box: page controls, then [H]ISTORY, [M]AIL and [C]LOSE.
     if (empty) add(" ");
     const help = add("", "");
     if (empty) help.style.marginTop = "0";                       // (v1.06.1) with nothing in the bag, the foot comes up under the list
-    if (holdBtn) { const hl = document.createElement("div"); hl.append(btn("[H] " + holdBtn.label, "hold", "btn" + (holdBtn.cooling ? " off" : ""))); help.append(hl); }
-    // (v1.25) The foot: ICHOR and SILVER (0 is ICHOR; arrows and Enter still work; a number uses a thing straight away), then [M]AIL and [C]LOSE.
-    if (ich) {
-      const mk = (t, top) => { const sp = document.createElement("span"); sp.className = "btn"; sp.dataset.top = top; sp.dataset.i = 0; sp.textContent = t; return sp; };
-      help.append(mk(`${invSel === 0 && topSel === 0 ? ">" : " "}ICHOR ${save.ichor}/${RULES.FLASK_MAX}`, 0), " ", mk(`${invSel === 0 && topSel === 1 ? ">" : " "}SILVER ${save.silver || 0}`, 1), "  ");
+    if (pages > 1) {
+      const pg = (t, v) => { const sp = btn(t, "page"); sp.dataset.page = v; return sp; };
+      help.append(pg("[<]", "prev"), ` ${invPage + 1}/${pages} `, pg("[>]", "next"), "  ");
     }
-    help.append(btn("[M]AIL", "reg"), " ", btn("[C]LOSE", "close"));
+    help.append(btn("[H]ISTORY", "hist", "btn" + (it0 && !it0.ichor ? "" : " off")), " ", btn("[M]AIL", "reg"), " ", btn("[C]LOSE", "close"));
+  }
+  // Move to the next or previous page of the bag: the chosen thing becomes the first one on it.
+  function pageInv(d) {
+    const ich = invList.length && invList[0].ichor ? 1 : 0, pages = Math.ceil((invList.length - ich) / INV_PER), p = Math.max(0, Math.min(pages - 1, invPage + d));
+    if (pages < 2 || p === invPage) return;
+    invSel = ich + p * INV_PER; showInv(true);
+  }
+  // (v1.29) HISTORY: the chosen thing's story, newest first, on its own screen: its tier and kind, when it was made, how
+  // often it changed hands, and each mark with the real date and time (kept by the shared registry, asked for when the
+  // screen opens). A thing with no registry number has no history to look up. [L]EDGER opens the copy's registry page.
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const GAME_NAMES = { "4dungeon": "4Dungeon", "88x31": "88x31", "irl-dungeon": "irl-dungeon", "scoundrel": "scoundrel.exe", "dawn-baton": "Dawn Baton" };
+  const stamp = (at, pad) => { const d = new Date(at * 1000), h = d.getHours() % 12 || 12, p = pad ? (n => String(n).padStart(2)) : String;
+    return `${MONTHS[d.getMonth()]} ${p(d.getDate())} ${p(h)}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() < 12 ? "AM" : "PM"}`; };
+  function openHist() {
+    const it = invList[invSel];
+    if (!it || it.ichor) return;
+    invHist = { it, num: Number.isInteger(it.copy) ? it.copy : null, story: null, err: "", loading: false };
+    showInv(true);
+  }
+  function histAct(a) {
+    const H = invHist; if (!H) return;
+    if (a === "back") { invHist = null; return showInv(true); }
+    if (a === "ledger" && H.num) window.open(`${ITEMS_URL}/ledger?item=${RULES.itemId(H.it.name)}&copy=${H.num}`, "_blank", "noopener");
+  }
+  function drawHist(pre, add) {
+    const H = invHist, it = H.it, S = H.story;
+    let used = 0;
+    const put = (t, cls) => { used++; return add(t, cls); };
+    put("HISTORY", ""); put(" ");
+    const tail = H.num ? `  #${H.num}${S ? ` of ${S.of}` : ""}` : "";
+    put(it.name.length + tail.length > 41 ? it.name.slice(0, 41 - tail.length - 2) + ".." + tail : it.name + tail, "");
+    put(`${RULES.tierWithBlessings(it.name, it.own).toLowerCase()}   ${it.align || "NEUTRAL"}   ${it.nature || "plain"}`, "dim");
+    for (const w of wrapText(it.text, 41)) put(w, "");
+    put(" ");
+    if (!H.num) put("This one has no number, so no history.", "dim");
+    else if (!S) {
+      put(H.err || "Looking...", "dim");
+      if (!H.loading && !H.err) {
+        H.loading = true;
+        acctApi(`/history?item=${RULES.itemId(it.name)}&copy=${H.num}`).then(r => { if (invHist !== H) return; H.loading = false; if (r.error) H.err = r.error; else H.story = r; showInv(true); });
+      }
+    } else {
+      put(`Made in ${GAME_NAMES[S.born_game] || S.born_game}, ${stamp(S.born_at)}`, "");
+      put(S.moves === 0 ? "Never changed hands." : S.moves === 1 ? "Changed hands once." : `Changed hands ${S.moves} times.`, "");
+      put(" ");
+      const label = e => e.k === "mark" ? RULES.markLabel(e.kind, e.value) : e.k === "move" ? (e.from === "4dungeon" ? "Sent to " + (GAME_NAMES[e.to] || e.to) : "Came from " + (GAME_NAMES[e.from] || e.from)) : "Used up";
+      const room = HIST_ROWS - used - 2, ev = S.events, shown = ev.length <= room ? ev : ev.slice(0, Math.max(0, room - 1));   // newest first, one page: the rest are on the ledger page
+      for (const e of shown) put(`${stamp(e.at, true)}  ${label(e)}`.slice(0, 41), e.k === "mark" && e.kind === "moon" ? "gold" : "");
+      if (shown.length < ev.length) put(`+${ev.length - shown.length} older, see the ledger`, "dim");
+    }
+    const btn2 = (t, a) => { const sp = document.createElement("span"); sp.className = "btn"; sp.textContent = t; sp.dataset.histact = a; return sp; };
+    const f = add("");
+    if (H.num) f.append(btn2("[L]EDGER", "ledger"), " ");
+    f.append(btn2("[C]LOSE", "back"));
   }
   // ABOUT: the build, what the game is, a few numbers from this run and the codex.
   // (The full stats only show at the end of a run.)
@@ -1578,18 +1624,6 @@
     if (save.encounter) { showInv(false); encounterBox(); return; }   // mid-fight: back to the fight box
     showInv(true);
   }
-  // Hold Omen / Release Omen's own action, off the header button or the H key -- not routed through
-  // useInv/invList/invSel at all now, since it's no longer a numbered item in that list.
-  async function holdAction() {
-    if (!save || waiting || !holdBtn || holdBtn.cooling) return;   // greyed out during the post-release cooldown: inert
-    if (holdBtn.action === "hold") { showInv(false); holdBox(); return; }   // still asks to confirm first, same as STANDBY always did
-    const log = save.log;
-    save = await play({ t: "useBankedOmen" });
-    logGlow = true; remember(log); persist(); draw();
-    if (save.encounter) { showInv(false); encounterBox(); return; }
-    showInv(true);
-  }
-
   // Opening a locked door takes two presses: the first arms it, the second (same direction) turns the key.
   // Anything else cancels. Open doors, a wall or an already-spent key answer on the first press.
   const NAMES = { N: "NORTH", S: "SOUTH", E: "EAST", W: "WEST" };
@@ -2557,13 +2591,15 @@
   // Clicking an item chooses it; clicking the chosen one again uses it. Only [C]LOSE, I or Esc closes it.
   document.getElementById("inv").addEventListener("click", e => {
     if (invReg) { const ra = e.target.closest("[data-regact]"); if (ra) regAct(ra.dataset.regact); return; }
+    if (invHist) { const ha = e.target.closest("[data-histact]"); if (ha) histAct(ha.dataset.histact); return; }
+    const pgb = e.target.closest("[data-page]"); if (pgb) return pageInv(pgb.dataset.page === "next" ? 1 : -1);
+    if (e.target.closest("[data-hist]")) return openHist();
     if (e.target.closest("[data-reg]")) { invReg = { page: 0, items: null, msg: "", err: "", loading: false }; return showInv(true); }
     const tp = e.target.closest("[data-top]");
     if (tp && ichorPick < 0) { const t = Number(tp.dataset.top); invSel = 0; topSel = t; showInv(true); return useInv(0); }   // (v1.25) one click uses it
     if (e.target.closest("[data-use]")) return useInv(invSel);
     if (e.target.closest("[data-close]")) { showInv(false); if (save && save.encounter) encounterBox(); return; }
     if (e.target.closest("[data-codex]")) { showInv(false); codexSel = -1; return showCodex(true); }
-    if (e.target.closest("[data-hold]")) return holdAction();
     const line = e.target.closest("[data-i]");
     if (ichorPick >= 0) { if (!line) { ichorPick = -1; return showInv(true); } const n = Number(line.dataset.i); if (n === ichorPick) return useInv(invSel, n || "0"); ichorPick = n; return showInv(true); }
     if (!line) { showInv(false); if (save && save.encounter) encounterBox(); return; }   // any other click closes, same as [C]LOSE
@@ -2655,6 +2691,7 @@
     }
     if (!document.getElementById("inv").hidden) {
       if (invReg) { e.preventDefault(); if (key === "escape" || key === "c" || key === "i" || key === "m" || key === "backspace") { invReg = null; showInv(true); } return; }
+      if (invHist) { e.preventDefault(); if (key === "escape" || key === "c" || key === "i" || key === "h" || key === "backspace") histAct("back"); else if (key === "l") histAct("ledger"); return; }
       if (ichorPick >= 0) {
         e.preventDefault();
         const n = save.party.length;
@@ -2665,9 +2702,10 @@
         return showInv(true);
       }
       if (key === "i" || key === "c" || key === "escape") { e.preventDefault(); showInv(false); if (save && save.encounter) encounterBox(); }
-      else if (key === "h") { e.preventDefault(); holdAction(); }
+      else if (key === "h") { e.preventDefault(); openHist(); }
       else if (key === "m") { e.preventDefault(); invReg = { page: 0, items: null, msg: "", err: "", loading: false }; showInv(true); }
       else if ((key === "arrowleft" || key === "arrowright") && invSel === 0 && invList.length && invList[0].ichor) { e.preventDefault(); topSel = key === "arrowright" ? 1 : 0; showInv(true); }
+      else if (key === "arrowleft" || key === "arrowright") { e.preventDefault(); pageInv(key === "arrowright" ? 1 : -1); }
       else if (/^[0-9]$/.test(key)) { e.preventDefault(); if (key === "0") topSel = 0; const ich = invList.length && invList[0].ichor ? 1 : 0, n = Number(key);   // 0 is ICHOR, 1-9 the bag
         if (n === 0 ? ich : n <= invList.length - ich) { invSel = n === 0 ? 0 : n - 1 + ich; showInv(true); useInv(invSel); } }   // (v1.06.1) pressing the number uses it
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
