@@ -103,7 +103,7 @@ test("(v1.25) a find is stamped with its moon and its deed once numbered; a clim
   const env = { DB: fakeD1() }, me = browser(env), marks = [];
   env.REGISTRY = {
     async birth() { return { copy: 3, created: true }; },
-    async addMarks(g) { for (const c of g.copies) marks.push([c.copy, g.kind, g.value, c.key.split(":").slice(1).join(":")]); return { ok: true, marked: [], already: 0, skipped: [] }; },
+    async addMarks(p) { for (const g of p.marks) for (const c of g.copies) marks.push([c.copy, g.kind, g.value, c.key.split(":").slice(1).join(":")]); return { ok: true, marked: [], already: 0, skipped: [] }; },
   };
   await me("/run", {});
   const ACT = (await import("../../act.js")).default, RULES = (await import("../../rules.js")).default, name = ACT.nameOf(1);
@@ -173,7 +173,7 @@ test("(v1.27) occasions: real days are named, they mark a find, and every histor
   assert.equal(RULES.markLines(["full", "found_wall", "blue_moon"])[0], "Found in a wall under a blue moon.");
   // the first copy is stamped when numbered
   const { settleCopies, stampMarks } = await import("../game.js");
-  const marks = [], env = { REGISTRY: { async addMarks(g) { for (const c of g.copies) marks.push(g.value); return { ok: true }; } } };
+  const marks = [], env = { REGISTRY: { async addMarks(p) { for (const g of p.marks) for (const c of g.copies) marks.push(g.value); return { ok: true }; } } };
   const name = ACT.nameOf(1), st = { copies: { [name]: [{ k: "r:1", c: null, q: ["full", "eclipse_solar"] }] }, finds: [] };
   const done = await settleCopies(env, async () => ({ json: async () => ({ copies: [{ key: "r:1", copy: 1 }] }) }), st, { t: "go" }, { id: 5 }, {});
   await stampMarks(env, done.marks);
@@ -183,13 +183,13 @@ test("(v1.27) occasions: real days are named, they mark a find, and every histor
 test("(v1.33) a find carries its finer place and level; copies in the bag get what they live through, once each", async () => {
   const ACT = (await import("../../act.js")).default, RULES = (await import("../../rules.js")).default, name = ACT.nameOf(1);
   const { settleCopies } = await import("../game.js");
-  const marks = [], env = { REGISTRY: { async addMarks(g) { for (const c of g.copies) marks.push(g.value); return { ok: true }; } } };
+  const marks = [], env = { REGISTRY: { async addMarks(p) { for (const g of p.marks) for (const c of g.copies) marks.push(g.value); return { ok: true }; } } };
   // a find from a locker on B3F, while a demon falls and a door opens: the old copy gets both, the new one neither
   const st = { stats: { beaten: 2, unlocks: 1, fled: 0 }, copies: { [name]: [{ k: "r:1", c: 7, m: ["full", "found_wall"] }] },
     finds: [{ id: 1, key: "r:2", p: 4, h: "found_wall", x: ["in_locker", "on_b3f", "bogus"] }] };
   const out = await settleCopies(env, null, st, { t: "fight" }, { id: 5 }, { stats: { beaten: 1, unlocks: 0, fled: 0 } });
   assert.deepEqual(marks, []);                                                         // (v1.36) nothing is written before the answer
-  assert.deepEqual(out.marks.flatMap((g) => g.copies.map((c) => [c.copy, g.value])), [[7, "beat_demon"], [7, "through_door"]]);   // they go after it (sendOut)
+  assert.deepEqual(out.marks.flatMap((p) => p.marks.flatMap((g) => g.copies.map((c) => [c.copy, g.value]))), [[7, "beat_demon"], [7, "through_door"]]);   // they go after it (sendOut)
   assert.deepEqual(st.copies[name][0].m, ["full", "found_wall", "beat_demon", "through_door"]);
   assert.deepEqual(st.copies[name][1].q, ["full", "found_wall", "in_locker", "on_b3f"]);
   // another fight won: nothing new for a copy that already saw one
@@ -274,14 +274,17 @@ test("(v1.37) the bag has no limit: what waited for a full bag goes into it", as
   assert.equal(ACT.types.includes("keep"), false);         // the "what do you leave?" answer is gone
 });
 
-test("(v1.38) a moment many things lived through is one registry call naming them all; a blessing still goes one at a time", async () => {
+test("(v1.39) things waiting with the same marks are one registry call, the new finds first; a blessing still goes one at a time", async () => {
   const ACT = (await import("../../act.js")).default, a = ACT.nameOf(1), b = ACT.nameOf(2);
   const { settleCopies, stampMarks } = await import("../game.js");
-  const one = [], many = [], env = { REGISTRY: { async addMark(m) { one.push([m.copy, m.value, m.key]); return { ok: true }; }, async addMarks(g) { many.push([g.value, g.copies.map((c) => [c.itemId, c.copy, c.key])]); return { ok: true }; } } };
-  // three copies in the bag (one already saw a demon fall), a fight run from, and one copy blessed in the same move
-  const st = { stats: { fled: 1 }, copies: { [a]: [{ k: "x", c: 1, m: ["fled_fight"] }, { k: "y", c: 2, q: ["blessed"] }], [b]: [{ k: "z", c: 5 }] } };
-  const out = await settleCopies(env, null, st, { t: "run" }, { id: 9 }, { stats: { fled: 0 } });
+  const one = [], many = [], env = { REGISTRY: { async addMark(m) { one.push([m.copy, m.value, m.key]); return { ok: true }; }, async addMarks(p) { many.push(p.marks.map((g) => [g.value, g.copies.map((c) => [c.itemId, c.copy, c.key])])); return { ok: true }; } } };
+  // two copies in the bag (one blessed this move), a demon beaten, and a new find from the demon on B3F
+  const ph = ACT.phaseMark(3), inner = async () => ({ json: async () => ({ copies: [{ key: "z", copy: 5 }] }) });
+  const st = { stats: { beaten: 1 }, copies: { [a]: [{ k: "x", c: 1, m: [ph] }, { k: "y", c: 2, m: [ph], q: ["blessed"] }] }, finds: [{ id: 2, key: "z", p: 3, h: "from_demon", x: ["on_b3f"] }] };
+  const out = await settleCopies(env, inner, st, { t: "fight" }, { id: 9 }, { stats: { beaten: 0 } });
   await stampMarks(env, out.marks);
-  assert.deepEqual(many, [["fled_fight", [[1, 2, "9:y:fled_fight"], [2, 5, "9:z:fled_fight"]]]]);   // one call, the two that hadn't run from a fight
+  assert.deepEqual(many, [
+    [[ph, [[2, 5, "9:z:" + ph]]], ["from_demon", [[2, 5, "9:z:from_demon"]]], ["on_b3f", [[2, 5, "9:z:on_b3f"]]]],   // the find's own entry first
+    [["beat_demon", [[1, 1, "9:x:beat_demon"], [1, 2, "9:y:beat_demon"]]]]]);      // then the two that saw the demon fall
   assert.deepEqual(one, [[2, "blessed", "9:y:blessed"]]);
 });
