@@ -238,24 +238,37 @@ export async function settleCopies(env, inner, st, a, me, old) {
 }
 const NIGHT = new Set([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ACT.phaseMark(i)).concat(ACT.OCCASIONS));
 // The marks waiting on numbered copies, taken off them (q to m) as registry calls; an unnumbered copy's keep waiting.
+// (v1.38) One call per moment, naming every copy that has it waiting: { holder, kind, value, copies: [{ itemId, copy, key }] }.
+// The registry's addMarks gives each copy its mark and seals ONE ledger entry for them all (a fight seen by 12 things is
+// one entry, not 12). A copy's key is the same as before, so a mark made one at a time is never made twice.
 function takeMarks(me, copies) {
-  const out = [];
+  const out = new Map();
   for (const [name, list] of Object.entries(copies)) for (const e of list) {
     if (e.c === null || !e.q || !e.q.length) continue;
     const itemId = ACT.itemId(name);
     for (const w of e.q) {
       const value = w.split(":")[0], kind = NIGHT.has(value) ? "night" : value === "answered" || value === "blessed" ? "moon" : "deed";
-      out.push({ itemId, copy: e.c, holder: { game: "4dungeon", playerId: me.id }, kind, value, key: me.id + ":" + e.k + ":" + w });
+      if (!out.has(kind + " " + w)) out.set(kind + " " + w, { holder: { game: "4dungeon", playerId: me.id }, kind, value, copies: [] });
+      out.get(kind + " " + w).copies.push({ itemId, copy: e.c, key: me.id + ":" + e.k + ":" + w });
       (e.m = e.m || []).push(value);
     }
     delete e.q;
   }
-  return out;
+  return [...out.values()];
 }
+const AT_ONCE = 300;   // dungeon-items MARKS_AT_ONCE
 export async function stampMarks(env, marks) {
-  for (const m of marks) {
-    try { const r = await env.REGISTRY.addMark(m); if (!(r && r.ok)) console.error("marks", m.key, r && r.error); }
-    catch (err) { console.error("marks", err); }
+  for (const g of marks) {
+    // a blessing climbs one copy's ladder, so the registry takes it one copy at a time
+    const calls = g.value === "blessed" ? g.copies.map((c) => () => env.REGISTRY.addMark({ ...c, holder: g.holder, kind: g.kind, value: g.value }))
+      : Array.from({ length: Math.ceil(g.copies.length / AT_ONCE) }, (_, i) => () => env.REGISTRY.addMarks({ ...g, copies: g.copies.slice(i * AT_ONCE, (i + 1) * AT_ONCE) }));
+    for (const call of calls) {
+      try {
+        const r = await call();
+        if (!(r && r.ok)) console.error("marks", g.value, r && r.error);
+        else if (r.skipped && r.skipped.length) console.error("marks", g.value, JSON.stringify(r.skipped));
+      } catch (err) { console.error("marks", err); }
+    }
   }
 }
 const later = (ctx, job) => { const p = job.catch((e) => console.error("sendOut", e)); if (ctx && ctx.waitUntil) ctx.waitUntil(p); else return p; };
