@@ -178,3 +178,16 @@ test("(v1.27) occasions: real days are named, they mark a find, and every histor
   await settleCopies(env, async () => ({ json: async () => ({ copies: [{ key: "r:1", copy: 1 }] }) }), st, { t: "go" }, { id: 5 }, {});
   assert.deepEqual(marks, ["full", "eclipse_solar", "first_copy"]);
 });
+
+test("(v1.31) a demon the player has answered stays seen on the server, so the page does not open its APPEARS screen again", async () => {
+  const env = { DB: fakeD1() }, me = browser(env);
+  let run = (await me("/run", {})).data, n = run.n, seenAfter = null;
+  for (let i = 0; i < 600 && seenAfter === null; i++) {
+    const a = await me("/act", { n, action: run.run.encounter ? { t: "fight" } : i % 8 === 7 ? { t: "turn", dir: "R" } : { t: "search" } });   // (turning, so it is not always a door wall)
+    assert.equal(a.status, 200); n = a.data.n;
+    if (run.run.encounter && !run.run.encounter.seen && a.data.run.encounter) seenAfter = a.data.run.encounter.seen;   // a fight began unseen, and the demon is still standing
+    run = a.data;
+    if (run.run.dead) run = (await me("/run", { fresh: true })).data, n = run.n;
+  }
+  assert.equal(seenAfter, true, "the demon the player just fought is marked seen");
+});

@@ -61,9 +61,13 @@
     const pool = free.length ? free : out;
     return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
   }
+  // The buttons on a demon's screen. Pressing one means KURA has seen the demon (its APPEARS screen), so the run keeps that:
+  // the page only draws, and an answer from the server replaces the page's copy of the encounter.
+  const ENCOUNTER_ACTS = new Set(["fight", "word", "aura", "go", "answer", "offerPick", "offerTrade", "offerLeave", "swap", "useItem", "giveIchor", "useSilver"]);
   function apply(st, a) {
     const f = a && ACTIONS[a.t];
     if (!f) throw new Error("unknown action: " + (a && a.t));
+    if (st && st.encounter && !st.encounter.seen && ENCOUNTER_ACTS.has(a.t)) st = { ...st, encounter: { ...st.encounter, seen: true } };
     return f(st, a);
   }
   // The page's old button names ("go-N", "opick-2", "altar-none", "yes", ...) as actions.
