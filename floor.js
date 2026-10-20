@@ -61,7 +61,7 @@
   //     kind, and whether a bonus or omen-streak room shows up at all, and where. Re-rolled every floor.
   function generate(seed = Math.floor(Math.random() * 2 ** 32), pseed = Math.floor(Math.random() * 2 ** 32), opts = {}) {
     const rand = rng(seed), prand = rng(pseed);
-    const days = Math.max(3, Math.min(DAYS, opts.days || DAYS)), pairs = days - 1;
+    const days = Math.max(1, Math.min(DAYS, opts.days || DAYS)), pairs = days - 1;
     let deck;
     for (let tries = 0; ; tries++) {
       deck = shuffleWith(KINDS.slice(), rand).concat(shuffleWith(KINDS.slice(), rand));

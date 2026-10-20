@@ -776,11 +776,10 @@
   // The clock here is the game's own (it follows the X testing cheat).
   const nowMs = st => TIME.now().getTime() + (st.clockOffset || 0) * 86400000;
   const quarterDeadline = (st, n) => TIME.localDay(TIME.quarter(n).end, st.tz);
-  // Where a new run wakes: the level the dark has reached, which is this quarter's -- unless fewer than two
-  // days of it are left, when she wakes one level higher with the whole next quarter ahead of her.
+  // Where a new run wakes: the level the dark has reached, which is this quarter's. A run that starts late has a shorter
+  // floor (arrive() builds one wing for each day left), never a skipped level.
   function startSlot(st) {
-    let n = TIME.quarterOf(new Date(nowMs(st))).n;
-    if (quarterDeadline(st, n) - clock(st) < 2) n++;
+    const n = TIME.quarterOf(new Date(nowMs(st))).n;
     return { n, height: TIME.quarter(n).q + 1, deadline: quarterDeadline(st, n) };
   }
 
@@ -1911,7 +1910,10 @@
   // things, said plainly: a night (a phase still ahead in that quarter, so it can always be made), a deed (how a thing
   // came to KURA), and what a thing is (its alignment, its nature, or its tier: COMMON, UNCOMMON or RARE, counting
   // blessings). Private to the run, rolled once per quarter, never rerolled. She judges only what shows on the things.
-  const WISH_DEEDS = ["found_wall", "from_demon", "given_member", "from_stranger"];
+  // The deeds she may ask for: found_wall and from_demon can be made any day; given_member needs a night to pass (a party
+  // member's pockets fill overnight), so only while the level has a night left. from_stranger needs another player's gift
+  // box, so she no longer asks for it (a wish rolled earlier may still say it, so WISH_DEED_WORDS keeps its words).
+  const WISH_DEEDS = ["found_wall", "from_demon"];
   const WISH_BASE = [["align", "LAW"], ["align", "NEUTRAL"], ["align", "CHAOS"], ["nature", "tech"], ["nature", "spirit"], ["nature", "both"],
     ["tier", "COMMON"], ["tier", "UNCOMMON"], ["tier", "RARE"]];
   function wishFor(st) {
@@ -1921,7 +1923,8 @@
     const q = TIME.quarter(d.quarter).q, here = TIME.quarterOf(new Date(nowMs(st))).n === d.quarter;
     const ahead = [2 * q, 2 * q + 1].filter(i => !here || i >= moon());
     const night = PHASE_MARK[pick(ahead.length ? ahead : [2 * q + 1])], [k, v] = pick(WISH_BASE);
-    st.wish = { n: d.quarter, night, deed: pick(WISH_DEEDS), base: { k, v } };
+    const deeds = d.deadline - clock(st) >= 1 ? [...WISH_DEEDS, "given_member"] : WISH_DEEDS;
+    st.wish = { n: d.quarter, night, deed: pick(deeds), base: { k, v } };
     return st.wish;
   }
   // The tier of the copy in bag slot i, counting its blessings: aura, the altar and breaking all read this.
