@@ -1339,7 +1339,7 @@
 
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
-  const INV_PER = 6, HIST_ROWS = 16;   // (v1.29) things to a page of INVOKE; rows in the box, for HISTORY
+  const INV_PER = 5, HIST_ROWS = 16;   // (v1.29) things to a page of INVOKE (5 since v1.36); rows in the box, for HISTORY
   const LEDGER_URL = "https://88x31.app/registry";   // the shared registry's public ledger page (88x31.app passes it through)
   let invReg = null;   // the bag's INVENTORY view (what the shared item list says you hold), or null
   let invHist = null;  // (v1.29) HISTORY: the chosen thing's story { it, num, story, err, loading }, or null
@@ -1465,7 +1465,7 @@
     invList.slice(first, first + INV_PER).forEach((it, k) => {
       const i = first + k;
       add((`${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{40}).{4,}$/, "$1...")).padEnd(43) + (it.pip ? "+" : ""), "btn", i); });   // (v1.26) + : something the moon wants
-    if (pages > 1 && invPage === 0) add(`  ${INV_PER + 1}  ... (next page)`, "btn dim").dataset.page = "next";   // (v1.33) the seventh row turns the page (a click, or the 7 key); grey (v1.36)
+    if (pages > 1 && invPage === 0) add(`  ${INV_PER + 1}  ... (next page)`, "btn dim").dataset.page = "next";   // (v1.33) the row after the last thing turns the page (a click, or its number key: 6 since v1.36); grey (v1.36)
     if (empty) add("  1  The bag is empty", "dim");               // (v1.06.1) no row of empty slots when there's nothing in it
     else for (let k = Math.max(count, invPage * INV_PER); k < Math.min(RULES.BAG_MAX, (invPage + 1) * INV_PER); k++) add(`  ${k + 1}  .`, "dim");
     if (invPage > 0) add(` ${RULES.BAG_MAX + 1}  ... (previous page)`, "btn dim").dataset.page = "prev";   // (v1.36) under the last slot, grey like the 7 row: a click turns back
@@ -1486,6 +1486,7 @@
     if (empty) add(" ");
     const help = add("", "");
     if (empty) help.style.marginTop = "0";                       // (v1.06.1) with nothing in the bag, the foot comes up under the list
+    else help.append("\n");                                     // (v1.36) an open line above the foot (the empty bag has its own, above)
     if (pages > 1) {
       const pg = (t, v) => { const sp = btn(t, "page"); sp.dataset.page = v; return sp; };
       help.append(pg("[<]", "prev"), ` ${invPage + 1}/${pages} `, pg("[>]", "next"), "  ");
@@ -2655,7 +2656,7 @@
       else if ((key === "arrowleft" || key === "arrowright") && invSel === 0 && invList.length && invList[0].ichor) { e.preventDefault(); topSel = key === "arrowright" ? 1 : 0; showInv(true); }
       else if (key === "arrowleft" || key === "arrowright") { e.preventDefault(); pageInv(key === "arrowright" ? 1 : -1); }
       else if (/^[0-9]$/.test(key)) { e.preventDefault(); if (key === "0") topSel = 0; const ich = invList.length && invList[0].ichor ? 1 : 0, n = Number(key);   // 0 is ICHOR, 1-9 the bag
-        if (n === INV_PER + 1 && invPage === 0 && invList.length - ich > INV_PER) return pageInv(1);   // (v1.33) 7 on the first page is its "next page" row
+        if (n === INV_PER + 1 && invPage === 0 && invList.length - ich > INV_PER) return pageInv(1);   // (v1.33) 6 (v1.36) on the first page is its "next page" row
         if (n === 0 ? ich : n <= invList.length - ich) { invSel = n === 0 ? 0 : n - 1 + ich; showInv(true); useInv(invSel); } }   // (v1.06.1) pressing the number uses it
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
