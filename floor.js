@@ -204,6 +204,8 @@
       const pile = extra[n].slice();
       const want = Math.max(extra[n].length, n === "P" ? RR(2) : n === "X" ? RR(3) : 1 + RR(3));
       while (pile.length < want) pile.push(pickR(n === "P" ? ["item", "silver"] : ["demon", "demon", "item", "item", "silver"]));
+      // Every room hides at least one item (a swapped-in demon or coin, or one added), so no room is searched for nothing.
+      if (!pile.includes("item")) { const at = pile.findIndex(h => h === "demon" || h === "silver"); if (at >= 0) pile[at] = "item"; else pile.push("item"); }
       if ((n === "X" || (n === "K" && !names.includes("X"))) && clueKind) pile.push("clue");          // the dead end's big clue (it doesn't count toward the pile's size)
       for (let j = pile.length - 1; j > 0; j--) { const m = RR(j + 1); [pile[j], pile[m]] = [pile[m], pile[j]]; }
       // A Recharge Bay is safe: its demons turn into items.

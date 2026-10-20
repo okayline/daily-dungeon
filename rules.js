@@ -1147,10 +1147,10 @@
     }
     // Rooms with an effect hide a fixture behind one wall. Finding it takes searching, like any find; using it is a SEARCH of that wall.
     if (FIXTURE[room.kind] && free.length) { const fd = free[next() % free.length]; w[fd].unshift("fixture"); w.fixtureDir = fd; }
-    // Nothing turns up on a first look. Each thing needs 5 to 10 points (half again more for each find already made on that wall) of searching (rolled now, hidden from the
+    // Nothing turns up on a first look. Each thing needs 3 to 6 points (half again more for each find already made on that wall) of searching (rolled now, hidden from the
     // player); every search of its wall adds a point or so (see SEARCH). prog is what each wall has had so far.
     w.need = {}; w.prog = {};
-    for (const x of free) { w.need[x] = w[x].map(() => 5 + next() % 6); w.prog[x] = 0; }
+    for (const x of free) { w.need[x] = w[x].map(() => 3 + next() % 4); w.prog[x] = 0; }
     // About one room in three hides something deep in one wall: findable, but only 1 in 35 per search,
     // and that wall may look empty for a very long time.
     if (free.length && next() % 3 === 0) w.deep = { dir: free[next() % free.length], item: names("MYTHIC")[next() % CATALOG.MYTHIC.length], found: false, need: 20 + next() % 31, prog: 0 };
@@ -1213,7 +1213,7 @@
     // How much a search is worth. The day's omen sets the luck of the day (hard 0.5, easy 1.6). A calm room means
     // steady hands (x1.25) and a hot one hurried ones (x0.75).
     // The moon's fullness helps too: up to x1.35 at the full moon, nothing at the new moon. Capped under 2 points, so nothing
-    // can ever turn up on a first look (the cheapest thing needs 5).
+    // can ever turn up on a first look (the cheapest thing needs 3).
     const fullness = (1 - Math.cos(moon() / 8 * 2 * Math.PI)) / 2;
     const worth = Math.min(1.9, fx.find * (tier === 0 ? 1.25 : tier >= 2 ? 0.75 : 1) * (1 + 0.35 * fullness));
     const where = `KURA searches the ${NAME[dir]} wall...`;
