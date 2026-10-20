@@ -204,8 +204,11 @@
       const pile = extra[n].slice();
       const want = Math.max(extra[n].length, n === "P" ? RR(2) : n === "X" ? RR(3) : 1 + RR(3));
       while (pile.length < want) pile.push(pickR(n === "P" ? ["item", "silver"] : ["demon", "demon", "item", "item", "silver"]));
-      // Every room hides at least one item (a swapped-in demon or coin, or one added), so no room is searched for nothing.
-      if (!pile.includes("item")) { const at = pile.findIndex(h => h === "demon" || h === "silver"); if (at >= 0) pile[at] = "item"; else pile.push("item"); }
+      // Every room hides 1 to 3 items (1 in 50 rooms of 100, 2 in 35, 3 in 15) on top of its demons and coins:
+      // the pile's own draws keep the demons and coins, and the items are rolled apart from them.
+      for (let j = pile.length - 1; j >= 0; j--) if (pile[j] === "item") pile.splice(j, 1);
+      const roll = RR(100);
+      for (let j = roll < 50 ? 1 : roll < 85 ? 2 : 3; j > 0; j--) pile.push("item");
       if ((n === "X" || (n === "K" && !names.includes("X"))) && clueKind) pile.push("clue");          // the dead end's big clue (it doesn't count toward the pile's size)
       for (let j = pile.length - 1; j > 0; j--) { const m = RR(j + 1); [pile[j], pile[m]] = [pile[m], pile[j]]; }
       // A Recharge Bay is safe: its demons turn into items.
