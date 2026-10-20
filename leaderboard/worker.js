@@ -10,7 +10,7 @@
 //   GET  /admin/here (header x-admin-key)                      -> every device seen this moon, for the X-mode board (v1.01.1)
 // Ranked by deepest floor, then most days survived, then whoever got there first. TURNS are shown but never ranked (spam).
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
-import { gameRoute } from "./game.js";
+import { gameRoute, keptScore } from "./game.js";
 import { accountsRoute, playerOf } from "./accounts.js";
 const MAX = { floor: 20, days: 400 };
 // Same lunar-epoch math as screen.js's epochIndex -- a whole-number count of real lunar months since
@@ -365,7 +365,11 @@ const WORKER = {
       if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
       let b; try { b = await req.json(); } catch (e) { return json({ error: "json" }, 400, allow); }
       const name = String(b.name || "").trim().replace(/\s+/g, " "), run = String(b.run || "");
-      const floor = Number(b.floor), days = Number(b.days), demons = Number(b.demons), turns = Number(b.turns);
+      // (v1.36) A run this server keeps posts the server's own numbers; the page's count only for a run it played itself (itch.io).
+      let me = null; try { me = await playerOf(env, req); } catch (e) {}
+      const real = await keptScore(env, me, run);
+      if (real && real.bad) return json({ error: "invalid" }, 400, allow);
+      const floor = Number(real ? real.floor : b.floor), days = Number(real ? real.days : b.days), demons = Number(real ? real.demons : b.demons), turns = Number(real ? real.turns : b.turns);
       const bad = !/^[A-Za-z0-9 _.\-]{3,10}$/.test(name) || !/^[a-z0-9]{8,40}$/.test(run)
         || ![floor, days, demons, turns].every(Number.isInteger) || floor < 1 || floor > MAX.floor || days < 1 || days > MAX.days
         || demons < 0 || demons > days * 40 || turns < 0 || turns > days * 5000 || floor > days;           // a floor needs at least a day
@@ -388,7 +392,7 @@ const WORKER = {
         try { await tallyStats(env.DB, b, turns, who); } catch (e) {}
       }
       // A post from a logged-in player is remembered as theirs (the board itself stays as anonymous as it was).
-      try { const me = await playerOf(env, req); if (me) await env.DB.prepare(`INSERT OR IGNORE INTO score_players (run, player_id) VALUES (?1, ?2)`).bind(run, me.id).run(); } catch (e) {}
+      try { if (me) await env.DB.prepare(`INSERT OR IGNORE INTO score_players (run, player_id) VALUES (?1, ?2)`).bind(run, me.id).run(); } catch (e) {}
       const row = await env.DB.prepare(`SELECT name, floor, days, demons, turns, made FROM scores WHERE run = ?1`).bind(run).first();
       return json({ ok: true, rank: await rankOf(env.DB, row) }, 200, allow);
     }

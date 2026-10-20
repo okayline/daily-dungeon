@@ -1081,7 +1081,8 @@
     if (!/^[A-Za-z0-9 _.\-]{3,10}$/.test(name)) { msg.textContent = "NO NAME ON THIS RUN."; return; }
     msg.textContent = "SENDING...";
     try {
-      const r = await fetch(LEADERBOARD_URL + "/score", { method: "POST", headers: { "content-type": "application/json" },
+      let tok = ""; try { tok = localStorage.getItem("dd-token") || ""; } catch (e) {}   // (v1.36) so the board can read this run's own numbers on the server
+      const r = await fetch(LEADERBOARD_URL + "/score", { method: "POST", headers: { "content-type": "application/json", ...(tok ? { authorization: "Bearer " + tok } : {}) },
         body: JSON.stringify({ ...RULES.score(save), name, version: SMT.VERSION }) });
       let d = {}; try { d = await r.json(); } catch (e) {}
       if (!r.ok || !d.ok) {

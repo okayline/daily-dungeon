@@ -226,3 +226,26 @@ test("a new run keeps the codex and a chosen name, and nothing else from the las
   for (const k of ["pacts", "tags", "raiseOk"]) assert.equal(run[k], undefined, k);
   assert.equal(run.silver, 0);
 });
+
+test("(v1.36) a run's end is sealed in the registry after the answer, and the board posts the server's numbers", async () => {
+  const { createHash } = await import("node:crypto");
+  const env = { DB: fakeD1() }, me = browser(env), sealed = [];
+  env.REGISTRY = { async sealRun(a) { sealed.push(a); return { ok: true, created: true }; }, async addMark() { return { ok: true }; } };
+  await me("/run", {});
+  const put = (f) => { const st = JSON.parse(env.DB.raw.prepare("SELECT state FROM runs").get().state); f(st); env.DB.raw.prepare("UPDATE runs SET state = ?").run(JSON.stringify(st)); return st; };
+  const st = put((s) => { s.dungeon.deadline = -1; s.today.date -= 1; s.steps = 12; });   // a new day, and the dark has already risen: the next move ends the run
+  const r = await me("/act", { n: 0, action: { t: "tick" } });
+  assert.equal(r.data.run.dead, true);
+  assert.equal(sealed.length, 1);
+  assert.equal(sealed[0].game, "4dungeon");
+  assert.equal(sealed[0].run, createHash("sha256").update("4dungeon-run:" + st.runId).digest("hex").slice(0, 32));
+  assert.equal(sealed[0].detail.end, "dark"); assert.equal(sealed[0].detail.turns, 12); assert.equal(sealed[0].detail.days, st.day);
+  assert.ok(!JSON.stringify(sealed[0]).includes(st.runId), "the run id itself is never sent");
+  await me("/act", { n: 1, action: { t: "tick" } });                           // already over: nothing sealed twice
+  assert.equal(sealed.length, 1);
+  // the page claims a deeper floor and more turns; the board keeps the server's
+  const post = await me("/score", { run: st.runId, name: "TESTER", floor: 4, days: 4, demons: 9, turns: 999, version: "t" });
+  assert.equal(post.status, 200);
+  assert.deepEqual({ ...env.DB.raw.prepare("SELECT floor, demons, turns FROM scores").get() }, { floor: st.climb || 1, demons: 0, turns: 12 });
+  assert.equal((await me("/score", { run: "zzzzzzzzzzzzzzzz", name: "TESTER", floor: 1, days: 1, demons: 0, turns: 1 })).status, 400);   // not this player's run
+});
