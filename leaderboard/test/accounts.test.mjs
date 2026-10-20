@@ -62,7 +62,7 @@ const makeEnv = (extra = {}) => ({ DB: fakeD1(), ACCOUNTS: fakeAccounts(), ALLOW
 function browser(env, { ip = "203.0.113.1", origin = ORIGIN } = {}) {
   let token = "";
   const me = async (path, body, { method, headers = {} } = {}) => {
-    const res = await worker.fetch(new Request("https://daily-dungeon-board.ddddungeon.workers.dev" + path, {
+    const res = await worker.fetch(new Request("https://board.example" + path, {
       method: method || (body !== undefined ? "POST" : "GET"),
       headers: { "cf-connecting-ip": ip, ...(origin ? { origin } : {}), ...(body !== undefined ? { "content-type": "application/json" } : {}), ...(token ? { authorization: "Bearer " + token } : {}), ...headers },
       body: body !== undefined ? JSON.stringify(body) : undefined,

@@ -755,7 +755,7 @@
   const ACCOUNT_HOST = location.hostname === "dungeon.88x31.app";   // passkeys belong to 88x31.app, so accounts only work on the game's own address
   // (v1.21.1) On the game's own address the board is the same Worker under /api: same origin, so no CORS preflight
   // (an extra trip before every POST) and one shared connection.
-  const LEADERBOARD_URL = ACCOUNT_HOST ? "/api" : "https://daily-dungeon-board.ddddungeon.workers.dev";
+  const LEADERBOARD_URL = ACCOUNT_HOST ? "/api" : "https://dungeon.88x31.app/api";
   // THE RUN ON THE SERVER (v1.21, stage 3 of dungeon-notes/4dungeon-server-move.md). On the game's own address (or a local
   // wrangler dev), every action goes to the Worker (/api/act), which keeps the run and plays it with the same rules
   // (act.js). Anywhere else (itch.io, a file) the page plays it itself, as before. Breath is off on the server for now.

@@ -2,6 +2,13 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.30 - Use It - Oct 19 2026, 20:15 HST
+
+- **Click a name for its story.** Clicking the thing you have chosen now opens its HISTORY instead of using it. INVOKE has a new [U]SE on the bar (the U key too) for using it.
+- **HISTORY has colour.** The title and the bar button are gold, and the Moon's lines are blue.
+- **24-hour time.** Dates and times in the game are always shown on the 24-hour clock.
+- **MAIL shows what is in your bag.** It no longer lists things from earlier runs.
+
 ## v1.29 - Pages - Oct 19 2026, 20:00 HST
 
 - **INVOKE has pages.** Six things to a page, with room between the parts. ICHOR and SILVER sit on the line above the first thing, and the bottom bar holds the page controls, HISTORY, MAIL and CLOSE. Pressing a number still uses that thing.
