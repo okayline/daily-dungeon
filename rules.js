@@ -2966,7 +2966,6 @@
     let x = Math.random() * friends.reduce((n, p) => n + weight(p), 0), p = friends[0];
     for (const q of friends) if ((x -= weight(q)) < 0) { p = q; break; }
     p.words = (p.words || 0) + 1;
-    p.talks = (p.talks || 0) + 1;                       // (v1.12.1) every talk ever with this member: questions only come after long conversations
     const y = WORD_YIELD[p.words - 1] || 0;
     pockets(st, p);
     st.log = pick(TALK_OPENERS)(p.name);
@@ -2987,7 +2986,7 @@
       st.extra = st.talkLine = "> " + pick(WORD_TRUCE)(p.name, rival.name);
       return show(st);
     }
-    // (v1.10) Now and then two members talk to each other and KURA only listens; now and then the member asks KURA something.
+    // (v1.10) Now and then two members talk to each other and KURA only listens.
     const other = friends.filter(q => q !== p);
     if (other.length && Math.random() < 0.2) {
       const q = pick(other);
@@ -2998,7 +2997,6 @@
       st.extra = st.talkLine = "> " + overhear(p.name, q.name, held.length ? String(pick(held)).replace(/^(a|an|the)\s+/i, "") : null);
       return show(st);
     }
-    if (y >= 1 && p.talks >= 10 && p.words >= 2 && !st.encounter && Math.random() < 0.15) { ask(st, p); tally(st, "asked"); return show(st); }
     // Now and then, an offer: only once they've already had a chat with KURA today (the 2nd WORD on), and rarely.
     const r = Math.random();
     const offerOdds = p.words >= 2 ? 0.12 * y : 0;
@@ -3328,54 +3326,6 @@
   const VOICE_FROM_DARK = ['A voice answers from the stone: "Not yet."', 'Something that is not the party says: "...yes..."',
     "The dark answers in KURA's own voice.", 'A voice, very close: "Keep going."', "Something laughs, then apologizes.",
     "A voice below counts to seven, then stops.", 'A whisper: "We heard you the first time."'];
-  // QUESTIONS. Now and then, talking to a party member, they ask KURA something instead, and [Y]ES / [N]O
-  // appear in the bottom right. Answers shift their patience, can lean KURA's alignment, and get a reply.
-  // Doing anything else lets the question lapse. Each: [question, [yes reply, patience, lean], [no reply, patience, lean]].
-  // (v1.10) Good vs. good: a question puts two kind answers to KURA, never a yes and a no. Each entry is
-  // [question, answer 1, answer 2, only-these-personas (or null), [label 1, label 2]]; an answer is [reply, patience, lean?].
-  const ASK = {
-    ELF: [
-      ['ELF: "Do you trust me?"', ['ELF: "Then I shall try to deserve it."', 2], ['ELF: "Always. Then I will not waste it."', 2], null, ["I do", "Always"]],
-      ['ELF: "Take what we find, and ask nothing?"', ["ELF smiles, a little. \"Take, then.\"", 1, "offer"], ['ELF: "A fair way. I like it."', 1, "pay"], null, ["Take", "Trade"]],
-      ['ELF: "Would you stay, if we found the way out?"', ['ELF: "Then we will find it together."', 2], ['ELF: "Then lead. I will follow."', 2], null, ["Stay", "Lead"]],
-    ],
-    PIXIE: [
-      ['PIXIE: "Are we going to be okay?"', ['PIXIE: "Okay. OKAY. Good."', 2], ['PIXIE: "Together. I like together."', 2], null, ["Yes", "Always"]],
-      ['PIXIE: "Can I have the next shiny thing?"', ['PIXIE: "PROMISE."', 2], ['PIXIE: "We SHARE it! Best idea ever."', 2], null, ["Yes", "Share"]],
-      ['PIXIE: "Do you think the moon misses us?"', ['PIXIE: "Me too."', 1], ['PIXIE waves at the ceiling. "Hi, moon!"', 1], null, ["Yes", "Wave"]],
-    ],
-    "CU SITH": [
-      ["CU SITH drops a bone at KURA's feet.", ["CU SITH bounds off and comes back, delighted.", 2], ["CU SITH leans into the petting, eyes closed.", 2], null, ["Throw", "Pet"]],
-      ["CU SITH stares into the dark, then at KURA.", ["CU SITH charges into the dark and comes back proud.", 1, "offer"], ["CU SITH settles beside KURA, ears up, content.", 1], null, ["Look", "Wait"]],
-    ],
-    data: [
-      ['{n}: "AWAITING A PRIORITY."', ['{n}: "GUARDING. THANK YOU."', 1, "pay"], ['{n}: "LEARNING. THANK YOU."', 1], null, ["Guard", "Learn"]],
-      ['{n}: "PERMISSION TO LOG YOUR THOUGHTS?"', ['{n}: "LOGGING. THEY ARE GOOD ONES."', 1, "pay"], ['{n}: "KEPT PRIVATE. TRUST NOTED."', 1], null, ["Log", "Keep"]],
-    ],
-    hardware: [
-      ['{n}: "will you keep me? even when I\'m old?"', ['{n}: "ok. ok. thank you"', 2], ['{n}: "i\'ll keep you too. promise"', 2], null, ["Always", "Both"]],
-      ['{n}: "can I hum? I like humming"', ["{n} hums happily at mains frequency.", 1], ["KURA hums along. {n} glows.", 1], null, ["Hum", "Duet"]],
-    ],
-    hybrid: [
-      ['{n}: "Do you wish to be more than flesh?"', ['{n}: "We could arrange that."', 1, "offer"], ['{n}: "Flesh is enough, then. I like that."', 1, "pay"], null, ["More", "Enough"]],
-      ['{n}: "Shall I listen to the walls for you?"', ['{n} listens. "...They\'re listening back."', 1], ["{n} and KURA listen together. The walls seem pleased.", 1], null, ["Listen", "Both"]],
-    ],
-    folklore: [
-      ['{n}: "Will they tell of us, after?"', ['{n}: "Let them."', 2], ['{n}: "Then we tell it ourselves."', 2], null, ["They", "We"]],
-      ['{n}: "Will you remember my name, after?"', ['{n}: "Good. See that you do."', 2], ["{n} stands a little taller. \"A song, then.\"", 2], ["HAUGHTY"], ["Yes", "Song"]],
-      ['{n}: "Do you fear the moon?"', ['{n}: "Wise."', 1, "pay"], ['{n}: "Good. Neither do I."', 1, "offer"], null, ["Wary", "Bold"]],
-    ],
-  };
-  // (v1.12.1) What the log says KURA did for each answer, in the order of ASK: [answer 1, answer 2].
-  const ASK_DID = {
-    ELF: [["KURA meets ELF's eyes and nods.", "KURA rests a hand on ELF's shoulder."], ["KURA nods and lets ELF take it.", "KURA offers ELF a fair trade."], ["KURA sits down beside ELF.", "KURA takes the first step ahead."]],
-    PIXIE: [["KURA gives PIXIE a thumbs up.", "KURA lets PIXIE settle on her shoulder."], ["KURA crosses her heart for PIXIE.", "KURA holds out both hands to share."], ["KURA nods at the ceiling, fondly.", "KURA waves at the moon."]],
-    "CU SITH": [["KURA throws the bone.", "KURA pets CU SITH."], ["KURA looks into the dark.", "KURA waits with CU SITH."]],
-    data: [["KURA points {n} toward the door.", "KURA opens a page for {n} to read."], ["KURA nods, and {n} starts logging.", "KURA covers her notes, smiling."]],
-    hardware: [["KURA pats {n} gently.", "KURA tucks {n} safe in her pocket."], ["KURA lets {n} hum.", "KURA hums along."]],
-    hybrid: [["KURA tilts her head and grins.", "KURA shakes her head, smiling, and pats {n}."], ["KURA asks {n} to listen.", "KURA listens with {n}."]],
-    folklore: [["KURA lifts her chin at {n}.", "KURA clasps {n}'s hand."], ["KURA taps her temple.", "KURA starts humming a tune for {n}."], ["KURA glances at the moon, wary.", "KURA grins up at the moon."]],
-  };
   // CONFIDING: a member at ease, now and then, tells KURA something about themselves (each told once, in order).
   const CONFIDE = {
     ELF: ['ELF: "I left a garden once. I still count its trees."', 'ELF: "I spent a hundred years in a tower. The quiet was easier."', 'ELF: "You remind me of someone. I will not say who."'],
@@ -3394,13 +3344,6 @@
     st.extra = "> " + pool[n].replace(/\{n\}/g, p.name);
     tally(st, "confided");
     return true;
-  }
-  function ask(st, p) {
-    const pool = ASK[p.name] || ASK[p.family || "folklore"];
-    const fits = pool.map((_, i) => i).filter(i => !pool[i][3] || pool[i][3].includes(personaOf(p)));
-    const k = fits[R(0, fits.length - 1)];
-    st.question = { who: p.name, pool: ASK[p.name] ? p.name : (p.family || "folklore"), k, lab: pool[k][4] || null };
-    st.extra = "> " + pool[k][0].replace(/\{n\}/g, p.name);
   }
   // KURA answers the question: YES (true) or NO (false). Free, like turning.
   function reply(st, yes) {
@@ -3440,14 +3383,6 @@
       tally(st, "answers");
       return show(st);
     }
-    if (!ASK[q.pool]) return show(st);          // a question saved before v1.10 (a last-chance or nagging one) just goes away
-    const [line, dp, why] = ASK[q.pool][q.k][yes ? 1 : 2];
-    p.patience = Math.max(0, Math.min(PATIENCE + 2, (p.patience ?? PATIENCE) + dp));
-    if (why) lean(st, why);
-    tally(st, "answers");
-    const did = ASK_DID[q.pool] && ASK_DID[q.pool][q.k] && ASK_DID[q.pool][q.k][yes ? 0 : 1];
-    st.log = did ? "> " + did.replace(/\{n\}/g, p.name) : `> KURA answers ${p.name}: ${q.lab ? String(q.lab[yes ? 0 : 1]).toLowerCase() : yes ? "yes" : "no"}.`;
-    st.extra = st.talkLine = "> " + line.replace(/\{n\}/g, p.name);
     return show(st);
   }
 

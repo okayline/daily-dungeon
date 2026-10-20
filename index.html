@@ -352,7 +352,7 @@
   // so a quick run of clicks can't skip past it. Anything urgent (a warning, a hit, a new demon) takes over at once.
   // Only what's drawn is held: the save and the LOG still get every line.
   let heldExtra = null;                     // { text, steps, t }: the line on screen, and when it went up
-  const EXTRA_URGENT = /closes tonight|GAME OVER|TRIPPING|comes down|-\d+ HP|appears|blocks the way|comes to see what broke|FALLS|calendar|joins the party/i;
+  const EXTRA_URGENT = /closes tonight|GAME OVER|TRIPPING|comes down|-\d+ HP|appears|blocks the way|comes to see what broke|FALLS|calendar|joins the party|^> She wants/i;   // (the last is the Moon's wish: the answer to pressing [M]OON, so it never waits)
   function extraToShow() {
     const want = save.extra || "", now = Date.now(), steps = save.steps || 0, h = heldExtra;
     const take = () => { if (!h || h.text !== want || steps < h.steps) heldExtra = { text: want, steps, t: now }; return want; };
@@ -1425,6 +1425,7 @@
     invList.slice(first, first + INV_PER).forEach((it, k) => {
       const i = first + k;
       add((`${i === invSel ? ">" : " "} ${i - ich + 1}  ${it.name}`.replace(/^(.{40}).{4,}$/, "$1...")).padEnd(43) + (it.pip ? "+" : ""), "btn", i); });   // (v1.26) + : something the moon wants
+    if (pages > 1 && invPage === 0) add(`  ${INV_PER + 1}  ... (next page)`, "btn").dataset.page = "next";   // (v1.33) the seventh row turns the page (a click, or the 7 key)
     if (empty) add("  1  The bag is empty", "dim");               // (v1.06.1) no row of empty slots when there's nothing in it
     else for (let k = Math.max(count, invPage * INV_PER); k < Math.min(RULES.BAG_MAX, (invPage + 1) * INV_PER); k++) add(`  ${k + 1}  .`, "dim");
     add(" ");
@@ -1462,7 +1463,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const GAME_NAMES = { "4dungeon": "4Dungeon", "88x31": "88x31", "irl-dungeon": "irl-dungeon", "scoundrel": "scoundrel.exe", "dawn-baton": "Dawn Baton" };
   const stamp = (at, pad) => { const d = new Date(at * 1000), two = n => String(n).padStart(2, "0");   // 24-hour time, in the player's own time zone
-    return `${MONTHS[d.getMonth()]} ${pad ? String(d.getDate()).padStart(2) : d.getDate()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
+    return `${MONTHS[d.getMonth()]} ${pad ? String(d.getDate()).padStart(2) : d.getDate()} ${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`; };
   function openHist() {
     const it = invList[invSel];
     if (!it || it.ichor) return;
@@ -1492,7 +1493,8 @@
         acctApi(`/history?item=${RULES.itemId(it.name)}&copy=${H.num}`).then(r => { if (invHist !== H) return; H.loading = false; if (r.error) H.err = r.error; else H.story = r; showInv(true); });
       }
     } else {
-      put(`Made in ${GAME_NAMES[S.born_game] || S.born_game}, ${stamp(S.born_at)}`, "");
+      let zn = "HST"; try { zn = new Intl.DateTimeFormat("en-US", { timeZoneName: "short" }).formatToParts(new Date(S.born_at * 1000)).find(x => x.type === "timeZoneName").value.replace(/^GMT$/, "UTC"); } catch (e) {}   // the player's own zone name (HST in Hawaii)
+      for (const w of wrapText(`Found in ${GAME_NAMES[S.born_game] || S.born_game}, ${stamp(S.born_at).replace(/^(\S+ \S+) /, "$1 at ")} ${zn}`, 41)) put(w, "");
       put(S.moves === 0 ? "Never changed hands." : S.moves === 1 ? "Changed hands once." : `Changed hands ${S.moves} times.`, "");
       put(" ");
       const label = e => e.k === "mark" ? RULES.markLabel(e.kind, e.value) : e.k === "move" ? (e.from === "4dungeon" ? "Sent to " + (GAME_NAMES[e.to] || e.to) : "Came from " + (GAME_NAMES[e.from] || e.from)) : "Used up";
@@ -2103,6 +2105,7 @@
           const row = document.createElement("div"); row.append(opt("[ESC] BACK", "otrade-none")); pre.appendChild(row);
           return;
         }
+        add(v.dir === "give" ? "TAKE ONE:" : "GIVE ONE:");      // whose things they are: a demon's own pockets (take) or KURA's bag (give)
         v.items.forEach((it, i) => { const d = document.createElement("div"); d.append(opt(fit(`[${i + 1}] ${it.toUpperCase()}`), "opick-" + i)); pre.appendChild(d); });
         add(" ");
         const row = document.createElement("div"); row.append(opt("[ESC] LEAVE IT", "opick-none")); pre.appendChild(row);
@@ -2711,6 +2714,7 @@
       else if ((key === "arrowleft" || key === "arrowright") && invSel === 0 && invList.length && invList[0].ichor) { e.preventDefault(); topSel = key === "arrowright" ? 1 : 0; showInv(true); }
       else if (key === "arrowleft" || key === "arrowright") { e.preventDefault(); pageInv(key === "arrowright" ? 1 : -1); }
       else if (/^[0-9]$/.test(key)) { e.preventDefault(); if (key === "0") topSel = 0; const ich = invList.length && invList[0].ichor ? 1 : 0, n = Number(key);   // 0 is ICHOR, 1-9 the bag
+        if (n === INV_PER + 1 && invPage === 0 && invList.length - ich > INV_PER) return pageInv(1);   // (v1.33) 7 on the first page is its "next page" row
         if (n === 0 ? ich : n <= invList.length - ich) { invSel = n === 0 ? 0 : n - 1 + ich; showInv(true); useInv(invSel); } }   // (v1.06.1) pressing the number uses it
       else if (key === "arrowdown" || key === "arrowup") { e.preventDefault(); invSel += key === "arrowdown" ? 1 : -1; showInv(true); }
       else if (key === "enter") { e.preventDefault(); useInv(invSel); }
