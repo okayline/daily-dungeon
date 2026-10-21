@@ -3,6 +3,7 @@
 //   POST /run {}               your run (a new one if you have none). Makes a guest player if this browser has none.
 //   POST /run {fresh: true}    start a new run
 //   POST /run {peek: true}     your run, or {run: null}: never makes a player or a run (the page's title screen)
+//                              (v1.40) Every /run answer with a player carries {name}: the board name, rolled if it had none.
 //   POST /act {n, action}      do one action. n is how many actions the page has seen on this run, so a resend of the
 //                              same action is refused instead of done twice. Answers {run, n}; a stale n gets 409 and the
 //                              run as it really is.
@@ -12,6 +13,7 @@
 import ACT from "../act.js";
 import SMT from "../screen.js";
 import { playerOf, makePlayer, Oops, reply, body, originsOf, sha, readToken, ipOf } from "./accounts.js";
+import { giveName } from "./names.js";
 
 const MAX_RUN = 400000;
 const now = () => Math.floor(Date.now() / 1000);
@@ -49,22 +51,22 @@ function fresh(old) {                     // a new run: what carries over (the c
 async function run(env, req, ctx) {
   const b = await body(req);
   if (b.peek === true) {
-    const me = await playerOf(env, req), row = me && (await load(env, me));
-    if (!row) return { run: null };
+    const me = await giveName(env, await playerOf(env, req)), row = me && (await load(env, me));
+    if (!row) return { run: null, name: me ? me.name : undefined };
     const st = tidy(ACT.apply(JSON.parse(row.state), { t: "tick" }));
     await store(env, me, st, row.n);
-    return { run: st, n: row.n, admin: !!me.admin };
+    return { run: st, n: row.n, admin: !!me.admin, name: me.name };
   }
-  const me = (await playerOf(env, req)) || (await makePlayer(env, req, ctx));
+  const me = await giveName(env, (await playerOf(env, req)) || (await makePlayer(env, req, ctx)));
   const row = await load(env, me);
   if (!row || b.fresh === true) {
     const st = fresh(row && JSON.parse(row.state)), n = row ? row.n + 1 : 0;
     await store(env, me, st, n);
-    return { run: st, n, me, moments: await runMoments(st, null), admin: !!me.admin };      // (v1.36) KURA wakes in the pit: sealed after the answer
+    return { run: st, n, me, moments: await runMoments(st, null), admin: !!me.admin, name: me.name };      // (v1.36) KURA wakes in the pit: sealed after the answer
   }
   const st = tidy(ACT.apply(JSON.parse(row.state), { t: "tick" }));   // catch up with the real date
   await store(env, me, st, row.n);
-  return { run: st, n: row.n, admin: !!me.admin };
+  return { run: st, n: row.n, admin: !!me.admin, name: me.name };
 }
 
 // (v1.21.1) One action is two trips to the database, each a single batch: (1) who this is, their run, and the rate

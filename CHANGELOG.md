@@ -2,6 +2,12 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.40 - Rolled Names - not released yet
+
+- **Everyone has a name.** Each player gets two random words (like "Quiet Heron"), the way the other 88x31 games do. The end screen says POST AS QUIET HERON and posts under it. USER shows your name with [REROLL] for a new one; runs already on the board keep the name they were posted under.
+- **The board's name column is wider**, so two-word names fit.
+- Removed: the name box on the end screen, and typing a name at all. Placeholder names like DEFAULT are now only used for a run played somewhere other than dungeon.88x31.app.
+
 ## v1.39 - Fewer Ledger Lines - Oct 20 2026, 09:49 HST
 
 - **A find's marks are one ledger line.** The moon a thing was found under, where it came from and the level it was picked up on are now one line on the shared ledger, right after the line where it came into the world (like "a neon tube fragment #3 and a scratched data disc #2 were found under a waxing gibbous moon, came from a demon and were picked up on B3F"). Things already in the bag that lived through the same fight get one line of their own.

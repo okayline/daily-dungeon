@@ -113,8 +113,6 @@
   .foundbox[data-mode="pass"] .code { -webkit-user-select: text; user-select: text; }
   .foundbox[data-mode="pass"] .btn { display: inline-block; }
   .codebox { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 29ch; padding: 0 4px; text-transform: uppercase; }
-  .nameinput { background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; width: 11ch; padding: 0 4px; text-transform: uppercase; }
-  .nameinput.bad { border-color: var(--demon); }
   #board .auto { color: var(--trail); }
   .passfield { display: block; width: 100%; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--trail); font: inherit; resize: none; margin: 4px 0; }
   /* The fight box sits inside the 3D view (rows 6-20, columns 1-47), like the bag, so the party and map stay in sight. */
@@ -740,7 +738,7 @@
   const SERVER = ACCOUNT_HOST || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const PAGE_KEEP = ["history", "logged", "key", "unsaved", "saved", "endShown", "submitted", "auraBand", "regCopies", "visitDay", "breathNow"];
   const OUT_LIST = ["finds", "gone", "events"], OUT_ONE = ["tally", "line3"];
-  let runN = 0, waiting = false, chain = Promise.resolve(), prefetch = null;
+  let runN = 0, waiting = false, chain = Promise.resolve(), prefetch = null, myName = "";   // myName: the player's board name (v1.40)
   function adopt(run, n, old) {
     if (old) {
       for (const k of PAGE_KEEP) if (old[k] !== undefined) run[k] = old[k];
@@ -756,6 +754,7 @@
     let d = null; try { d = await r.json(); } catch (e) {}
     if (!d) throw new Error("no answer");
     if (typeof d.token === "string" && d.token) try { localStorage.setItem("dd-token", d.token); } catch (e) {}
+    if (typeof d.name === "string") myName = d.name;
     return d;
   }
   // One action on the run: the server's answer (or the page's own, off the game's address). Actions go one at a time.
@@ -1028,28 +1027,16 @@
     else done(false);
   }
   // LEADERBOARD: post this run's score once, and read the top of the board. Ranked by floor, then days; TURNS are shown only.
-  // THE NAME: a run starts with a placeholder (RULES.named) and never waits for one. It is only the player's handle for
-  // the board (the character is always KURA): it is typed, if at all, in the post row at the end of a run.
-  const nameProblem = v => !v ? "TYPE A NAME FIRST." : v.length < 3 ? "TOO SHORT: AT LEAST 3 CHARACTERS." : v.length > 10 ? "TOO LONG: 10 CHARACTERS AT MOST." : "LETTERS, NUMBERS, SPACE _ . - ONLY.";
-  // A name field keeps its keys to itself (so typing B or C is a letter, not a command): Enter and Escape do its two jobs.
-  function nameField(inp, onEnter, onEscape) {
-    inp.className = "nameinput"; inp.maxLength = 10; inp.spellcheck = false; inp.autocomplete = "off"; inp.value = (save && save.playerName) || "";
-    inp.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); onEnter(); } else if (e.key === "Escape") { e.preventDefault(); onEscape(); } });
-    inp.addEventListener("input", () => inp.classList.remove("bad"));
-    return inp;
-  }
+  // THE NAME (v1.40): only the player's handle for the board (the character is always KURA), never typed. On the game's
+  // own address it is the player's rolled board name (myName, from the server; rerolled on the USER page); a run the page
+  // plays itself (itch.io, a file) posts under its placeholder (RULES.named).
+  const postName = () => (SERVER ? myName : (save && save.playerName)) || "";
   async function submitScore() {
     const msg = document.getElementById("scoremsg");
     if (!LEADERBOARD_URL || !save || !save.dead || save.submitted || !msg) return;
     if (save.cheated) { msg.textContent = "THIS RUN USED A TESTING CHEAT, SO IT CAN'T BE POSTED."; return; }
-    const field = document.getElementById("postname");     // the post row's name: a rename right before posting
-    if (field) {
-      const next = await play({ t: "setName", name: field.value });
-      if (next === save) { msg.textContent = nameProblem(field.value.trim()); field.focus(); return; }
-      save = next; persist();
-    }
-    const name = save.playerName || "";
-    if (!/^[A-Za-z0-9 _.\-]{3,10}$/.test(name)) { msg.textContent = "NO NAME ON THIS RUN."; return; }
+    const name = postName();
+    if (!name && !SERVER) { msg.textContent = "NO NAME ON THIS RUN."; return; }   // (the server knows its players' names)
     msg.textContent = "SENDING...";
     try {
       let tok = ""; try { tok = localStorage.getItem("dd-token") || ""; } catch (e) {}   // (v1.36) so the board can read this run's own numbers on the server
@@ -1062,7 +1049,7 @@
           : d.error === "invalid" ? "THE BOARD DID NOT LIKE THIS SCORE." : `THE BOARD ANSWERED ${r.status}.`;
         return;
       }
-      save.submitted = { name, rank: d.rank }; persist();
+      save.submitted = { name: d.name || name, rank: d.rank }; persist();
       toggleLog(true);
     } catch (e) { msg.textContent = "COULD NOT REACH THE BOARD. IS THE WORKER DEPLOYED WITH THE LATEST CODE?"; }
   }
@@ -1074,8 +1061,8 @@
   }
   function renderBoard() {
     const pre = document.querySelector("#board pre"), d = boardData, admin = !!(save && save.freeSteps);
-    const row = (rank, x, sel) => `${sel ? ">" : x.you ? (admin ? "*" : ">") : " "} ${String(rank).padStart(3)}  ${x.name.toUpperCase().padEnd(10)}  ${String(x.floor).padEnd(5)} ${String(x.days).padStart(4)}  ${String(x.demons).padStart(6)}  ${String(x.turns).padStart(6)}`;
-    const lines = ["", "  RANK  NAME        LEVELS DAYS  DEMONS   TURNS", ""];
+    const row = (rank, x, sel) => `${sel ? ">" : x.you ? (admin ? "*" : ">") : " "} ${String(rank).padStart(3)}  ${x.name.toUpperCase().padEnd(16)}  ${String(x.floor).padEnd(5)} ${String(x.days).padStart(4)}  ${String(x.demons).padStart(6)}  ${String(x.turns).padStart(6)}`;
+    const lines = ["", "  RANK  NAME              LEVELS DAYS  DEMONS   TURNS", ""];
     d.rows.forEach((x, i) => lines.push(row(i + 1, x, admin && i === boardSel)));
     if (!d.rows.length) lines.push("  Nobody yet.");
     if (d.you) lines.push("  ...", row(d.you.rank, { ...d.you, you: true }));
@@ -1083,7 +1070,7 @@
     // a placeholder name (nobody renamed it) is dim; everything else stays plain text
     const auto = new Set([...d.rows, ...(d.you ? [d.you] : [])].filter(x => RULES.isAutoName(x.name)).map(x => x.name.toUpperCase()));
     boardHead(pre, lines.map((l, i) => {
-      const nm = l.slice(7, 17).trim();
+      const nm = l.slice(7, 23).trim();
       if (i < 3 || !auto.has(nm)) return l + "\n";
       const sp = document.createElement("span"); sp.className = "auto"; sp.textContent = l; return [sp, "\n"];
     }).flat());
@@ -1167,11 +1154,7 @@
         row.className = "submitrow";
         if (save.submitted) row.append(`POSTED AS ${String(save.submitted.name).toUpperCase()}.  RANK ${save.submitted.rank}.  `, button("[B]OARD", "board"));
         else if (save.cheated) row.append("THIS RUN USED A TESTING CHEAT AND CAN'T BE POSTED.  ", button("[B]OARD", "board"));
-        else {
-          const inp = nameField(document.createElement("input"), submitScore, () => inp.blur());
-          inp.id = "postname";
-          row.append("POST AS ", inp, "  ", button("[P]OST", "submit"), document.createElement("br"), button("[B]OARD", "board"));
-        }
+        else row.append(`POST AS ${postName().toUpperCase() || "..."}  `, button("[P]OST", "submit"), document.createElement("br"), button("[B]OARD", "board"));
         const msg = document.createElement("div"); msg.id = "scoremsg"; msg.textContent = " ";
         post.push(row, msg);
       }
@@ -1195,6 +1178,7 @@
       const r = await fetch(LEADERBOARD_URL + path, body === undefined ? { headers } : { method: "POST", keepalive: !!keep, headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify(body) });
       const d = await r.json();
       if (typeof d.token === "string") try { d.token ? localStorage.setItem("dd-token", d.token) : localStorage.removeItem("dd-token"); } catch (e) {}
+      if (typeof d.name === "string" && (path === "/account" || path === "/name")) myName = d.name;
       return d;
     } catch (e) { return { error: "Can't reach the server." }; }
   };
@@ -1232,6 +1216,7 @@
       if (!ACCOUNT_HOST) { line(" Accounts work at dungeon.88x31.app."); line(" Open the game there to use them."); return; }
       if (!a) { line(" Loading...", "dim"); return; }
       if (a.error) { line(" " + a.error); return; }
+      if (a.name) { row(` NAME  ${a.name.toUpperCase()}  `, btn("REROLL", "reroll")); line(" Your name on the board.", "dim"); line(); }
       if (newCode) {
         line(" YOUR NEW SAVE CODE (shown once)", "gold");
         line("   " + newCode, "gold code");
@@ -1268,6 +1253,7 @@
     passAct = async a => {
       if (a === "back" || a === "close") return close();
       if (!ACCOUNT_HOST) return;
+      if (a === "reroll") { const r = await api("/name", { reroll: true }); if (r.error) return say(r.error); msg = `You're ${r.name.toUpperCase()} now.`; return draw2(); }
       if (a === "code") { const r = await api("/codes", { action: "new" }); if (r.error) return say(r.error); newCode = r.code; copied = false; msg = ""; return draw2(); }
       if (a === "done") { newCode = ""; copied = false; msg = ""; return paint(last); }
       if (a === "copycode") {
@@ -2486,7 +2472,7 @@
   document.getElementById("log").addEventListener("click", e => {
     if (e.target.closest("[data-submit]")) return submitScore();
     if (e.target.closest("[data-board]")) { toggleLog(false); return toggleBoard(true); }
-    if (e.target.closest(".submitrow")) return;                      // typing a name must not close the log
+    if (e.target.closest(".submitrow")) return;                      // a click on the post row must not close the log
     if (e.target.closest("[data-download]")) return downloadLog();
     if (e.target.closest("[data-copy]")) return copyLog(e.target.closest("[data-copy]"));
     const sel = window.getSelection && window.getSelection();
@@ -2540,7 +2526,7 @@
   document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
-    if (e.target && e.target.tagName === "INPUT") return;    // a field's own keys (see nameField)
+    if (e.target && e.target.tagName === "INPUT") return;    // a field's own keys (the save code box)
     const fbox = document.getElementById("found");
     if (!fbox.hidden && fbox.dataset.mode === "intro") { e.preventDefault(); if (e.repeat) return; if (key === "enter") introOK(); else { const k = { f: "fight", t: "word", r: "run" }[key]; if (k) introGo(k); } return; }
     if (!fbox.hidden && fbox.dataset.mode === "pass") { if (key === "escape") passAct("close"); return; }   // typing and pasting go to the fields

@@ -42,7 +42,6 @@
     // the run itself
     tick: st => RULES.tick(st),
     reset: st => RULES.reset(st || {}),
-    setName: (st, a) => RULES.setName(st, a.name),
     named: st => RULES.named(st),
     // admin tools (the page asks for the admin key first; on the server these will need the player's admin flag)
     freesteps: st => RULES.freesteps(st),                     // infinite steps on/off (marks the run)
