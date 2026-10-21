@@ -99,6 +99,20 @@ test("a post from a logged-in player is remembered as theirs; the old address (n
   assert.equal((await stranger("/top")).status, 200);
 });
 
+test("a player posts under their rolled two-word name, whatever name the page sends, and can reroll it", async () => {
+  const env = makeEnv(), a = browser(env, { ip: "203.0.113.4" });
+  await a("/api/codes", { action: "new" });
+  const named = () => env.DB.raw.prepare("SELECT name FROM players WHERE id = 1").get().name;
+  const acct = (await a("/api/account")).data;
+  assert.match(named(), /^[A-Z][a-z]+ [A-Z][a-z]+$/);
+  assert.equal(acct.name, named());
+  const r = await a("/api/score", { run: "abcdefgh87654321", name: "DEFAULT", floor: 2, days: 3, demons: 1, turns: 40, version: "v1.40" });
+  assert.equal(r.data.name, named());
+  assert.equal(env.DB.raw.prepare("SELECT name FROM scores WHERE run = 'abcdefgh87654321'").get().name, named());
+  const old = named(), re = await a("/api/name", { reroll: true });
+  assert.equal(re.data.name, named()); assert.notEqual(named(), old);
+});
+
 test("another site can't act for a player; JSON is required; no ACCOUNTS binding says so", async () => {
   const env = makeEnv(), a = browser(env, { ip: "203.0.113.7" }), evil = browser(env, { ip: "203.0.113.8", origin: "https://evil.example" });
   assert.equal((await evil("/api/codes", { action: "new" })).status, 403);

@@ -3627,9 +3627,9 @@
 
 
   // What the leaderboard gets: deepest floor, days survived, demons beaten, and the real turn count (never the on-screen one).
-  const NAME_OK = /^[A-Za-z0-9 _.\-]{3,10}$/;
   // A run never waits for a name: it starts with a placeholder (dry, file-ish, nothing that is a demon or a program
-  // in the game) and the player can rename any time by clicking the name in the party panel, or when posting.
+  // in the game). (v1.40) On the game's own address a player posts under their rolled board name (leaderboard/names.js)
+  // instead; the placeholder is the board name only for a run the page plays itself (itch.io, a file). Names aren't typed.
   const AUTO_NAMES = ["UNTITLED", "NEWFOLDR", "TEMPFILE", "GUEST", "NO NAME", "DRAFT 2", "READONLY", "DEFAULT", "BADSECTR", "ORPHAN", "STALE", "PENDING", "REDACTED"];
   const isAutoName = name => AUTO_NAMES.includes(String(name || "").toUpperCase());
   function named(st, fresh) {                              // give a run a name if it has none (fresh: a new run rerolls a placeholder)
@@ -3640,12 +3640,6 @@
       st.playerName = pool[Math.floor(Math.random() * pool.length)];
     }
     delete st.needName;
-    return st;
-  }
-  function setName(st, name) {                             // the player's own name, typed in the name box or the post row
-    name = String(name || "").trim().replace(/\s+/g, " ");
-    if (!NAME_OK.test(name)) return st;
-    st = copy(st); st.playerName = name.toUpperCase(); delete st.needName;
     return st;
   }
   // align travels with the score payload so the Worker can tally faction seasons off the run's final
@@ -3681,7 +3675,7 @@
         beaten: k.beaten || 0, talks: k.demonTalks || 0, joined: k.recruited || 0, unlocks: k.unlocks || 0, standby: k.standby || 0, climbs: k.floors || 0,
         moon: k.moonAsked || 0, moonYes: k.moonAnswered || 0, breath: k.breathOut || 0, silver: k.silverFound || 0, rare: k.rare || 0,
         traded: k.traded || 0, peace: k.peace || 0, moonTook: k.moonTook || 0 } }; };
-  const api = { holding: v => { heldKey = !!v; }, setName, named: st => named(st, false), isAutoName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, markLabel, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), lastWordsList: ALL_WORDS };
+  const api = { holding: v => { heldKey = !!v; }, named: st => named(st, false), isAutoName, score, summary, next, freesteps, debugInfo, reset, hold, useBankedOmen, search, go, turn, available, isLocked: (st, dir) => !!st.dungeon && looksLocked(st.dungeon, dir), tick, inventory, useItem, slotTier, takeOut, fight, word, talk: word, answer, swap, offerPick, offerTrade, boxFound, boxDone, offerLeaveConfirm, offerView, codex, reply, feedIchor, drinkIchor, giveIchor, useSilver, welcomeVisitor, takeAway, itemId: n => ITEM_ID[n] || null, nameOf: id => Object.keys(ITEM_ID).find(n => ITEM_ID[n] === id) || null, FLASK_MAX, silverCost: st => SILVER_COST * floorNum(st), levelMap, breathNext, breath: st => breathNow(st, false), omen: t => omen(t), omenStreak: t => omenStreak(t), tierOf: n => TIER[n] || "COMMON", markLines, markLabel, PHASE_MARK, OCCASIONS, wishFor, wishMeets, wishJudge, wishLine, tierWithBlessings, raisePick, raiseGo, raiseCancel, raiseView: st => st.raise ? { picks: st.raise.picks.slice(), bag: (st.items || []).map((n, i) => ({ name: n, pip: wishPip(st, n, copyMarks(copyAt(st, i))) })) } : null, itemAlign, itemAlignName, aura, readAura, wear, noticeLine, moonChatter, moonReact, auraUsed: st => !!(st.encounter && st.encounter.auraRound === st.encounter.round), lastWordsList: ALL_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.RULES = api;
 })(this);

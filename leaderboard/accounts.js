@@ -9,7 +9,8 @@
 // token the page keeps in localStorage and sends as "Authorization: Bearer <token>" (only its hash is stored). Answers that
 // log in carry {token}; logout answers {token: ""}. Only pages in ACCOUNT_ORIGINS may use these routes, and that page's
 // origin is what the shared service checks passkeys against (RP ID 88x31.app).
-//   GET  /account                       who you are here: save codes and passkeys
+//   GET  /account                       who you are here: your board name, save codes and passkeys
+//   POST /name {reroll: true}           (v1.40) a new random board name
 //   POST /codes {action: "new"|"remove", id}   make a save code (shown once) or forget one
 //   POST /load {code}                   log this browser in as the player a save code belongs to
 //   POST /passkey {action: register_options|register|login_options|login|remove}
@@ -20,9 +21,10 @@
 //   POST /send {itemId, copy}           (v1.14) send one to your 88x31 (a button goes home; a dungeon item visits)
 //   GET  /history?item=&copy=           (v1.29) one copy's public story from the registry (the same thing its /ledger page shows)
 import SHARED from "../items.js";
+import { giveName } from "./names.js";
 const GAME = "4dungeon", MAX_FOUND_A_DAY = 300;
 const OUR_ITEMS = new Set(SHARED.filter((i) => !i.retired).map((i) => i.id));   // only 4Dungeon's own items are registered from here
-const SAVE_ROUTES = new Set(["/account", "/codes", "/load", "/passkey", "/logout", "/found", "/spent", "/inventory", "/send", "/history"]);
+const SAVE_ROUTES = new Set(["/account", "/name", "/codes", "/load", "/passkey", "/logout", "/found", "/spent", "/inventory", "/send", "/history"]);
 
 export class Oops extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 const now = () => Math.floor(Date.now() / 1000);
@@ -97,10 +99,18 @@ export const body = async (req) => { let v; try { v = await req.json(); } catch 
 async function account(env, req) {
   const me = await playerOf(env, req);
   if (!me) return { player: false, codes: [], passkeys: [], devices: 0 };
-  const id = await accountFor(env, me);
+  const { name } = await giveName(env, me), id = await accountFor(env, me);
   const ways = id ? ok(await ACC(env).info(id)) : { codes: [], passkeys: [] };
   const devices = 1 + (await env.DB.prepare("SELECT COUNT(*) AS n FROM player_sessions WHERE player_id = ?").bind(me.id).first()).n;
-  return { player: true, codes: ways.codes, passkeys: ways.passkeys, devices };
+  return { player: true, name, codes: ways.codes, passkeys: ways.passkeys, devices };
+}
+// (v1.40) A new random board name. Runs already on the board keep the name they were posted under.
+async function rename(env, req) {
+  const me = await giveName(env, await mustPlayer(env, req)), b = await body(req);
+  if (b.reroll !== true) throw new Oops("Names are rolled, not typed.");
+  const p = await giveName(env, me, { reroll: true });
+  if (p.name === me.name) throw new Oops("Couldn't find a free name. Try again.");
+  return { name: p.name };
 }
 
 async function codes(env, req, ctx) {
@@ -167,9 +177,10 @@ export async function accountsRoute(req, env, url) {
     if (!originsOf(env).includes(from)) throw new Oops("Accounts work at dungeon.88x31.app. Open the game there to use them.", 403);
     if (req.method === "POST" && !/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const p = url.pathname, m = req.method;
-    if (p !== "/found" && p !== "/spent" && p !== "/inventory" && p !== "/history") ACC(env);   // no accounts service, no players made
+    if (p !== "/found" && p !== "/spent" && p !== "/inventory" && p !== "/history" && p !== "/name") ACC(env);   // no accounts service, no players made
     let out;
     if (p === "/account" && m === "GET") out = await account(env, req);
+    else if (p === "/name" && m === "POST") out = await rename(env, req);
     else if (p === "/codes" && m === "POST") out = await codes(env, req, ctx);
     else if (p === "/load" && m === "POST") out = await load(env, req, ctx);
     else if (p === "/passkey" && m === "POST") out = await passkey(env, req, ctx);

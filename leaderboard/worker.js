@@ -1,5 +1,5 @@
 // Leaderboard for Daily Digital Demon Dungeon: a Cloudflare Worker with a D1 database.
-//   POST /score   {run, name, floor, days, demons, turns, version, align}   -> {ok, rank}
+//   POST /score   {run, name, floor, days, demons, turns, version, align}   -> {ok, rank, name}  (a player's post goes under their board name, not `name`)
 //   GET  /top?n=20&run=ID                                      -> {rows: [...], you: {...} | null}
 //   GET  /season                                               -> {epoch, law, chaos}
 //   GET  /stats                                                -> {epoch, counts: {...}, lastFall}
@@ -12,6 +12,7 @@
 // The game saves in the player's browser, so scores can't be proven: the checks below only keep out the casual junk.
 import { gameRoute, keptScore } from "./game.js";
 import { accountsRoute, playerOf } from "./accounts.js";
+import { giveName } from "./names.js";
 const MAX = { floor: 20, days: 400 };
 // Same lunar-epoch math as screen.js's epochIndex -- a whole-number count of real lunar months since
 // the same new-moon reference, so it's identical for every player (and this Worker) at every instant.
@@ -364,18 +365,20 @@ const WORKER = {
     if (url.pathname === "/score" && req.method === "POST") {
       if (!pageOk) return json({ error: "origin", seen: from }, 403, allow);
       let b; try { b = await req.json(); } catch (e) { return json({ error: "json" }, 400, allow); }
-      const name = String(b.name || "").trim().replace(/\s+/g, " "), run = String(b.run || "");
+      const run = String(b.run || "");
       // (v1.36) A run this server keeps posts the server's own numbers; the page's count only for a run it played itself (itch.io).
-      let me = null; try { me = await playerOf(env, req); } catch (e) {}
+      let me = null; try { me = await giveName(env, await playerOf(env, req)); } catch (e) {}
+      // (v1.40) A player posts under their rolled board name; the page's name only counts where there's no player (itch.io).
+      const own = !!(me && me.name), name = own ? me.name : String(b.name || "").trim().replace(/\s+/g, " ");
       const real = await keptScore(env, me, run);
       if (real && real.bad) return json({ error: "invalid" }, 400, allow);
       const floor = Number(real ? real.floor : b.floor), days = Number(real ? real.days : b.days), demons = Number(real ? real.demons : b.demons), turns = Number(real ? real.turns : b.turns);
-      const bad = !/^[A-Za-z0-9 _.\-]{3,10}$/.test(name) || !/^[a-z0-9]{8,40}$/.test(run)
+      const bad = (!own && !/^[A-Za-z0-9 _.\-]{3,10}$/.test(name)) || !/^[a-z0-9]{8,40}$/.test(run)
         || ![floor, days, demons, turns].every(Number.isInteger) || floor < 1 || floor > MAX.floor || days < 1 || days > MAX.days
         || demons < 0 || demons > days * 40 || turns < 0 || turns > days * 5000 || floor > days;           // a floor needs at least a day
       if (bad) return json({ error: "invalid" }, 400, allow);
       const words = String(env.BLOCKLIST || "").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
-      if (words.some(w => name.toLowerCase().includes(w))) return json({ error: "name" }, 400, allow);
+      if (!own && words.some(w => name.toLowerCase().includes(w))) return json({ error: "name" }, 400, allow);
       const who = await hash((req.headers.get("cf-connecting-ip") || "?") + "daily-dungeon"), now = Math.floor(Date.now() / 1000);
       const recent = await env.DB.prepare(`SELECT COUNT(*) AS n FROM scores WHERE who = ?1 AND made > ?2`).bind(who, now - 3600).first();
       if (recent.n >= 5) return json({ error: "slow down" }, 429, allow);
@@ -394,7 +397,7 @@ const WORKER = {
       // A post from a logged-in player is remembered as theirs (the board itself stays as anonymous as it was).
       try { if (me) await env.DB.prepare(`INSERT OR IGNORE INTO score_players (run, player_id) VALUES (?1, ?2)`).bind(run, me.id).run(); } catch (e) {}
       const row = await env.DB.prepare(`SELECT name, floor, days, demons, turns, made FROM scores WHERE run = ?1`).bind(run).first();
-      return json({ ok: true, rank: await rankOf(env.DB, row) }, 200, allow);
+      return json({ ok: true, rank: await rankOf(env.DB, row), name: row.name }, 200, allow);
     }
     // THE GIFT BOX (v1.10): /gift (see giftBox() above).
     if (url.pathname === "/gift") return giftBox(req, env, pageOk, from, allow);

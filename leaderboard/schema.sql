@@ -77,14 +77,17 @@ CREATE INDEX IF NOT EXISTS news_who_idx ON news (who, made);
 
 -- PLAYER ACCOUNTS (v1.13). Save codes and passkeys live in the shared Accounts service (the dungeon-items Worker); these are
 -- this game's own side. A player is a browser cookie (only the token's hash is kept); the account's player here is linked
--- in the shared service under the game name "4dungeon". No names, no email.
+-- in the shared service under the game name "4dungeon". No email. (v1.40) The only name is a rolled two-word board name.
 CREATE TABLE IF NOT EXISTS players (
   id          INTEGER PRIMARY KEY,
   token_hash  TEXT NOT NULL UNIQUE,
   created_at  INTEGER NOT NULL,
   seen_at     INTEGER NOT NULL,
-  admin       INTEGER NOT NULL DEFAULT 0      -- (v1.20) 1 = the webmaster: the admin tools work for this player (set by hand)
+  admin       INTEGER NOT NULL DEFAULT 0,     -- (v1.20) 1 = the webmaster: the admin tools work for this player (set by hand)
+  name        TEXT,                           -- (v1.40) the board name: two random words (names.js), rerolled on the USER page
+  name_key    TEXT                            -- lowercase name, so names are unique ignoring case
 );
+CREATE UNIQUE INDEX IF NOT EXISTS players_name_key ON players (name_key);
 -- other devices a player is logged in on (the first device uses players.token_hash)
 CREATE TABLE IF NOT EXISTS player_sessions (
   token_hash  TEXT PRIMARY KEY,

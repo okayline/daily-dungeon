@@ -37,6 +37,8 @@ test("a guest gets a run; actions move it on; a resend is refused; breath stays 
   assert.ok(first.data.token, "a guest player was made");
   assert.ok(first.data.run.dungeon && first.data.run.party, "a real run came back");
   assert.equal(first.data.n, 0);
+  assert.equal(first.data.name, env.DB.raw.prepare("SELECT name FROM players").get().name, "(v1.40) the guest has a rolled board name");
+  assert.match(first.data.name, /^[A-Z][a-z]+ [A-Z][a-z]+$/);
   const a = await me("/act", { n: 0, action: { t: "search" } });
   assert.equal(a.status, 200); assert.equal(a.data.n, 1);
   assert.equal(a.data.run.breath, undefined);
