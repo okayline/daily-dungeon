@@ -2,7 +2,7 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
-## v1.40 - Rolled Names - not released yet
+## v1.40 - Rolled Names - Oct 21 2026, 13:25 HST
 
 - **Everyone has a name.** Each player gets two random words (like "Quiet Heron"), the way the other 88x31 games do. The end screen says POST AS QUIET HERON and posts under it. USER shows your name with [REROLL] for a new one; runs already on the board keep the name they were posted under.
 - **The board's name column is wider**, so two-word names fit.
