@@ -195,3 +195,20 @@ test("spent uses up only your own copies, and needs a sign-in", async () => {
   assert.deepEqual(r.data.done, [{ itemId: 3, copy: 1 }]);
   assert.ok(calls.every((c) => c.holder.game === "4dungeon" && c.holder.playerId === 1));
 });
+
+test("account carries the pinned copy and the picker's list; pin pins it for this player", async () => {
+  const pins = [];
+  const REGISTRY = {
+    async pinned(g, p) { return { itemId: 9, copy: 4, item: { name: "Neon" }, marks: [{ kind: "moon", value: "blessed" }] }; },
+    async heldAcross(g, p, n) { return [{ itemId: 9, copy: 4, game: "tilt", pinned: 1, item: { name: "Neon" } }]; },
+    async pin(a) { pins.push(a); return { ok: true }; },
+  };
+  const env = makeEnv({ REGISTRY }), a = browser(env, { ip: "203.0.113.60" });
+  assert.match((await a("/pin", { itemId: 9, copy: 4 })).data.error, /save code/);
+  await a("/codes", { action: "new" });
+  const acct = (await a("/account")).data;
+  assert.deepEqual(acct.carry, { name: "Neon", copy: 4, blessed: 1 });
+  assert.deepEqual(acct.copies, [{ itemId: 9, copy: 4, name: "Neon", game: "tilt", pinned: 1 }]);
+  assert.deepEqual((await a("/pin", { itemId: 9, copy: 4 })).data, { ok: true });
+  assert.deepEqual(pins, [{ game: "4dungeon", playerId: 1, itemId: 9, copy: 4 }]);
+});

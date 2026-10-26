@@ -1225,6 +1225,15 @@
         row("   ", btn("DONE", "done"));
         line();
       }
+      // (v1.41) CARRY: the copy you carry into every 88x31 game (gold if the Moon blessed it), and every copy your account
+      // holds in any game, newest first, each with PIN.
+      if (a.player) {
+        const on = (a.copies || []).find(x => x.pinned) || (a.copies || [])[0];
+        line(` CARRY  ${a.carry ? a.carry.name + " #" + a.carry.copy : "nothing yet"}`.slice(0, 45), a.carry && a.carry.blessed ? "gold" : "");
+        for (const [i, x] of (a.copies || []).slice(0, 12).entries()) row(`   ${(x.name + " #" + x.copy).slice(0, 28).padEnd(29)}`, x === on ? "" : btn("PIN", "pin-" + i));
+        if (!(a.copies || []).length) line("   No copies yet. Find one while signed in.", "dim");
+        line();
+      }
       line(` SAVE CODES (${a.codes.length})`);
       for (const c of a.codes) row(`   made ${monthDay(c.created_at)}${c.last_used_at ? ", used " + monthDay(c.last_used_at) : ""}  `, btn("FORGET", "fcode-" + c.id));
       if (!a.codes.length) line("   None yet.", "dim");
@@ -1274,6 +1283,7 @@
         const c = input ? input.value.trim() : ""; if (!c) return say("Type your save code first.");
         const r = await api("/load", { code: c }); if (r.error) return say(r.error); msg = "Signed in."; await draw2(); reloadRun(); return;
       }
+      if (a.startsWith("pin-")) { const x = last && last.copies[Number(a.slice(4))]; if (!x) return; const r = await api("/pin", { itemId: x.itemId, copy: x.copy }); if (r.error) return say(r.error); msg = "Pinned. Every game carries it now."; return draw2(); }
       if (a === "out") { const r = await api("/logout", {}); if (r.error) return say(r.error); msg = "Signed out."; return draw2(); }
       try {
         if (a === "pk") {

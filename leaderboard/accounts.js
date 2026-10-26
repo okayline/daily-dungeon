@@ -20,11 +20,12 @@
 //   GET  /inventory                     (v1.14) the copies you hold in 4Dungeon: your finds, and 88x31 buttons visiting
 //   POST /send {itemId, copy}           (v1.14) send one to your 88x31 (a button goes home; a dungeon item visits)
 //   GET  /history?item=&copy=           (v1.29) one copy's public story from the registry (the same thing its /ledger page shows)
+//   POST /pin {itemId, copy}            (v1.41) carry this copy into every 88x31 game (GET /account lists them: carry, copies)
 import SHARED from "../items.js";
 import { giveName } from "./names.js";
 const GAME = "4dungeon", MAX_FOUND_A_DAY = 300;
 const OUR_ITEMS = new Set(SHARED.filter((i) => !i.retired).map((i) => i.id));   // only 4Dungeon's own items are registered from here
-const SAVE_ROUTES = new Set(["/account", "/name", "/codes", "/load", "/passkey", "/logout", "/found", "/spent", "/inventory", "/send", "/history"]);
+const SAVE_ROUTES = new Set(["/account", "/name", "/codes", "/load", "/passkey", "/logout", "/found", "/spent", "/inventory", "/send", "/history", "/pin"]);
 
 export class Oops extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 const now = () => Math.floor(Date.now() / 1000);
@@ -98,11 +99,12 @@ export const body = async (req) => { let v; try { v = await req.json(); } catch 
 
 async function account(env, req) {
   const me = await playerOf(env, req);
-  if (!me) return { player: false, codes: [], passkeys: [], devices: 0 };
+  if (!me) return { player: false, codes: [], passkeys: [], devices: 0, carry: null, copies: [] };
   const { name } = await giveName(env, me), id = await accountFor(env, me);
   const ways = id ? ok(await ACC(env).info(id)) : { codes: [], passkeys: [] };
   const devices = 1 + (await env.DB.prepare("SELECT COUNT(*) AS n FROM player_sessions WHERE player_id = ?").bind(me.id).first()).n;
-  return { player: true, name, codes: ways.codes, passkeys: ways.passkeys, devices };
+  const [carry, copies] = await Promise.all([carried(env, me.id), copiesOf(env, me.id)]);   // (v1.41) the copy you carry, and the picker's list
+  return { player: true, name, codes: ways.codes, passkeys: ways.passkeys, devices, carry: carryView(carry), copies };
 }
 // (v1.40) A new random board name. Runs already on the board keep the name they were posted under.
 async function rename(env, req) {
@@ -177,7 +179,7 @@ export async function accountsRoute(req, env, url) {
     if (!originsOf(env).includes(from)) throw new Oops("Accounts work at dungeon.88x31.app. Open the game there to use them.", 403);
     if (req.method === "POST" && !/^application\/json\b/i.test(req.headers.get("content-type") || "")) throw new Oops("Send JSON.", 415);
     const p = url.pathname, m = req.method;
-    if (p !== "/found" && p !== "/spent" && p !== "/inventory" && p !== "/history" && p !== "/name") ACC(env);   // no accounts service, no players made
+    if (p !== "/pin" && p !== "/found" && p !== "/spent" && p !== "/inventory" && p !== "/history" && p !== "/name") ACC(env);   // no accounts service, no players made
     let out;
     if (p === "/account" && m === "GET") out = await account(env, req);
     else if (p === "/name" && m === "POST") out = await rename(env, req);
@@ -190,6 +192,7 @@ export async function accountsRoute(req, env, url) {
     else if (p === "/inventory" && m === "GET") out = await inventory(env, req);
     else if (p === "/send" && m === "POST") out = await send(env, req);
     else if (p === "/history" && m === "GET") out = await history(env, url);
+    else if (p === "/pin" && m === "POST") out = await pinCopy(env, req);
     else return reply({ error: "No such thing." }, 404);
     return reply(ctx.token === null ? out : { ...out, token: ctx.token });
   } catch (e) {
@@ -279,4 +282,42 @@ async function send(env, req) {
   const r = await env.REGISTRY.moveCopy({ itemId, copy, from: { game: GAME, playerId: me.id }, to: { game: "88x31", playerId } });
   if (!r || r.error) throw new Oops(r && r.error ? r.error : "Nothing moved.");
   return { ok: true };
+}
+
+// ---------- the carried copy (copied from TILT.EXE v0.19; 4Dungeon v1.41 shows it, and marks nothing yet) ----------
+// Your account's pinned copy from any game (dungeon-items registry.js pinned: the pin, else your newest copy), read when
+// a run starts so the page can show it, and read again when a memorable moment marks it (markCarried: a deed mark made
+// in this game, keyed so a retry makes no second mark). A Moon-blessed copy (a 4Dungeon mark) shows in gold. A registry
+// that's away, or no copy, carries nothing and never stops a run.
+async function carried(env, playerId) {
+  try {
+    const c = env.REGISTRY && env.REGISTRY.pinned ? await env.REGISTRY.pinned(GAME, playerId) : null;
+    return c && c.itemId ? { ...c, blessed: c.marks.some((m) => m.kind === "moon" && m.value === "blessed") ? 1 : 0 } : null;
+  } catch (e) { console.error(e); return null; }
+}
+const carryView = (c) => c ? { name: c.item.name, copy: c.copy, blessed: c.blessed } : null;
+async function markCarry(env, playerId, value, key) {
+  const c = await carried(env, playerId);
+  if (!c) return;
+  try {
+    const r = await env.REGISTRY.markCarried({ itemId: c.itemId, copy: c.copy, by: { game: GAME, playerId }, kind: "deed", value, key });
+    if (r && r.error) console.error("The registry refused the mark: " + r.error);
+  } catch (e) { console.error(e); }
+}
+
+// (v1.41) The picker (USER panel): /account lists every copy your account holds in any game (copies, newest first) and the
+// one you carry (carry); POST /pin {itemId, copy} pins one, and every game carries it from then on.
+async function pinCopy(env, req) {
+  const me = await playerOf(env, req), b = await body(req);
+  if (!me) throw new Oops("Make a save code or passkey first.", 401);
+  if (!env.REGISTRY) throw new Oops("The item registry is unavailable right now.", 503);
+  const r = await env.REGISTRY.pin({ game: GAME, playerId: me.id, itemId: Number(b.itemId), copy: Number(b.copy) });
+  if (r && r.error) throw new Oops(r.error);
+  return { ok: true };
+}
+async function copiesOf(env, playerId) {
+  try {
+    const list = env.REGISTRY && env.REGISTRY.heldAcross ? await env.REGISTRY.heldAcross(GAME, playerId, 50) : [];
+    return (list || []).map((c) => ({ itemId: c.itemId, copy: c.copy, name: c.item.name, game: c.game, pinned: c.pinned }));
+  } catch (e) { console.error(e); return []; }
 }
