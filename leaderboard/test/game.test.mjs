@@ -290,3 +290,16 @@ test("(v1.39) things waiting with the same marks are one registry call, the new 
     [["beat_demon", [[1, 1, "9:x:beat_demon"], [1, 2, "9:y:beat_demon"]]]]]);      // then the two that saw the demon fall
   assert.deepEqual(one, [[2, "blessed", "9:y:blessed"]]);
 });
+
+test("a new find also carries what happened in the world (Tank, Witch) as night marks; a registry without it, or one that fails, adds nothing", async () => {
+  const ACT = (await import("../../act.js")).default, name = ACT.nameOf(1);
+  const { settleCopies } = await import("../game.js");
+  const run = async (REGISTRY) => {
+    const st = { copies: {}, finds: [{ id: 1, key: "r:1", p: 4 }] };
+    const out = await settleCopies({ REGISTRY }, async () => ({ json: async () => ({ copies: [{ key: "r:1", copy: 3 }] }) }), st, { t: "go" }, { id: 5 }, {});
+    return out.marks.flatMap((p) => p.marks.map((g) => [g.kind, g.value]));
+  };
+  assert.deepEqual(await run({ async worldEvents() { return { events: ["tank_fell", "witch_fell", "bogus"] }; } }), [["night", "full"], ["night", "tank_fell"], ["night", "witch_fell"]]);
+  assert.deepEqual(await run({}), [["night", "full"]]);
+  assert.deepEqual(await run({ async worldEvents() { throw new Error("down"); } }), [["night", "full"]]);
+});

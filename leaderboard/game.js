@@ -181,6 +181,13 @@ async function sendOut(env, inner, me, st, spends, marks, moments) {
 // the copies already in the bag live through, at most once per copy: a demon beaten (beat_demon), a demon talked down
 // or recruited (talked_down), a fight run from (fled_fight), a locked door opened (through_door). Seen by comparing the
 // run's tallies before and after the move, so things found in this same move don't get them.
+// What happened in the world (the l4d chapters, Registry.worldEvents): every new find gets these as night marks, like the moon.
+const WORLD = ["tank_fell", "witch_fell"];
+async function worldToday(env) {
+  if (!env.REGISTRY || typeof env.REGISTRY.worldEvents !== "function") return [];
+  try { const r = await env.REGISTRY.worldEvents(); return ((r && r.events) || []).filter((e) => WORLD.includes(e)); }
+  catch (e) { console.error("worldEvents", e); return []; }
+}
 const FIND_EXTRA = /^(in_locker|in_archive|deep_stone|on_(b[1-4]|[1-9])f)$/;
 const LIVED = [[["beaten"], "beat_demon"], [["peace", "recruited"], "talked_down"], [["fled"], "fled_fight"], [["unlocks"], "through_door"]];
 // Returns { spends, marks }: the copies to use up and the marks to stamp, both sent after the answer.
@@ -197,7 +204,7 @@ export async function settleCopies(env, inner, st, a, me, old) {
     const has = new Set([...(e.m || []), ...(e.q || [])].map((v) => String(v).split(":")[0]));
     for (const v of lived) if (!has.has(v)) (e.q = e.q || []).push(v);
   }
-  const ask = [];
+  const ask = [], world = (st.finds || []).length ? await worldToday(env) : [];
   for (const f of st.finds || []) {
     const name = ACT.nameOf(f.id);
     if (!name) continue;
@@ -208,6 +215,7 @@ export async function settleCopies(env, inner, st, a, me, old) {
     if (typeof f.h === "string") q.push(f.h);
     for (const x of Array.isArray(f.x) ? f.x : []) if (FIND_EXTRA.test(x)) q.push(x);
     for (const o of Array.isArray(f.o) ? f.o : []) if (ACT.OCCASIONS.includes(o)) q.push(o);
+    for (const w of world) q.push(w);
     (copies[name] = copies[name] || []).push(q.length ? { k: f.key, c: null, q } : { k: f.key, c: null });
   }
   const up = (st.climb || 1) - ((old && old.climb) || 1);
@@ -238,7 +246,7 @@ export async function settleCopies(env, inner, st, a, me, old) {
   if (Object.keys(copies).length) st.copies = copies; else delete st.copies;
   return { spends, marks };
 }
-const NIGHT = new Set([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ACT.phaseMark(i)).concat(ACT.OCCASIONS));
+const NIGHT = new Set([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ACT.phaseMark(i)).concat(ACT.OCCASIONS, WORLD));
 // The marks waiting on numbered copies, taken off them (q to m) as registry calls; an unnumbered copy's keep waiting.
 // (v1.39) Copies waiting with the same marks share a call, { holder, marks: [{ kind, value, copies: [{ itemId, copy, key }] }] },
 // and the registry's addMarks seals ONE ledger entry for each call: the move's new finds (their moon, place and level) are
