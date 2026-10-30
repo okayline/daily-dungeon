@@ -5,6 +5,7 @@ Changes to the game itself, newest first, with the time each went live (Honolulu
 ## v1.43 - No Scrollbar - Oct 29 2026, 22:00 HST
 
 - **The screen no longer scrolls inside itself**, so no scrollbar shows beside it. Removed: the screen box's own scrolling (`overflow-x: auto` on `.frame`).
+- The shared footer (from dungeon-items) waits until the page has loaded before it shows, so it no longer appears alone in the middle of the screen first, and its text can be selected. Removed: nothing in this game (the change is in dungeon-items `footer.js`).
 
 ## v1.42 - Footer - Oct 29 2026, 14:18 HST
 
