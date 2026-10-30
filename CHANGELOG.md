@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.43 - No Scrollbar - Oct 29 2026, 22:00 HST
+
+- **The screen no longer scrolls inside itself**, so no scrollbar shows beside it. Removed: the screen box's own scrolling (`overflow-x: auto` on `.frame`).
+
 ## v1.42 - Footer - Oct 29 2026, 14:18 HST
 
 - **The shared footer** from dungeon-items ("© ~*~88x31~*~ cLuB, year · ≡ v1.42"), the same line every 88x31 game shows. Its ≡ opens USER.

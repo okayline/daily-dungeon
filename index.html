@@ -26,7 +26,7 @@
     font-family: "VT323", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
     font-variant-ligatures: none;      /* VT323 joins fl, fi and ff into one cell, which pulls that row's border a column left */
   }
-  .frame { max-width: 100%; overflow-x: auto; }
+  .frame { max-width: 100%; }   /* (v1.43) the screen never scrolls inside itself */
   pre {
     margin: 0; font-family: inherit; line-height: 1.05;
     font-size: clamp(6px, calc((100vw - 32px) / 49), 22px); white-space: pre;
@@ -157,7 +157,7 @@
     <div id="board" class="logview" role="dialog" aria-modal="true" aria-label="Leaderboard" hidden><pre></pre></div>
     <div id="about" class="logview" role="dialog" aria-modal="true" aria-label="About" hidden><pre></pre></div>
     <!-- the footer every game shows (dungeon-items src/footer.js): "© ~*~88x31~*~ cLuB, year · ≡ version"; ≡ opens USER (#user) -->
-    <script src="https://dungeon-items.ddddungeon.workers.dev/footer.js" data-version="v1.42" data-carry="#user"></script>
+    <script src="https://dungeon-items.ddddungeon.workers.dev/footer.js" data-version="v1.43" data-carry="#user"></script>
     <div id="cheat" class="ver cheat"></div>
     <div id="found" class="foundbox" role="dialog" aria-modal="true" aria-live="polite" hidden><pre></pre></div></div>
 <script src="sky.js"></script>
