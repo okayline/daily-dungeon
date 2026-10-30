@@ -2,6 +2,11 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.42 - Footer - Oct 29 2026, 14:30 HST
+
+- **The shared footer** from dungeon-items ("© ~*~88x31~*~ cLuB, year · ≡ v1.42"), the same line every 88x31 game shows. Its ≡ opens USER.
+- Removed: the version line under the screen (the footer shows it now).
+
 ## v1.41 - Carry - Oct 26 2026, 00:35 HST
 
 - **USER has a CARRY list.** It shows the copy you carry into every 88x31 game (gold if the Moon blessed it) and every copy your account holds in any game, newest first, with [PIN] to carry a different one. It's the same pin every other game reads.
