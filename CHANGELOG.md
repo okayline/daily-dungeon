@@ -2,7 +2,7 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
-## v1.42 - Footer - Oct 29 2026, 14:30 HST
+## v1.42 - Footer - Oct 29 2026, 14:18 HST
 
 - **The shared footer** from dungeon-items ("© ~*~88x31~*~ cLuB, year · ≡ v1.42"), the same line every 88x31 game shows. Its ≡ opens USER.
 - Removed: the version line under the screen (the footer shows it now).
