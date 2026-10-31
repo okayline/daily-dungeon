@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.44 - Footer Spot - Oct 31 2026, 05:17 HST
+
+- **The footer is drawn into its own spot under the screen and stays hidden until the game has drawn**, so it no longer shows up alone in the middle of the screen while the game is still loading. Removed: the footer's old wait-for-page-load, which fired before this game drew, and `data-carry="#user"` (the ≡ no longer opens USER; the footer's ≡ is only a mark now).
+
 ## v1.43 - No Scrollbar - Oct 29 2026, 22:00 HST
 
 - **The screen no longer scrolls inside itself**, so no scrollbar shows beside it. Removed: the screen box's own scrolling (`overflow-x: auto` on `.frame`).

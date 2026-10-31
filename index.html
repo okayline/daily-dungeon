@@ -156,8 +156,9 @@
     <div id="codex" class="logview" role="dialog" aria-modal="true" aria-label="Codex" hidden><pre></pre></div>
     <div id="board" class="logview" role="dialog" aria-modal="true" aria-label="Leaderboard" hidden><pre></pre></div>
     <div id="about" class="logview" role="dialog" aria-modal="true" aria-label="About" hidden><pre></pre></div>
-    <!-- the footer every game shows (dungeon-items src/footer.js): "© ~*~88x31~*~ cLuB, year · ≡ version"; ≡ opens USER (#user) -->
-    <script src="https://dungeon-items.ddddungeon.workers.dev/footer.js" data-version="v1.43" data-carry="#user"></script>
+    <!-- the footer every game shows (dungeon-items src/footer.js): "🄯 ~*~88x31~*~ · § ≡ version", drawn into this spot; start() shows it once the game has drawn -->
+    <div id="ddfoot" hidden></div>
+    <script src="https://dungeon-items.ddddungeon.workers.dev/footer.js" data-version="v1.44"></script>
     <div id="cheat" class="ver cheat"></div>
     <div id="found" class="foundbox" role="dialog" aria-modal="true" aria-live="polite" hidden><pre></pre></div></div>
 <script src="sky.js"></script>
@@ -791,6 +792,7 @@
     else { if (s) stash("-old"); save = null; }
     sweepCheats();
     showTitle();
+    document.getElementById("ddfoot").hidden = false;   // (v1.44) the footer shows only once the game has drawn, so it is never alone mid-screen
   }
 
   // TITLE SCREEN -----------------------------------------------------------------------------------
