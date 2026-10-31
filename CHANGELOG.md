@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.45 - Tab Icon - Oct 31 2026, 11:30 HST
+
+- **A tab icon:** a pastel pixel-art favicon (88 over 31 on a big X, in this game's colours), so the browser tab and home-screen bookmark show the game instead of a blank default. Removed: nothing (the page had no icon before).
+
 ## v1.44 - Footer Spot - Oct 31 2026, 05:17 HST
 
 - **The footer is drawn into its own spot under the screen and stays hidden until the game has drawn**, so it no longer shows up alone in the middle of the screen while the game is still loading. Removed: the footer's old wait-for-page-load, which fired before this game drew, and `data-carry="#user"` (the ≡ no longer opens USER; the footer's ≡ is only a mark now).
