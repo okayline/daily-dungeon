@@ -1311,7 +1311,7 @@
   // Doors: open ones are free, a locked one takes the day's key. SEARCH is unlimited, turning is free. X (infinite steps) and Shift+X (next day) are hidden testing cheats.
   // INVOKE: the inventory. Press a number (or click a line) to use an item; I or Escape closes it.
   const INV_PER = 5, HIST_ROWS = 16;   // (v1.29) things to a page of INVOKE (5 since v1.36); rows in the box, for HISTORY
-  const LEDGER_URL = "https://88x31.app/registry";   // the shared registry's public ledger page (88x31.app passes it through)
+  const LEDGER_URL = "https://club.88x31.app/registry";   // the shared registry's public ledger page (club.88x31.app passes it through)
   let invReg = null;   // the bag's INVENTORY view (what the shared item list says you hold), or null
   let invHist = null;  // (v1.29) HISTORY: the chosen thing's story { it, num, story, err, loading }, or null
   let invList = [], invSel = 0, topSel = 0, invPage = 0, logGlow = false, ichorPick = -1;   // ichorPick: who the picker is on (-1: closed)

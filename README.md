@@ -26,7 +26,7 @@ Daily Digital Demon Dungeon (4Dungeon) is a daily, asynchronous, moon-phased, ti
 - **The walls hide things.** Search, but not too long in one place.
 - **Talk.** To demons, to your friends, to the dark. Everyone carries something.
 - **Your aura shows.** What you carry and who walks with you. Things notice.
-- **Things remember.** Every find has a story, and the [ledger](https://88x31.app/registry) keeps it.
+- **Things remember.** Every find has a story, and the [ledger](https://club.88x31.app/registry) keeps it.
 - **One omen a day.** Every one of them is true.
 
 ## Files
