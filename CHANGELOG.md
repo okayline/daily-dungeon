@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.48 - White Icon - Oct 31 2026, 23:00 HST
+
+- **Tab icon in white:** the "88 x 31" tab icon now uses scoundrel.exe's white version. Removed: this page's red one.
+
 ## v1.47 - Calm Icon - Oct 31 2026, 22:35 HST
 
 - **A calmer tab icon:** just "88 x 31" in this game's accent colour, wider, inside a bold ASCII `+--+` border, on this page's own background colour (transparent on this black page). Removed: the busy pastel background with the big X, and the numbers' dark outline, white tops and shadow bar.
