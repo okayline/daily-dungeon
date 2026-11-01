@@ -2,6 +2,10 @@
 
 Changes to the game itself, newest first, with the time each went live (Honolulu time, from the commit history). Save commits (`Day NNN ...`) are the adventure log and aren't listed here.
 
+## v1.47 - Calm Icon - Oct 31 2026, 22:35 HST
+
+- **A calmer tab icon:** just "88 x 31" in this game's accent colour, wider, inside a bold ASCII `+--+` border, on this page's own background colour (transparent on this black page). Removed: the busy pastel background with the big X, and the numbers' dark outline, white tops and shadow bar.
+
 ## v1.46 - Notes Tidy - Oct 31 2026, 13:35 HST
 
 - **Behind the scenes only:** nothing in the game changes. The repo's working notes (`CLAUDE.md`) now hold only notes for this game. Removed: the shared working-rules block that was copied into that file.
